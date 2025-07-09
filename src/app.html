@@ -6,9 +6,14 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="dark light" />
 		%sveltekit.head%
-
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+		/>
 		<style>
-			body {
+
+			
+			/* body {
 				--bg-1: hsl(0, 0%, 100%);
 				--bg-2: hsl(206, 20%, 90%);
 				--bg-3: hsl(206, 20%, 80%);
@@ -252,10 +257,10 @@
 				--link: hsl(206, 96%, 72%);
 				--link-hover: hsl(206, 96%, 78%);
 				--link-active: hsl(206, 96%, 64%);
-			}
+			} */
 		</style>
 	</head>
-	<body>
+	<body data-bs-theme="dark">
 		<div style="display: contents">%sveltekit.body%</div>
 
 		<script>

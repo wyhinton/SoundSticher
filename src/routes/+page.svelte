@@ -1,6 +1,10 @@
+<svelte:head>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="/css/bootswatch.css" />
+</svelte:head>
 <script lang="ts">
 	import Greet from "$lib/Greet.svelte";
+	
 </script>
 
-<h1>Welcome to SvelteKit</h1>
 <Greet />

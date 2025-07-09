@@ -4,22 +4,35 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "dev:web": "vite",
+    "build": "tauri build",
+    "build:web": "vite build",
+    "lint": "svelte-check --tsconfig ./tsconfig.json && eslint src && prettier --check src",
+    "format": "eslint --fix src && prettier --write src"
   },
   "dependencies": {
     "@tauri-apps/api": ">=2.0.0-beta.0",
-    "@tauri-apps/plugin-shell": ">=2.0.0-beta.0"
+    "@tauri-apps/plugin-log": "^2.6.0",
+    "@tauri-apps/plugin-shell": ">=2.0.0-beta.0",
+    "@thisux/sveltednd": "^0.0.20",
+    "boostrap": "^2.0.0",
+    "svelte-persisted-store": "^0.12.0",
+    "svelte-tauri-filedrop": "^2.0.2"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.1",
     "@sveltejs/kit": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
-    "@tauri-apps/cli": ">=2.0.0-beta.0",
+    "@tauri-apps/cli": "^2.6.2",
+    "@typescript-eslint/eslint-plugin": "^8.35.1",
+    "@typescript-eslint/parser": "^8.35.1",
+    "eslint": "^9.30.1",
+    "eslint-plugin-only-warn": "^1.1.0",
+    "eslint-plugin-svelte": "^3.10.1",
     "internal-ip": "^7.0.0",
-    "svelte": "^4.2.17",
+    "svelte": "5.35.2",
     "typescript": "^5.0.2",
     "vite": "^5.0.0"
   }
