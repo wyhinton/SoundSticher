@@ -1,11 +1,11 @@
 {
   "productName": "tauri-v2-sveltekit-template",
   "version": "0.0.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "audio.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev:web",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "npm run build:web",
     "frontendDist": "../build"
   },
   "app": {
