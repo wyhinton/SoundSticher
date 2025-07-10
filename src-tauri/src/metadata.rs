@@ -1,11 +1,20 @@
 use std::path::Path;
 
+use lofty::file::AudioFile;
+use lofty::probe::Probe;
+use lofty::read_from_path;
+use serde::Deserialize;
+use serde::Serialize;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::probe::ProbeResult;
 use symphonia::default::get_probe;
+
+use lofty;
+
+use crate::error::Error;
 
 pub fn get_duration(path: &str) -> Option<f32> {
     let file = std::fs::File::open(path).ok()?;
@@ -41,4 +50,42 @@ pub fn get_duration(path: &str) -> Option<f32> {
         length
     );
     Some(duration as f32 / sample_rate as f32)
+}
+
+#[derive(serde::Serialize)]
+pub struct FileMetadata {
+    pub path: String,
+    pub size: Option<u64>,
+    pub bitRate: Option<u32>,
+}
+
+#[tauri::command]
+pub fn get_metadata(title: String) -> Result<FileMetadata, Error> {
+    let tagged_file = read_from_path(&title);
+    let meta = match tagged_file {
+        Ok(taggedFile) => {
+            let props = taggedFile.properties();
+            return Ok(FileMetadata {
+                path: title.clone(),
+                size: get_file_size(title.clone()),
+                bitRate: props.audio_bitrate(),
+            });
+        }
+        Err(e) => {
+            eprintln!("Error doing metadata: {}", e);
+            return Err(Error::InvalidPath);
+        }
+    };
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct GetFileSizeResponse {
+    file_size: Option<u64>,
+}
+fn get_file_size(path: String) -> Option<u64> {
+    if let Ok(metadata) = std::fs::metadata(path) {
+        return Some(metadata.len());
+    }
+    return None;
 }
