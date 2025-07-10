@@ -1910,6 +1910,10 @@ progress {
   padding: 0.25rem 0.25rem;
 }
 
+.table-xs > :not(caption) > * > * {
+  padding: 0.15rem 0.15rem;
+}
+
 .table-bordered > :not(caption) > * {
   border-width: 1px 0;
 }

@@ -4,6 +4,7 @@ import { onDestroy } from 'svelte';
 import { persisted } from 'svelte-persisted-store'
 import { derived, get } from 'svelte/store'
 import { warn, debug, trace, info, error } from '@tauri-apps/plugin-log';
+import { listen } from '@tauri-apps/api/event';
 
 // trace('Trace');
 // info('Info');
@@ -28,12 +29,22 @@ interface Song{
 
 interface AppState{
     sections: Section[];
+    playingSong?: string;
+    playingSection?: number;
+    playProgress?: number;
 }
 
-interface Section{
+interface AudioFileItem{ 
+    path: string,
+    size?: number,
+    bitRate?: number,
+}
+
+export interface Section{
     folderPath: string,
-    files: string[],
+    files: AudioFileItem[],
     errors: ErrorKind[],
+    metaData?: FileMetadata[]
 }
 
 export const appState = persisted<AppState>('appState', {
@@ -45,7 +56,7 @@ const DEFAULT_FOLDER = "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_ti
 
 export function addSection(){
     appState.update(state=>{
-         state.sections = [{folderPath: DEFAULT_FOLDER, files: [], errors: []}, ...state.sections];
+         state.sections = [{folderPath: DEFAULT_FOLDER, files: [], errors: [],  metaData: []}, ...state.sections];
          return state;
     })
     get_file_paths_in_folder(0);
@@ -68,15 +79,26 @@ export function updatePath(sectionIndex: number, value: string){
     get_file_paths_in_folder(sectionIndex)
 }
 
-export async function play_song(song: string){
+export async function play_song(song: string, sectionIndex: number){
     await invoke<Song[]>("play_song", {title: song}).then(f=>{
+        appState.update(state=>{
+            state.playingSection = sectionIndex;
+            state.playingSong = song;
+            return state;
+        })
         console.log(f)
     });
 }
 
 
+interface FileMetadata{
+    path: string,
+    size?: number,
+    bitRate?: number,
+}
+
 export async function get_file_paths_in_folder(sectionIndex: number) {
-    const { sections } = get(appState); // import { get } from 'svelte/store'
+    const { sections } = get(appState);
     const folder = sections[sectionIndex]?.folderPath;
 
     if (!folder) return;
@@ -84,17 +106,46 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
     try {
         const files = await invoke<string[]>("get_file_paths_in_folder", { folderPath: folder });
 
+        // Set file paths first
         appState.update(state => {
             const section = state.sections[sectionIndex];
-            section.files = files;
-            section.errors = section.errors.filter(e => e.kind === "io"); // optional
+            section.files = files.map(f=>({path: f}));
+            section.errors = section.errors.filter(e => e.kind === "io");
             return state;
         });
 
         console.log(`Fetched files for section ${sectionIndex}:`, files);
 
+        // Now fetch metadata for each file in parallel
+        const metadataList = await Promise.all<FileMetadata|null>(
+            files.map(async (file) => {
+                try {
+                    const metadata = await invoke<FileMetadata>("get_metadata", { title: file });
+                    return metadata;
+                } catch (err) {
+                    console.error(`Failed to get metadata for ${file}:`, err);
+                    return null;
+                }
+            })
+        );
+
+        // Store metadata in the section (you can customize this structure)
+        appState.update(state => {
+            const section = state.sections[sectionIndex];
+            state.sections.forEach((s,i)=>{
+                s.files.forEach((f,j)=>{
+                    const meta = metadataList.filter(m=>m.path===f.path)[0];
+                    state.sections[i].files[j] = {...f, bitRate: meta.bitRate, size: meta.size}
+                })
+            })
+            console.log(state.sections)
+            section.metaData = metadataList;
+            return state;
+        });
+
     } catch (e: any) {
         console.error("Failed to fetch files:", e);
+
         appState.update(state => {
             const section = state.sections[sectionIndex];
             section.errors.push({
@@ -105,6 +156,15 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
         });
     }
 }
+
+
+
+listen<number>('song-progress', (event) => {
+    appState.update(state => {
+        state.playProgress = event.payload
+        return state;
+    });
+});
 
 appState.subscribe((s)=>{
     console.log(s)

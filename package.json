@@ -13,13 +13,17 @@
     "format": "eslint --fix src && prettier --write src"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@tauri-apps/api": ">=2.0.0-beta.0",
     "@tauri-apps/plugin-log": "^2.6.0",
     "@tauri-apps/plugin-shell": ">=2.0.0-beta.0",
     "@thisux/sveltednd": "^0.0.20",
     "boostrap": "^2.0.0",
+    "svelte-fa": "^4.0.4",
     "svelte-persisted-store": "^0.12.0",
-    "svelte-tauri-filedrop": "^2.0.2"
+    "svelte-tauri-filedrop": "^2.0.2",
+    "svelte-tree-view": "^1.4.2"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.1",

@@ -1,51 +1,25 @@
-use rodio::{source, Decoder, OutputStream, Sink};
+use rodio::{Decoder, OutputStream, Sink};
 use std::fs::{metadata, File};
 use std::io::BufReader;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
-use thiserror::Error;
 
 use log;
+
+use crate::error::{Error, ErrorKind};
+use crate::metadata::get_metadata;
+mod error;
 mod metadata;
 
 pub struct AppState {
     current_song: Mutex<Option<Arc<Sink>>>,
 }
 
-#[derive(Debug, Error)]
-enum Error {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error("failed to parse as string: {0}")]
-    Utf8(#[from] std::str::Utf8Error),
-    #[error("Invalid path")]
-    InvalidPath,
-}
-
-#[derive(serde::Serialize)]
-#[serde(tag = "kind", content = "message")]
-#[serde(rename_all = "camelCase")]
-enum ErrorKind {
-    Io(String),
-    Utf8(String),
-    InvalidPath,
-}
-
 pub struct Song {
     pub title: String,
-}
-
-#[derive(serde::Serialize)]
-pub struct FileMetadata {
-    pub name: String,
-    pub path: String,
-    pub size: u64,
-    pub modified: Option<u64>,
-    pub created: Option<u64>,
 }
 
 impl serde::Serialize for Error {
@@ -164,21 +138,13 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
             }
         };
 
-        // match Decoder::new(BufReader::new(file)) {
-        //     Ok(source) => sink.append(source),
-        //     Err(e) => {
-        //         eprintln!("Error decoding audio file: {}", e);
-        //         return;
-        //     }
-        // }
-
         match Decoder::new(BufReader::new(file)) {
-            Ok(source) => source,
+            Ok(source) => sink.append(source),
             Err(e) => {
                 eprintln!("Error decoding audio file: {}", e);
                 return;
             }
-        };
+        }
 
         let duration = metadata::get_duration(&path);
         let start = Instant::now();
@@ -207,80 +173,18 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
 
         {
             let mut current_song = state.current_song.lock().unwrap();
+
             if let Some(ref current) = *current_song {
-                current.pause();
+                current.stop(); // Stop the previous song
             }
+
+            *current_song = Some(Arc::clone(&sink)); // Track the new one
         }
 
         sink.set_volume(1.0);
         sink.sleep_until_end();
     });
 }
-
-// #[tauri::command]
-// fn play_song(title: String, state: State<'_, Arc<AppState>>) {
-//     let path = title.clone();
-//     // let path = format!("../assets/test_audio/{}", title);
-//     let state = state.inner().clone();
-//     log::info!("Got request to play_song {}", title);
-
-//     match metadata(&path) {
-//         Ok(meta) => {
-//             if !meta.is_file() {
-//                 eprintln!("Path exists but is not a file: {}", path);
-//                 return;
-//             }
-//         }
-//         Err(e) => {
-//             eprintln!("Error accessing file metadata for {}: {}", path, e);
-//             return;
-//         }
-//     }
-
-//     thread::spawn(move || {
-//         let file = match File::open(&path) {
-//             Ok(file) => file,
-//             Err(e) => {
-//                 eprint!("Error opening file {}: {}", path, e);
-//                 return;
-//             }
-//         };
-
-//         let (_stream, stream_handle) = match OutputStream::try_default() {
-//             Ok(output) => output,
-//             Err(e) => {
-//                 eprintln!("Error making stream {}:{}", title, e);
-//                 return;
-//             }
-//         };
-
-//         let sink = match Sink::try_new(&stream_handle) {
-//             Ok(sink) => Arc::new(sink),
-//             Err(e) => {
-//                 eprintln!("Error creating sink: {}", e);
-//                 return;
-//             }
-//         };
-
-//         match Decoder::new(BufReader::new(file)) {
-//             Ok(source) => sink.append(source),
-//             Err(e) => {
-//                 eprintln!("Error decoding audio file: {}", e);
-//                 return;
-//             }
-//         }
-
-//         {
-//             let mut current_song = state.current_song.lock().unwrap();
-//             if let Some(ref current) = *current_song {
-//                 current.pause();
-//             }
-//         }
-
-//         sink.set_volume(1.0);
-//         sink.sleep_until_end();
-//     });
-// }
 
 #[tauri::command]
 fn pause_song(title: String, state: State<'_, Arc<AppState>>) {
@@ -318,7 +222,8 @@ pub fn run() {
             set_volume,
             get_file_paths_in_folder,
             play_song,
-            pause_song
+            pause_song,
+            get_metadata,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

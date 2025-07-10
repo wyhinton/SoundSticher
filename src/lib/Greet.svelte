@@ -6,7 +6,13 @@
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { onMount, unmount } from "svelte";
   import FileDrop from "svelte-tauri-filedrop";
-  import {
+  import {TreeView} from 'svelte-tree-view'
+  import DiffValue from "svelte-tree-view"
+  import mapDocDeltaChildren from "svelte-tree-view"
+  import {Fa} from 'svelte-fa'
+// import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
+
+    import {
     addSection,
     appState,
     deleteSection,
@@ -16,6 +22,7 @@
     updatePath,
   } from "./state/state.svelte";
   import { get } from "svelte/store";
+  import Section from "./Section.svelte";
 
   WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
@@ -36,18 +43,18 @@
   // console.log(event)
   // })
 
-  listen<number>('song-progress', (event) => {
-    console.log(
-      event
-    );
-  });
+
   // let folders = $state<string[]>([]);
   let stateAsString = $derived(
     JSON.stringify(
-      $appState.sections.map((s) => ({
-        folderPath: s.folderPath,
-        files: s.files.length,
-      }))
+      {
+        ...$appState,
+        sections: $appState.sections.map((s) => ({
+          folderPath: s.folderPath,
+          files: s.files.length,
+        })),
+      
+      }
     )
   );
 
@@ -64,76 +71,60 @@
       }
     });
   });
+
+  const theme = {
+  scheme: 'google',
+  author: 'seth wright (http://sethawright.com)',
+  base00: '#1d1f21',
+  base01: '#282a2e',
+  base02: '#373b41',
+  base03: '#969896',
+  base04: '#b4b7b4',
+  base05: '#c5c8c6',
+  base06: '#e0e0e0',
+  base07: '#ffffff',
+  base08: '#CC342B',
+  base09: '#F96A38',
+  base0A: '#FBA922',
+  base0B: '#198844',
+  base0C: '#3971ED',
+  base0D: '#3971ED',
+  base0E: '#A36AC7',
+  base0F: '#3971ED'
+}
 </script>
 
 
 <button class="btn btn-sm" onclick={addSection}>Add section</button>
-<button class="btn btn-sm btn-secondary" onclick={() => play_song("test")}
-  >PLAY SONG</button
->
-{stateAsString}
+<button class="btn btn-sm" onclick={()=>console.log($appState)}>Log App State</button>
+
 <div class="">
   {#each $appState.sections as section, sectionIndex}
-    <div
-      class="card d-flex flex-column"
-      class:error={$appState.sections[sectionIndex].errors.length > 0}
-    >
-      <div class="d-flex ">
-        <input
-          class="folder-input"
-          onchange={(e) => {
-            updatePath(sectionIndex, (e.target as HTMLInputElement).value);
-          }}
-          bind:value={$appState.sections[sectionIndex].folderPath}
-          type="text"
-          id="name"
-          placeholder="Enter your name"
-        />
-		      <button
-        class="btn btn-sm"
-        >Get Files Test</button
-      >
-      <button
-        class="btn btn-sm btn-danger"
-        onclick={() => deleteSection(sectionIndex)}>Delete Section</button
-      >
-      </div>
+    <Section section={$appState.sections[sectionIndex]} sectionIndex={sectionIndex}></Section>
 
-
-      <div class="d-flex flex-column">
-        <div class="d-flex flex-column">
-          {#each $appState.sections[sectionIndex].errors as sectionError, errorIndex}
-            {sectionError.message}
-          {/each}
-        </div>
-        <div class="table-responsive section-table">
-          <table class="table table-sm table-striped table-hover">
-            <thead>
-              <tr class="">
-                <th class="file-column">File</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each $appState.sections[sectionIndex].files as file, fileIndex}
-                <tr onclick={()=>play_song(file)}><td><div class="file-name">{file.split(/[/\\]/).pop()}</div></td></tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ERRORS -->
-    </div>
   {/each}
 </div>
+<!-- <TreeView
+  data={$appState}
+  theme={theme}
+  recursionOpts={{
+    maxDepth: 16,
+    shouldExpandNode: (n) =>{
+      // console.log(n)
+      if (["files", "metaData"].includes(n.key) ){
+        // console.log(n)
+        return false;
+      }
+      return true
+    }
+  }}
+/> -->
+
+{stateAsString}
 
 <style>
-	.section-table{
-		max-height: 400px;
-	}
-.file-column {
-    max-width: 300px;
-  }
+
+
   .dropzone {
     margin: 20px;
     padding: 20px;
@@ -143,26 +134,9 @@
     background: #d6dff0;
   }
 
-  .error {
-    border: 1px solid red;
-    color: red;
-  }
 
-  .file-name {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    max-width: 400px;
-  }
 
-  th {
-    text-align: left;
-  }
 
-  .folder-input {
-    width: 500px;
-  }
+  
 
-  tr {
-  }
 </style>
