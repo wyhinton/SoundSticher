@@ -57,6 +57,9 @@ pub struct FileMetadata {
     pub path: String,
     pub size: Option<u64>,
     pub bitRate: Option<u32>,
+    pub channels: Option<u8>,
+    pub bitDepth: Option<u8>,
+    pub duration: u128,
 }
 
 #[tauri::command]
@@ -69,6 +72,9 @@ pub fn get_metadata(title: String) -> Result<FileMetadata, Error> {
                 path: title.clone(),
                 size: get_file_size(title.clone()),
                 bitRate: props.audio_bitrate(),
+                channels: props.channels(),
+                bitDepth: props.bit_depth(),
+                duration: props.duration().as_millis(),
             });
         }
         Err(e) => {
