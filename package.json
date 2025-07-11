@@ -20,6 +20,7 @@
     "@tauri-apps/plugin-shell": ">=2.0.0-beta.0",
     "@thisux/sveltednd": "^0.0.20",
     "boostrap": "^2.0.0",
+    "prismjs": "^1.30.0",
     "svelte-fa": "^4.0.4",
     "svelte-persisted-store": "^0.12.0",
     "svelte-tauri-filedrop": "^2.0.2",

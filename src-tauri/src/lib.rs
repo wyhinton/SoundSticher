@@ -11,6 +11,7 @@ use log;
 
 use crate::error::{Error, ErrorKind};
 use crate::metadata::get_metadata;
+mod combine;
 mod error;
 mod metadata;
 
@@ -22,20 +23,6 @@ pub struct Song {
     pub title: String,
 }
 
-impl serde::Serialize for Error {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::ser::Serializer,
-    {
-        let error_message = self.to_string();
-        let error_kind = match self {
-            Self::Io(_) => ErrorKind::Io(error_message),
-            Self::Utf8(_) => ErrorKind::Utf8(error_message),
-            Self::InvalidPath => ErrorKind::InvalidPath,
-        };
-        error_kind.serialize(serializer)
-    }
-}
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 #[tauri::command]
@@ -224,6 +211,7 @@ pub fn run() {
             play_song,
             pause_song,
             get_metadata,
+            combine::combine_audio_files,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
