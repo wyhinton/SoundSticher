@@ -68,6 +68,7 @@ pub fn get_metadata(title: String) -> Result<FileMetadata, Error> {
     let meta = match tagged_file {
         Ok(taggedFile) => {
             let props = taggedFile.properties();
+            log::info!("✅ Successfully retrieved metadata for: {}", title);
             return Ok(FileMetadata {
                 path: title.clone(),
                 size: get_file_size(title.clone()),
@@ -83,6 +84,13 @@ pub fn get_metadata(title: String) -> Result<FileMetadata, Error> {
         }
     };
 }
+
+// #[tauri::command]
+// pub fn load_samples_into_state(
+//     samplePaths: Vec<String>,
+//     state: State<'_, Arc<AppState>>,
+// ) -> Result<FileMetadata, Error> {
+// }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]

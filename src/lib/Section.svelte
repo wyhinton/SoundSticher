@@ -4,6 +4,7 @@
     appState,
     deleteSection,
     getAllFiles,
+    pause_song,
     play_song,
     updatePath,
     type Section,
@@ -14,23 +15,27 @@
   export let sections: Section[];
 </script>
 
-<div class="card d-flex flex-column">
+<div class="card d-flex flex-column position-relative">
   <div class="d-flex flex-column">
     <div class="d-flex flex-column">
       <!-- {#each section.errors as sectionError, errorIndex}
           {sectionError.message}
         {/each} -->
     </div>
+    {#if sections.length === 0}
+      <div class="position-absolute no-inputs-warning">No inputs</div>
+    {/if}
+
     <div class="table-responsive section-table">
       <table class="table table-xs border-0">
         <thead>
           <tr class="">
             <th class="file-column">File</th>
-            <th class="file-column text-center">Size</th>
-            <th class="file-column text-center">bitRate</th>
-            <th class="file-column text-center">Channels</th>
-            <th class="file-column text-center">bitDepth</th>
-            <th class="file-column text-center">Duration</th>
+            <th class="text-center">Size</th>
+            <th class="text-center">bitRate</th>
+            <th class="text-center">Channels</th>
+            <th class="text-center">bitDepth</th>
+            <th class="text-center">Duration</th>
           </tr>
         </thead>
         <tbody>
@@ -38,14 +43,33 @@
             <tr
               class:playing={file.path === $appState.playingSong &&
                 $appState.playProgress < 1}
-              onclick={() => play_song(file.path)}
+              onclick={() => {
+                if (file.path === $appState.playingSong &&
+                $appState.playProgress < 1){
+                   pause_song()
+                } else {
+                  play_song(file.path)
+                }
+                }}
               ><td
-                ><div
-                  style:background-color={toCssRgb(file.color.rgb, 0.1)}
-                  class="file-name"
+                >
+                <div class="d-flex align-items-center">
+         
+                <div
+                  class="file-name ms-1"
                 >
                   {file.path.split(/[/\\]/).pop()}
-                </div></td
+                </div>
+                {#if file.path === $appState.playingSong &&
+                $appState.playProgress < 1}
+                  <i class="ms-1 fas fa-play text-success"></i>
+                   <!-- content here -->
+                {/if}
+              <!-- <div class="color-indicator ms-1" style:background-color={toCssRgb(file.color.rgb, 1)}>
+                </div> -->
+                </div>
+                
+                </td
               >
               <td class="audio-number">{formatBytes(file.size)}</td>
               <td class="audio-number">{file.bitRate}</td>
@@ -63,8 +87,20 @@
 </div>
 
 <style>
+  .color-indicator{
+    height: 5px;
+    width: 5px;
+  }
+
+  .no-inputs-warning{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
   .section-table {
     max-height: 400px;
+    min-height: 400px;
   }
 
   .btn {
@@ -78,6 +114,7 @@
     position: sticky !important;
     top: 0;
     font-size: 11px;
+    color: #9d9d9d !important;
   }
 
   .audio-number {
@@ -89,9 +126,14 @@
   }
 
   td {
-    background-color: #181c20 !important;
+    background-color: var(--bs-primary-bg-subtle) !important;
+    /* background-color: #181c20 !important; */
     padding: 0px !important;
     font-size: 12px;
+  }
+
+  td > div > div{
+    font-family: 'Fira Code'
   }
 
   tr:hover > td {
@@ -153,6 +195,7 @@
 
   .file-column {
     max-width: 300px;
+    /* border-radius: 5px 0px 0px 0px; */
   }
 
   .file-name {

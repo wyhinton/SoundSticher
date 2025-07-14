@@ -1,11 +1,9 @@
 export const files = $state<string[]>([]);
-import { invoke } from "@tauri-apps/api/core";
-import { onDestroy } from "svelte";
 import { persisted } from "svelte-persisted-store";
-import { derived, get } from "svelte/store";
-import { warn, debug, trace, info, error } from "@tauri-apps/plugin-log";
+import { get } from "svelte/store";
 import { listen } from "@tauri-apps/api/event";
 import { getNextAvailableColor, type AbletonColor } from "$lib/utils/colors";
+import { invokeWithPerf } from "./performance";
 
 export type ErrorKind = {
   kind: "io" | "utf8";
@@ -32,6 +30,8 @@ interface AppState {
   playingSection?: number;
   playProgress?: number;
   combinedFile?: VisualSample;
+  combineFileMeta?: FileMetadata
+  isCombiningFile: boolean;
 }
 
 interface AudioFileItem {
@@ -63,6 +63,7 @@ interface FileMetadata {
 
 export const appState = persisted<AppState>("appState", {
   sections: [],
+  isCombiningFile: false,
 });
 
 const DEFAULT_FOLDER =
@@ -104,12 +105,21 @@ export function updatePath(sectionIndex: number, value: string) {
 }
 
 export async function play_song(song: string) {
-  await invoke<Song[]>("play_song", { title: song }).then((f) => {
+  await invokeWithPerf<Song[]>("play_song", { title: song }).then((f) => {
     appState.update((state) => {
       state.playingSong = song;
       return state;
     });
     console.log(f);
+  });
+}
+
+export async function pause_song() {
+  await invokeWithPerf<Song[]>("pause_song", {}).then((f) => {
+    appState.update((state) => {
+      state.playingSong = undefined;
+      return state;
+    });
   });
 }
 
@@ -122,17 +132,25 @@ export async function combine_audio_files(
   input_files: string[],
   output_path: string
 ) {
-  await invoke<CombineAudioResult>("combine_audio_files", {
+  await invokeWithPerf<CombineAudioResult>("combine_audio_files", {
     inputFiles: input_files,
     outputPath: output_path,
   }).then((f) => {
-    appState.update((state) => {
-      state.combinedFile = { path: f.output, svgPath: f.svgPath };
-      return state;
+    const metadata = invokeWithPerf<FileMetadata>("get_metadata", {
+            title: "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav",
+    }).then((m)=>{
+      console.log(m)
+      appState.update((state) => {
+        state.combinedFile = { path: f.output, svgPath: f.svgPath };
+        state.combineFileMeta = m;
+        return state;
+      });
+      console.log(f);
     });
-    console.log(f);
   });
 }
+
+
 
 export async function get_file_paths_in_folder(sectionIndex: number) {
   const { sections } = get(appState);
@@ -141,7 +159,7 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
   if (!folder) return;
 
   try {
-    const files = await invoke<string[]>("get_file_paths_in_folder", {
+    const files = await invokeWithPerf<string[]>("get_file_paths_in_folder", {
       folderPath: folder,
     });
 
@@ -159,7 +177,7 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
     const metadataList = await Promise.all<FileMetadata | null>(
       files.map(async (file) => {
         try {
-          const metadata = await invoke<FileMetadata>("get_metadata", {
+          const metadata = await invokeWithPerf<FileMetadata>("get_metadata", {
             title: file,
           });
           return metadata;
@@ -215,6 +233,21 @@ appState.subscribe((s) => {
   console.log(s);
 });
 
+export function resetAppState(){
+  appState.update((state) => {
+  state.combinedFile = undefined;
+  state.sections = [];
+  state.playingSong = undefined;
+  state.playingSection = undefined;
+  state.playProgress = undefined;
+  state.combineFileMeta = undefined;
+  state.isCombiningFile = false;
+  return state;
+});
+}
+
 export function getAllFiles(sections: Section[]) {
   return sections.map((s) => s.files).flat();
 }
+
+

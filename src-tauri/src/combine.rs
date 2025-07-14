@@ -111,7 +111,7 @@ pub fn combine_audio_files(
     log::info!("Total time: {:.2?}", start_total.elapsed());
     return Ok(CombineAudioResult {
         output: output_path,
-        svg_path: generate_waveform_path(&all_samples, 1000, 100),
+        svg_path: generate_waveform_path(&all_samples, 1000, 70),
     });
 }
 
