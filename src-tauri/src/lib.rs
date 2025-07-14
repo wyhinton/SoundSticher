@@ -1,13 +1,13 @@
+use log;
 use rodio::{Decoder, OutputStream, Sink};
 use std::fs::{metadata, File};
 use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
+use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
-
-use log;
 
 use crate::error::{Error, ErrorKind};
 use crate::metadata::get_metadata;
@@ -22,7 +22,6 @@ pub struct AppState {
 pub struct Song {
     pub title: String,
 }
-
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 #[tauri::command]
@@ -174,10 +173,13 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
 }
 
 #[tauri::command]
-fn pause_song(title: String, state: State<'_, Arc<AppState>>) {
+fn pause_song(state: State<'_, Arc<AppState>>) {
     let mut current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
+        println!("PAUSING!!!!");
         sink.pause();
+    } else {
+        println!("FAILED!!")
     }
 }
 
@@ -198,6 +200,7 @@ pub fn run() {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
                 window.close_devtools();
+                app.listen("download-started", |event| {});
             }
             Ok(())
         })
@@ -220,6 +223,7 @@ pub fn run() {
                 ))
                 .build(),
         )
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
         // .run(context::generate_context("../targets").into())
         .run(tauri::generate_context!())
