@@ -1,6 +1,6 @@
 <script lang="ts">
   import { performanceStore, resetPerformance } from "$lib/state/performance";
-  import { positionStore } from "$lib/state/position";
+  import { addNewFolderOnDrop, positionStore } from "$lib/state/position";
   import { appState, resetAppState } from "$lib/state/state.svelte";
   import Prism from 'prismjs';
   import 'prismjs/components/prism-json';
@@ -67,6 +67,9 @@ import 'prismjs/themes/prism-okaidia.css';
             {/each}
         </tbody>
     </table>
+    <div><b>Is Over Table Container: </b>{$positionStore.isOverTableContainer}</div>
+    <div><b>Inputs under mouse: </b>{$positionStore.inputsUnderMouse}</div>
+    <div><b>Add new folder on drop: </b>{$addNewFolderOnDrop}</div>
     <div>{JSON.stringify($positionStore)}</div>
     <div>{t}</div>
 </div>

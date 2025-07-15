@@ -9,7 +9,7 @@
   let pathGroup: SVGGElement;
 
   const height = 100;
-  const durationSeconds = 121;
+  const durationSeconds = $appState?.combineFileMeta?.duration;
 
   const rawPath = $appState?.combinedFile?.svgPath;
   const originalPathWidth = 1000;
@@ -19,7 +19,7 @@
   let xScale: d3.ScaleLinear<number, number>;
 
   function updateScales() {
-    xScale = d3.scaleLinear().domain([0, durationSeconds]).range([0, width]);
+    xScale = d3.scaleLinear().domain([0, durationSeconds/1000]).range([0, width]);
 
     scaleX = width / originalPathWidth;
 
@@ -90,7 +90,7 @@
           pathGroupD3.attr("transform", `translate(${t.x}, 0) scale(${t.k}, 1)`);
           console.log(height);
           const newXScale = t.rescaleX(
-            d3.scaleLinear().domain([0, durationSeconds]).range([0, width])
+            d3.scaleLinear().domain([0, durationSeconds/1000]).range([0, width])
           );
           renderAxis(newXScale);
         })
