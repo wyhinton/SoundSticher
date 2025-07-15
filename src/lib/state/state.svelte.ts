@@ -69,13 +69,14 @@ export const appState = persisted<AppState>("appState", {
 const DEFAULT_FOLDER =
   "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_time-leeuwarden";
 
-export function addSection() {
+export function addSection(path?: string) {
+  console.log(path)
   appState.update((state) => {
     const color = getNextAvailableColor(state.sections);
     console.log(color);
     state.sections = [
       {
-        folderPath: DEFAULT_FOLDER,
+        folderPath: path??DEFAULT_FOLDER,
         files: [],
         errors: [],
         metaData: [],
