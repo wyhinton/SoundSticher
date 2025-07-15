@@ -12,12 +12,38 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "tauri-v2-sveltekit-template",
-        "width": 800,
-        "height": 600
+        "width": 1266,
+        "height": 800
+      },
+      {
+        "label":"debug",
+        "title": "debug",
+        "width": 400,
+        "height": 800,
+        "url": "/debug"
       }
     ],
     "security": {
+          "capabilities": [
+                "main-capability",
+                {
+                    "identifier": "use-external-drives",
+                    "description": "Capability to be able to use library on external drives",
+                    "windows": ["*"],
+                    "permissions": [
+                        {
+                            "identifier": "fs:scope",
+                            "allow": ["**"]
+                        }
+                    ]
+                }
+            ],
+            "assetProtocol": {
+                "scope": ["**"],
+                "enable": true
+            },
       "csp": null
     }
   },
