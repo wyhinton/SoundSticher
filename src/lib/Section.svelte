@@ -2,21 +2,17 @@
   import { formatBytes, formatMilliseconds } from "./utils/format";
   import {
     appState,
-    deleteSection,
     getAllFiles,
     pause_song,
     play_song,
-    updatePath,
     type Section,
   } from "./state/state.svelte";
-  import { toCssRgb } from "./utils/colors";
-  import { getAbortSignal } from "svelte";
 
   export let sections: Section[];
 </script>
 
-<div class="card d-flex flex-column position-relative">
-  <div class="d-flex flex-column">
+<div class="card d-flex flex-column position-relative" >
+  <div class="d-flex flex-column" style:background-color="#080808">
     <div class="d-flex flex-column">
       <!-- {#each section.errors as sectionError, errorIndex}
           {sectionError.message}
@@ -26,7 +22,7 @@
       <div class="position-absolute no-inputs-warning">No inputs</div>
     {/if}
 
-    <div class="table-responsive section-table">
+    <div class="table-responsive section-table dot-grid-background">
       <table class="table table-xs border-0">
         <thead>
           <tr class="">
@@ -87,6 +83,10 @@
 </div>
 
 <style>
+  .dot-grid-background {
+  background-image: radial-gradient(circle, #141313 1px, transparent 1px);
+  background-size: 5px 5px;
+}
   .color-indicator{
     height: 5px;
     width: 5px;

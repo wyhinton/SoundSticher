@@ -1,19 +1,17 @@
 <script lang="ts">
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
-
+  import { stat } from '@tauri-apps/plugin-fs'
   import {
     appState,
     deleteSection,
+    get_file_paths_in_folder,
     updatePath,
   } from "./state/state.svelte";
   import { toCssRgb } from "./utils/colors";
   import { onMount } from "svelte";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import type { DragDropEvent } from "@tauri-apps/api/webviewWindow";
-  import { json } from "@sveltejs/kit";
-  import { logPositionInfo } from "./state/position";
-  WebviewWindow.getCurrent()
+    WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
     .then((v) => {
       console.log(v);
@@ -38,14 +36,11 @@
 
   let test;
   let rects;
-  let inputsUnderMouse = [];
-  let innerPosition;
-  let innerSize;
-  let viewPosition;
-  let viewSize;
+  let inputsUnderMouse: number[] = [];
   let isOver;
   let x;
   let y;
+  let scaleFactor = 1;
 
 
   onMount(async () => {
@@ -54,14 +49,17 @@
       console.log(event)
       rects = getInputRects();
       inputsUnderMouse = [];
-      
+      const factor = view.window.scaleFactor();
+      factor.then(f=>{
+        console.log(f)
+        scaleFactor = f;
+      })
       switch (event.payload.type) {
         case 'enter':
           isOver = true;
         case 'over':
-            x = event.payload.position.x.toString();
-            y = event.payload.position.y.toString();
-            // innerPosition = view.position();
+            x = (event.payload.position.x/scaleFactor).toString();
+            y = (event.payload.position.y/scaleFactor).toString();
             rects.forEach((r,i)=>{
               if (isPointInRect(parseInt(x), parseInt(y), r)){
                 console.log(`%cHERE LINE :67 %c`,'color: brown; font-weight: bold', '');
@@ -74,39 +72,41 @@
 
             // logPositionInfo(view);
         case 'drop':
-          const position = event.payload.position;
-          // logPositionInfo(view);
-          // console.log(rects)
-          // console.log(view.position())
-          // console.log(view.size)
-          // console.log(view.window.innerPosition())
-          // console.log(view.window.innerSize())
-          // console.log({x: rects[0].x, y: rects[0].y, width: rects[0].width, height: rects[0].height})
-          // const isInside = rects.filter(r=>isPointInRect((event.payload as DragDropEvent).))
-          // rects.forEach((r,i)=>{
-          //   if (isPointInRect(position.x, position.y, r)){
-          //     inputsUnderMouse.push(i)
-          //   }
-          // })
-          
-          console.log(event.payload.position); // ✅ Safe
+            let atDrop: number[] = []
+            x = (event.payload.position.x/scaleFactor).toString();
+            y = (event.payload.position.y/scaleFactor).toString();
+            rects.forEach((r,i)=>{
+              if (isPointInRect(parseInt(x), parseInt(y), r)){
+                console.log(`%cHERE LINE :67 %c`,'color: brown; font-weight: bold', '');
+                atDrop.push(i)
+                inputsUnderMouse.push(i)
+              }
+            })
+            test = event.payload.position.toJSON();
+          if (event.payload.type === "drop"){
+              console.log(event.payload.paths)
+              const paths =  event.payload.paths;
+              console.log(atDrop)
+              if (atDrop.length>0){
+              Promise.all(event.payload.paths.map(p=>stat(p))).then((v)=>{
+                    console.log(v)
+                    console.log(inputsUnderMouse)
+                    v.forEach((v)=>{
+                      if (v.isDirectory){
+                          updatePath(atDrop[0], paths[0])
+                      }
+                    })
+                })
+                inputsUnderMouse = [];
+              }
+    
+          }
           break;
         case 'leave':
            isOver = false;
           console.log("No position data");
           break;
       }
-
-
-
-      // if (event.payload.type === "over") {
-      //   // console.log("User hovering", event.payload.position);
-      // } else if (event.payload.type === "drop") {
-      //   console.log(event)
-      //   console.log("User dropped", event.payload.paths);
-      // } else {
-      //   console.log("File drop cancelled");
-      // }
     });
   });
 
@@ -115,7 +115,7 @@
 
 
 <div class="position-relative">
-    <div class="table-responsive" style:min-height="50px" style:background-color="#32383e">
+    <div class="table-responsive" style:min-height="100px" style:background-color="rgb(15 21 27)">
         {#if $appState.sections.length === 0}
           <div class="position-absolute no-inputs-warning">No inputs!</div>
         {/if}
@@ -129,10 +129,10 @@
           </thead>
           <tbody bind:this={container}>
             {#each $appState.sections as item, sectionIndex}
-              <tr>
+              <tr class="source-row">
                 <!-- <tr style:background-color={toCssRgb(item.color.rgb, 0.5)}> -->
                 <td>
-                  <div class="d-flex justify-content-start align-items-center">
+                  <div class:under-drag={inputsUnderMouse.includes(sectionIndex)} class="d-flex justify-content-start align-items-center">
                     <i class="fas fa-folder my-0 mx-2"></i>
     
                     <input
@@ -169,15 +169,22 @@
         </table>
     </div>
 </div>
-<div style:font-size="9px">
+<!-- <div style:font-size="9px">
   x: {x}
   y: {y}
   {JSON.stringify(isOver)}
   {JSON.stringify(test)}
   {JSON.stringify(rects)}
   {JSON.stringify(inputsUnderMouse)}
-</div>
+</div> -->
 <style>
+ 
+.source-row{
+  border-bottom: 1px solid white;
+}
+ .under-drag{
+    border: 2px solid green;
+  }
   .folder-input {
     width: 500px;
     border-radius: 2px;

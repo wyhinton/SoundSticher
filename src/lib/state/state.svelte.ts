@@ -98,6 +98,7 @@ export function deleteSection(index: number) {
 
 export function updatePath(sectionIndex: number, value: string) {
   appState.update((state) => {
+    console.log(state.sections)
     state.sections[sectionIndex].folderPath = value;
     return state;
   });

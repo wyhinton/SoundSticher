@@ -61,13 +61,24 @@ fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
         let entry = entry?; // Also converts into AppError
         let path = entry.path();
 
+        println!("entry {}", &path.display());
+
         if path.is_file() {
+            // ❌ Skip hidden metadata files like "._track.mp3"
+            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                if file_name.starts_with("._") {
+                    continue;
+                }
+            }
+
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 let ext = ext.to_lowercase();
 
-                // Only allow common audio file extensions
-                if ["mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff", "alac"]
-                    .contains(&ext.as_str())
+                // ✅ Allow common audio file extensions
+                if [
+                    "mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff", "alac", "aif",
+                ]
+                .contains(&ext.as_str())
                 {
                     let path_str = path.to_str().ok_or(Error::InvalidPath)?;
                     paths.push(path_str.to_string());
@@ -76,9 +87,9 @@ fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
         }
     }
 
+    println!("Total valid files: {}", paths.len());
     Ok(paths)
 }
-
 #[tauri::command]
 fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
     let path = title.clone();
@@ -195,6 +206,7 @@ fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             {
                 let window = app.get_webview_window("main").unwrap();
