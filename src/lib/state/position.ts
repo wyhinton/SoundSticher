@@ -2,12 +2,15 @@ import type { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { Webview } from "@tauri-apps/api/webview";
 import { persisted } from "svelte-persisted-store";
 import { performanceStore } from "./performance";
+import { derived } from "svelte/store";
 
 interface PositionState {
+  inputsUnderMouse: number[],
   viewPosition?: {x: number, y: number};
   viewSize?: {width: number, height: number};
   innerPosition?: {x: number, y: number};
   innerSize?: {width: number, height: number};
+  isOverTableContainer: boolean;
 }
 
 export const positionStore = persisted<PositionState>(
@@ -17,8 +20,32 @@ export const positionStore = persisted<PositionState>(
     viewSize: undefined,
     innerSize: undefined,
     viewPosition: undefined,
-  }
+    inputsUnderMouse: [],
+    isOverTableContainer: false,
+  },
 );
+
+export const setIsOverTableContainer = (isOver: boolean) =>{
+  positionStore.update(s=>{
+    s.isOverTableContainer = isOver;
+    return s;
+  })
+}
+
+export const setInputsUnderMouse = (inputs: number[]) =>{
+  positionStore.update(s=>{
+    s.inputsUnderMouse = inputs;
+    return s;
+  })
+}
+
+export const clearUnderMouse = () =>{
+  positionStore.update((s)=>{
+    s.inputsUnderMouse = [];
+    s.isOverTableContainer = false;
+    return s;
+  })
+}
 
 export const logPositionInfo = (view: Webview) => {
   console.log();
@@ -35,38 +62,9 @@ export const logPositionInfo = (view: Webview) => {
         return s;
       })
     })
-  // positionStore.update((s)=>{
-  //   view.position().
-  // })
-  //  Promise.all([
-  //   view.position(),
-  //   view.size(),
-  //   view.window.innerPosition(),
-  //   view.window.innerSize(),
-  // ]).then(([position, size, innerPosition, innerSize]) => {
-  //   positionStore.update((store)=>({
-  //       ...store,
-  //       viewPosition: position.toJSON(), 
-  //       viewSize: size.toJSON(),
-  //       innerPosition: innerPosition.toJSON(),
-  //       innerSize: innerSize.toJSON()        
-  //   }))
-  // });
-
-  // view.position().then((p) => {
-  //   console.log(`POSITION: ${p}`);
-  // });
-  // view.size().then((p) => {
-  //   console.log(`SIZE: ${p}`);
-  // });
-  // view.window.innerPosition().then((p) => {
-  //   console.log(`INNER POSITION: ${p}`);
-  // });
-  // view.window.innerSize().then((p) => {
-  //   console.log(`INNER SIZE: ${p}`);
-  // });
 };
 
-positionStore.subscribe((s)=>{
-  console.log(s)
+export const addNewFolderOnDrop = derived(positionStore, (s)=>{
+  return s.inputsUnderMouse.length === 0 && s.isOverTableContainer;
 })
+
