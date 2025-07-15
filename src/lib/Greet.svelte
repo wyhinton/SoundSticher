@@ -33,7 +33,7 @@
 <div class="">
   <div class="px-0">
     <Sources></Sources>
-      <div class="text-center pixel-font py-2"><b>$</b></div>
+      <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
     <Section sections={$appState.sections}></Section>
   </div>
   <!-- <Waveform></Waveform> -->

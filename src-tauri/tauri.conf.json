@@ -26,6 +26,24 @@
       }
     ],
     "security": {
+          "capabilities": [
+                "main-capability",
+                {
+                    "identifier": "use-external-drives",
+                    "description": "Capability to be able to use library on external drives",
+                    "windows": ["*"],
+                    "permissions": [
+                        {
+                            "identifier": "fs:scope",
+                            "allow": ["**"]
+                        }
+                    ]
+                }
+            ],
+            "assetProtocol": {
+                "scope": ["**"],
+                "enable": true
+            },
       "csp": null
     }
   },
