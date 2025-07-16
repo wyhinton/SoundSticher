@@ -11,7 +11,7 @@
   export let sections: Section[];
 </script>
 
-<div class="card d-flex flex-column position-relative" >
+<div style:width="-webkit-fill-available" class="card d-flex flex-column position-relative " >
   <div class="d-flex flex-column" style:background-color="#080808">
     <div class="d-flex flex-column">
       <!-- {#each section.errors as sectionError, errorIndex}

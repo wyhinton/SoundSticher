@@ -31,7 +31,7 @@
 <Toolbar></Toolbar>
 
 <div class="">
-  <div class="px-0">
+  <div class="px-0 d-flex">
     <Sources></Sources>
       <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
     <Section sections={$appState.sections}></Section>
