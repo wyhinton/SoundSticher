@@ -252,4 +252,7 @@ export function getAllFiles(sections: Section[]) {
   return sections.map((s) => s.files).flat();
 }
 
-
+appState.subscribe((v)=>{
+  console.log(`%cHERE LINE :256 %c`,'color: brown; font-weight: bold', '');
+  
+})

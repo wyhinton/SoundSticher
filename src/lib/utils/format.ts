@@ -12,3 +12,7 @@ export function formatMilliseconds(ms: number): string {
   const seconds = ms / 1000;
   return `${seconds.toFixed(2)}s`;
 }
+
+export function formatFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() || '';
+}
