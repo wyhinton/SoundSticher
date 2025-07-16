@@ -15,6 +15,7 @@
     setIsOverTableContainer,
   } from "./state/position";
   import SineWaveShader from "./SineWaveShader.svelte";
+  import EditableInput from "./EditableInput.svelte";
   WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
     .then((v) => {
@@ -126,8 +127,7 @@
   <div
     bind:this={tableContainer}
     class:drop-add={$addNewFolderOnDrop}
-    class="table-responsive"
-    style:min-height="100px"
+    class="table-responsive h-100"
     style:background-color="rgb(15 21 27)"
   >
     {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
@@ -156,7 +156,7 @@
                 class="d-flex justify-content-start align-items-center"
               >
                 <i class="fas fa-folder my-0 mx-2"></i>
-
+                <!-- <EditableInput fullPath={item.folderPath}></EditableInput> -->
                 <input
                   style:color={toCssRgb(item.color.rgb, 1)}
                   class="folder-input input-group-sm my-auto"
@@ -214,7 +214,7 @@
     border: 2px solid green;
   }
   .folder-input {
-    width: 500px;
+    width: 200px;
     border-radius: 2px;
     border: 0px;
     /* background: var(--bs-primary-bg-subtle) !important; */
