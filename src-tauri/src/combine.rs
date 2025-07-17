@@ -1,7 +1,9 @@
+use crate::error::Error;
+use crate::AppState;
 use hound::{SampleFormat, WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
@@ -10,8 +12,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::default::{get_codecs, get_probe};
 use sysinfo::System;
-
-use crate::error::Error; // Add to Cargo.toml
+use tauri::{AppHandle, Emitter, Manager, State}; // Add to Cargo.toml
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -20,62 +21,47 @@ pub struct CombineAudioResult {
     svg_path: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CombineEvent {
+    progress: f32,
+}
+
 #[tauri::command]
 pub fn combine_audio_files(
     input_files: Vec<String>,
     output_path: String,
+    state: State<'_, Arc<AppState>>,
+    _app_handle: tauri::AppHandle,
 ) -> Result<CombineAudioResult, Error> {
     let start_total = Instant::now();
     let mut all_samples: Vec<i16> = vec![];
-    let mut sys = System::new_all();
+
     log::info!(
-        "Got request to combine_audio_files for {} files, out put to {}",
-        &input_files.len(),
-        &output_path
+        "Got request to combine_audio_files for {} files, output to {}",
+        input_files.len(),
+        output_path
     );
 
-    for file_path in &input_files {
+    for (i, file_path) in input_files.iter().enumerate() {
         let start_file = Instant::now();
         println!("Decoding: {}", file_path);
 
-        let file = File::open(file_path.clone())?;
-        let mss = MediaSourceStream::new(Box::new(file), Default::default());
-
-        let probed = match get_probe().format(
-            &Default::default(),
-            mss,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        ) {
-            Ok(probe) => probe,
-            Err(e) => {
-                eprintln!("Error doing: {}", e);
-                return Err(Error::InvalidPath);
-            }
-        };
-
-        let mut format = probed.format;
-        let track = format.default_track().ok_or(Error::NoDefaultTrackFound);
-        let mut decoder =
-            get_codecs().make(&track.unwrap().codec_params, &DecoderOptions::default())?;
-
-        let mut sample_count = 0;
-
-        while let Ok(packet) = format.next_packet() {
-            let decoded = decoder.decode(&packet)?;
-            let spec = *decoded.spec();
-            let mut sample_buf = SampleBuffer::<i16>::new(decoded.capacity() as u64, spec);
-            sample_buf.copy_interleaved_ref(decoded);
-            sample_count += sample_buf.len();
-            all_samples.extend(sample_buf.samples().iter());
-        }
-
+        let samples = get_samples(file_path)?;
         log::info!(
             "Decoded {} samples from {} in {:.2?}",
-            sample_count,
+            samples.len(),
             file_path,
             start_file.elapsed()
         );
+
+        all_samples.extend(&samples);
+
+        let progress_value = ((i + 1) as f32 / input_files.len() as f32);
+        let _ = _app_handle.emit("combine-audio-progress", progress_value);
+        // Store into AppState if needed
+        // if let Ok(mut audio_files) = state.audio_files.lock() {
+        //     audio_files.push((file_path.clone(), samples));
+        // }
     }
 
     let start_write = Instant::now();
@@ -88,31 +74,26 @@ pub fn combine_audio_files(
         sample_format: SampleFormat::Int,
     };
 
-    let mut writer = WavWriter::create(output_path.clone(), spec)?;
+    let mut writer = WavWriter::create(&output_path, spec)?;
     for sample in &all_samples {
         writer.write_sample(*sample)?;
     }
 
     writer.finalize()?;
+
     log::info!(
         "Wrote {} samples from {} files in {:.2?}",
         all_samples.len(),
-        &input_files.len(),
+        input_files.len(),
         start_write.elapsed()
     );
 
-    // Optional: Print memory usage
-    // sys.refresh_processes();
-    // if let Some(process) = sys.process(sysinfo::get_current_pid().unwrap()) {
-    //     println!("Memory: {:.2} MB", process.memory() as f64 / 1024.0);
-    //     println!("CPU Usage: {:.2}%", process.cpu_usage());
-    // }
-
     log::info!("Total time: {:.2?}", start_total.elapsed());
-    return Ok(CombineAudioResult {
+
+    Ok(CombineAudioResult {
         output: output_path,
         svg_path: generate_waveform_path(&all_samples, 1000, 70),
-    });
+    })
 }
 
 pub fn generate_waveform_path(samples: &[i16], width: usize, height: usize) -> String {
@@ -143,4 +124,41 @@ pub fn generate_waveform_path(samples: &[i16], width: usize, height: usize) -> S
     }
 
     d
+}
+
+#[tauri::command]
+pub fn update_inputs() {
+    println!("SHOULD UPDATE")
+}
+
+fn get_samples(file_path: &str) -> Result<Vec<i16>, Error> {
+    let file = File::open(file_path).map_err(|_| Error::InvalidPath)?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    let probed = get_probe()
+        .format(
+            &Default::default(),
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|_| Error::InvalidPath)?;
+
+    let mut format = probed.format;
+    let track = format.default_track().ok_or(Error::NoDefaultTrackFound)?;
+    let mut decoder = get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|_| Error::InvalidPath)?;
+
+    let mut samples: Vec<i16> = Vec::new();
+
+    while let Ok(packet) = format.next_packet() {
+        let decoded = decoder.decode(&packet).map_err(|_| Error::InvalidPath)?;
+        let spec = *decoded.spec();
+        let mut sample_buf = SampleBuffer::<i16>::new(decoded.capacity() as u64, spec);
+        sample_buf.copy_interleaved_ref(decoded);
+        samples.extend(sample_buf.samples().iter().copied());
+    }
+
+    Ok(samples)
 }

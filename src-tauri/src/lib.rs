@@ -227,6 +227,7 @@ pub fn run() {
             pause_song,
             get_metadata,
             combine::combine_audio_files,
+            combine::update_inputs,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
