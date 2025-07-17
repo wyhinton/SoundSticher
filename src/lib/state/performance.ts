@@ -17,6 +17,7 @@ export interface PerformanceState {
   get_file_paths_in_folder: PerformanceMetric[];
   pause_song: PerformanceMetric[];
   play_song: PerformanceMetric[];
+  update_inputs: PerformanceMetric[];
 
 
 }
@@ -27,6 +28,7 @@ export const performanceStore = persisted<PerformanceState>("performanceState",{
   get_file_paths_in_folder: [],
   pause_song: [],
   play_song: [],
+  update_inputs: [],
   
 });
 

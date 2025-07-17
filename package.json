@@ -25,6 +25,7 @@
     "@thisux/sveltednd": "^0.0.20",
     "boostrap": "^2.0.0",
     "d3": "^7.9.0",
+    "lodash-es": "^4.17.21",
     "prismjs": "^1.30.0",
     "svelte-fa": "^4.0.4",
     "svelte-persisted-store": "^0.12.0",
