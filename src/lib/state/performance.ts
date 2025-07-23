@@ -4,7 +4,7 @@ import { persisted } from 'svelte-persisted-store';
 import { writable } from 'svelte/store';
 
 
-interface PerformanceMetric{
+export interface PerformanceMetric{
     time: number;
     timeStamp: number;
 }
@@ -18,7 +18,9 @@ export interface PerformanceState {
   pause_song: PerformanceMetric[];
   play_song: PerformanceMetric[];
   update_inputs: PerformanceMetric[];
-
+  combine_all_cached_samples: PerformanceMetric[];
+  play_combined_audio: PerformanceMetric[];
+  cancel_combine: PerformanceMetric[];
 
 }
 
@@ -29,7 +31,9 @@ export const performanceStore = persisted<PerformanceState>("performanceState",{
   pause_song: [],
   play_song: [],
   update_inputs: [],
-  
+  combine_all_cached_samples: [],
+  play_combined_audio: [],
+  cancel_combine: [],
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {

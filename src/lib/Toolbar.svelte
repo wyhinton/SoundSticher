@@ -8,6 +8,8 @@
     getAllFiles,
   } from "./state/state.svelte";
   import type { Event, UnlistenFn } from "@tauri-apps/api/event";
+  import { get } from "svelte/store";
+  import { BaseDirectory, create } from "@tauri-apps/plugin-fs";
   
   WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
@@ -30,7 +32,7 @@
 
 <div class="d-flex justify-content-center p-2">
   <!-- <div class="pixel-font">!Test</div> -->
-  <button class="btn btn-sm" onclick={addSection}><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button>
+  <button class="btn btn-sm" onclick={()=>addSection()}><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button>
 
   <button class:disabled={$appState.sections.length === 0} class="btn btn-sm" onclick={() => combine_audio_files(getAllFiles($appState.sections).map(f=>f.path),TEST_OUTPUT_DIR)}
     ><i class="me-1 fas fa-layer-group text-success"></i>Combine Files</button

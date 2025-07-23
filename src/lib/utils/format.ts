@@ -16,3 +16,16 @@ export function formatMilliseconds(ms: number): string {
 export function formatFileName(filePath: string): string {
   return filePath.split(/[/\\]/).pop() || '';
 }
+
+export function toSource(obj) {
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'string') {
+      // Escape backslashes
+      return value.replace(/\\/g, '\\\\');
+    }
+    return value;
+  }, 2)
+  // Replace double quotes with single quotes (optional)
+  .replace(/"([^"]+)":/g, "'$1':")
+  .replace(/"/g, "'");
+}

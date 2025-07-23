@@ -1,7 +1,10 @@
 use log;
 use rodio::{Decoder, OutputStream, Sink};
+use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::{metadata, File};
 use std::io::BufReader;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
@@ -9,14 +12,22 @@ use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 
-use crate::error::{Error, ErrorKind};
+use crate::error::Error;
 use crate::metadata::get_metadata;
 mod combine;
 mod error;
 mod metadata;
 
+#[derive(Serialize)]
+pub struct SerializableAppState {
+    pub audio_files: HashMap<String, usize>,
+}
+
 pub struct AppState {
     current_song: Mutex<Option<Arc<Sink>>>,
+    pub audio_files: Mutex<HashMap<String, Vec<i16>>>,
+    pub combined_audio: Mutex<Option<Vec<i16>>>,
+    pub cancel_flag: AtomicBool,
 }
 
 pub struct Song {
@@ -195,6 +206,20 @@ fn pause_song(state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
+fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
+    let audio_files = state.audio_files.lock().unwrap();
+
+    let audio_file_lengths: HashMap<String, usize> = audio_files
+        .iter()
+        .map(|(path, samples)| (path.clone(), samples.len()))
+        .collect();
+
+    SerializableAppState {
+        audio_files: audio_file_lengths,
+    }
+}
+
+#[tauri::command]
 fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
     let mut current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
@@ -205,8 +230,10 @@ fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard::init())
         .setup(|app| {
             {
                 let window = app.get_webview_window("main").unwrap();
@@ -218,6 +245,9 @@ pub fn run() {
         })
         .manage(Arc::new(AppState {
             current_song: Mutex::new(None),
+            audio_files: Mutex::new(HashMap::new()),
+            combined_audio: Mutex::new(None),
+            cancel_flag: AtomicBool::new(false),
         }))
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -228,6 +258,10 @@ pub fn run() {
             get_metadata,
             combine::combine_audio_files,
             combine::update_inputs,
+            combine::combine_all_cached_samples,
+            combine::play_combined_audio,
+            combine::cancel_combine,
+            get_app_state,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

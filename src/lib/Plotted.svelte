@@ -9,22 +9,44 @@
   let pathGroup: SVGGElement;
 
   const height = 100;
-  const durationSeconds = $appState?.combineFileMeta?.duration;
+  // const durationSeconds = $appState?.combinedFileLength;
+  $: durationSeconds = $appState?.combinedFileLength ?? 0;
+  $: if ($appState?.combinedFileLength && width > 0) {
+    updateScales();
+  }
 
   const rawPath = $appState?.combinedFile?.svgPath;
   const originalPathWidth = 1000;
+  let currentTransform = d3.zoomIdentity;
   let width = 0;
   let scaleX = 1;
 
   let xScale: d3.ScaleLinear<number, number>;
+  let playHeadPosition = 0;
+  let playHeadX = 0;
+  $: playHeadX = xScale?.(playHeadPosition) ?? 0;
 
   function updateScales() {
-    xScale = d3.scaleLinear().domain([0, durationSeconds/1000]).range([0, width]);
-
+    console.log(durationSeconds);
+    xScale = d3.scaleLinear().domain([0, durationSeconds]).range([0, width]);
     scaleX = width / originalPathWidth;
-
     renderAxis(xScale);
+    console.log(height);
   }
+  
+
+function handleClick(event: MouseEvent) {
+  const rect = container.getBoundingClientRect();
+  const relativeX = event.clientX - rect.left;
+  console.log(relativeX)
+  const clickedTime = currentTransform
+    .rescaleX(d3.scaleLinear().domain([0, durationSeconds]).range([0, width]))
+    .invert(relativeX);
+    console.log(clickedTime)
+  playHeadPosition =  Math.max(0, Math.min(clickedTime, durationSeconds));
+  console.log(playHeadPosition)
+  // playHeadX = relativeX;
+}
 
   function renderAxis(scale: d3.ScaleLinear<number, number>) {
     const axis = d3
@@ -51,7 +73,6 @@
       .style("font-size", "10px"); // optional
 
     const ticks = d3.selectAll("g.tick");
-    console.log(ticks);
 
     ticks
       .filter((_, i, nodes) => i === 0)
@@ -85,12 +106,13 @@
         ])
         // .extent([[0, 0], [width, height]])
         .on("zoom", (event) => {
-          const t = event.transform;
-        //   pathGroupD3.attr("transform", t.toString());
-          pathGroupD3.attr("transform", `translate(${t.x}, 0) scale(${t.k}, 1)`);
-          console.log(height);
-          const newXScale = t.rescaleX(
-            d3.scaleLinear().domain([0, durationSeconds/1000]).range([0, width])
+          currentTransform = event.transform;
+          pathGroupD3.attr(
+            "transform",
+            `translate(${event.transform.x}, 0) scale(${event.transform.k}, 1)`
+          );
+          const newXScale = currentTransform.rescaleX(
+            d3.scaleLinear().domain([0, durationSeconds]).range([0, width])
           );
           renderAxis(newXScale);
         })
@@ -134,33 +156,50 @@
   });
 </script>
 
-<div class="svg-container ">
-  <div bind:this={container} style="width: 100%;">
+<div class="svg-container position-relative">
+  <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important">
+    <!-- {playHeadX} -->
+    <!-- {scaleX} -->
+    {currentTransform.k.toFixed(2)}x
+  </div>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <!-- x={playHeadX / (0.5 - currentTransform.k)} -->
+  <div
+    on:click={(e) => {
+      handleClick(e);
+    }}
+    bind:this={container}
+    style="width: 100%;"
+  >
     <svg bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
       <g bind:this={pathGroup}>
         <path
-          d={rawPath}
-          stroke="steelblue"
+          d={$appState?.combinedFile?.svgPath}
+          stroke="#3091f1"
           fill="none"
           stroke-width="2"
           transform={`scale(${scaleX}, 1)`}
+          pointer-events="none"
         />
-      </g>
-      <rect
-        x="0"
-        y={80}
-        {width}
-        height="20"
-        fill="var(--bs-dark-bg-subtle);"
+              <rect
+              x={playHeadX}
+        y={0}
+        width={1/ currentTransform.k}
+        height="80"
+        fill="red"
       />
+      </g>
+      <rect x="0" y={80} {width} height="20" fill="var(--bs-dark-bg-subtle);" />
+      <!-- PLAYHEAD -->
+
       <g bind:this={axisGroup} transform={`translate(0, ${height - 20})`} />
     </svg>
   </div>
 </div>
 
 <style>
-
-  .svg-container{
+  .svg-container {
     background-color: var(--bs-primary-bg-subtle);
   }
   svg {

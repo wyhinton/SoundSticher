@@ -160,6 +160,7 @@
     color: #e8e8e8 !important;
     background-color: rgb(6, 5, 8) !important;
     border: 1px solid rgb(6, 5, 9) !important;
+    white-space: nowrap;
     /* color: red !important;  */
   }
 

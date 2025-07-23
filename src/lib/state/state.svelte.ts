@@ -1,11 +1,10 @@
 export const files = $state<string[]>([]);
 import { persisted } from "svelte-persisted-store";
 import { derived, get } from "svelte/store";
-import { listen } from "@tauri-apps/api/event";
 import { getNextAvailableColor, type AbletonColor } from "$lib/utils/colors";
 import { invokeWithPerf } from "./performance";
-import { debounce } from "lodash-es";
-import { getCurrentWindow, ProgressBarStatus } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export type ErrorKind = {
   kind: "io" | "utf8";
@@ -26,15 +25,17 @@ interface VisualSample {
   path: string;
   svgPath: string;
 }
-interface AppState {
+export interface AppState {
   sections: Section[];
   playingSong?: string;
   playingSection?: number;
   playProgress?: number;
   combinedFile?: VisualSample;
   combineFileMeta?: FileMetadata;
+  combinedFileLength: number;
   isCombiningFile: boolean;
   combineAudioFileProgress?: number;
+  playingCombined: boolean;
 }
 
 interface AudioFileItem {
@@ -67,6 +68,8 @@ interface FileMetadata {
 export const appState = persisted<AppState>("appState", {
   sections: [],
   isCombiningFile: false,
+  combinedFileLength: 0,
+  playingCombined: false,
 });
 
 export const combiningAudio = derived(appState, (s) => {
@@ -181,23 +184,32 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
 
     console.log(`Fetched files for section ${sectionIndex}:`, files);
 
+    const metadataList: FileMetadata[] = await invokeWithPerf("get_metadata", {
+      titles: files,
+    });
     // Now fetch metadata for each file in parallel
-    const metadataList = await Promise.all<FileMetadata | null>(
-      files.map(async (file) => {
-        try {
-          const metadata = await invokeWithPerf<FileMetadata>("get_metadata", {
-            title: file,
-          });
-          return metadata;
-        } catch (err) {
-          console.error(`Failed to get metadata for ${file}:`, err);
-          return null;
-        }
-      })
-    );
+    // const metadataList = await Promise.all<FileMetadata[] | null>(
+    //   files.map(async (file) => {
+    //     // try {
+    //     //   const metadata = await invokeWithPerf<FileMetadata>("get_metadata", {
+    //     //     title: file,
+    //     //   });
+    //     //   return metadata;
+    //     // } catch (err) {
+    //     //   console.error(`Failed to get metadata for ${file}:`, err);
+    //     //   return null;
+    //     // }
+    //   })
+    // );
 
     // Store metadata in the section (you can customize this structure)
     appState.update((state) => {
+      console.log(
+        `%cHERE LINE :204 %c`,
+        "color: yellow; font-weight: bold",
+        ""
+      );
+
       const section = state.sections[sectionIndex];
       state.sections.forEach((s, i) => {
         s.files.forEach((f, j) => {
@@ -230,28 +242,6 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
   }
 }
 
-listen<number>("song-progress", (event) => {
-  appState.update((state) => {
-    state.playProgress = event.payload;
-    console.log(event);
-    return state;
-  });
-});
-
-listen<number>("combine-audio-progress", (event) => {
-  appState.update((state) => {
-    console.log(event);
-    // state.playProgress = event.payload;
-    state.combineAudioFileProgress = event.payload;
-
-    //  getCurrentWindow().setProgressBar({
-    //   status: ProgressBarStatus.Normal,
-    //   progress: event.payload*100,
-    // });
-    return state;
-  });
-});
-
 appState.subscribe((s) => {
   // console.log(s);
 });
@@ -274,18 +264,112 @@ export function getAllFiles(sections: Section[]) {
 }
 
 let prevValue = get(appState);
-const unsubscribe = appState.subscribe((newValue) => {
+
+export interface SectionSend {
+  folderPath: string;
+  paths: AudioSend[];
+}
+
+interface AudioSend {
+  path: string;
+}
+
+appState.subscribe((newValue) => {
+  const newSends: SectionSend[] = newValue.sections.map((s) => ({
+    folderPath: s.folderPath,
+    paths: s.files.map((f) => ({ path: f.path })),
+  }));
+  const oldSends: SectionSend[] = prevValue.sections.map((s) => ({
+    folderPath: s.folderPath,
+    paths: s.files.map((f) => ({ path: f.path })),
+  }));
   if (prevValue !== undefined) {
-    // Compare old and new
-    if (
-      JSON.stringify(prevValue.sections) !== JSON.stringify(newValue.sections)
-    ) {
-      console.log(prevValue.sections);
-      console.log(newValue.sections);
-      invokeWithPerf("update_inputs", {});
-      console.log("appState changed:", { old: prevValue, new: newValue });
+    if (JSON.stringify(oldSends) !== JSON.stringify(newSends)) {
+      console.log(oldSends)
+      console.log(newSends)
+      const allNewPaths = newSends.map((s) => s.paths).flat();
+      if (allNewPaths.length === 0) {
+        invokeWithPerf("cancel_combine")
+        appState.update((s)=>{
+          s.combinedFileLength = 0;
+          s.combinedFile.svgPath = ""
+          return s;
+        })
+      } else {
+        invokeWithPerf("update_inputs", { sections: newSends }).then((r) => {
+          appState.update((s) => {
+            s.combinedFile.svgPath = "";
+            return s;
+          });
+          invokeWithPerf<CombineAudioResult>("combine_all_cached_samples").then(
+            (r) => {
+              invoke("get_app_state").then((c) => {
+                console.log(c);
+              });
+            }
+          );
+        });
+        console.log("appState changed:", { old: prevValue, new: newValue });
+      }
     }
   }
 
   prevValue = newValue;
+});
+
+listen<number>("song-progress", (event) => {
+  appState.update((state) => {
+    state.playProgress = event.payload;
+    console.log(event);
+    return state;
+  });
+});
+
+interface CachedCombineResult {
+  svgPath: string;
+  duration: number;
+}
+
+listen<CachedCombineResult>("combined-cached", (event) => {
+  appState.update((state) => {
+    console.log(event);
+    state.combinedFile = {
+      ...state.combinedFile,
+      svgPath: state.combinedFile.svgPath + event.payload.svgPath,
+    };
+    state.combinedFileLength = event.payload.duration;
+    return state;
+  });
+});
+
+listen<string>("processed-segment", (event) => {
+  appState.update((state) => {
+    state.combinedFile = {
+      ...state.combinedFile,
+      svgPath: state.combinedFile.svgPath + event.payload,
+    };
+    return state;
+  });
+});
+
+listen<number>("total-length", (event) => {
+  appState.update((state) => {
+    console.log(event);
+    state.combinedFileLength = event.payload;
+    return state;
+  });
+});
+
+listen<number>("combine-audio-progress", (event) => {
+  appState.update((state) => {
+    console.log(event);
+    // state.playProgress = event.payload;
+    state.combineAudioFileProgress = event.payload;
+
+    //  getCurrentWindow().setProgressBar({
+    //   status: ProgressBarStatus.Normal,
+    //   progress: event.payload*100,
+    // });
+    return state;
+  });
 });
