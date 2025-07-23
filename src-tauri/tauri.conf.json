@@ -36,7 +36,8 @@
                         {
                             "identifier": "fs:scope",
                             "allow": ["**"]
-                        }
+                        },
+                        "fs:default"
                     ]
                 }
             ],

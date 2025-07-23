@@ -129,6 +129,7 @@
     class:drop-add={$addNewFolderOnDrop}
     class="table-responsive h-100"
     style:background-color="rgb(15 21 27)"
+    style:width="400px"
   >
     {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
       <!-- <SineWaveShader></SineWaveShader> -->
@@ -247,7 +248,7 @@
     position: absolute;
     top: 65%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -150%);
     font-size: 12px;
   }
 </style>

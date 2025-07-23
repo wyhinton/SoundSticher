@@ -62,27 +62,55 @@ pub struct FileMetadata {
     pub duration: u128,
 }
 
+// #[tauri::command]
+// pub fn get_metadata(title: String) -> Result<FileMetadata, Error> {
+//     let tagged_file = read_from_path(&title);
+//     let meta = match tagged_file {
+//         Ok(taggedFile) => {
+//             let props = taggedFile.properties();
+//             log::info!("✅ Successfully retrieved metadata for: {}", title);
+//             return Ok(FileMetadata {
+//                 path: title.clone(),
+//                 size: get_file_size(title.clone()),
+//                 bitRate: props.audio_bitrate(),
+//                 channels: props.channels(),
+//                 bitDepth: props.bit_depth(),
+//                 duration: props.duration().as_millis(),
+//             });
+//         }
+//         Err(e) => {
+//             eprintln!("Error doing metadata: {}", e);
+//             return Err(Error::InvalidPath);
+//         }
+//     };
+// }
+
 #[tauri::command]
-pub fn get_metadata(title: String) -> Result<FileMetadata, Error> {
-    let tagged_file = read_from_path(&title);
-    let meta = match tagged_file {
-        Ok(taggedFile) => {
-            let props = taggedFile.properties();
-            log::info!("✅ Successfully retrieved metadata for: {}", title);
-            return Ok(FileMetadata {
-                path: title.clone(),
-                size: get_file_size(title.clone()),
-                bitRate: props.audio_bitrate(),
-                channels: props.channels(),
-                bitDepth: props.bit_depth(),
-                duration: props.duration().as_millis(),
-            });
+pub fn get_metadata(titles: Vec<String>) -> Result<Vec<FileMetadata>, Error> {
+    let mut results = Vec::new();
+
+    for title in titles {
+        match read_from_path(&title) {
+            Ok(tagged_file) => {
+                let props = tagged_file.properties();
+                log::info!("✅ Successfully retrieved metadata for: {}", title);
+                results.push(FileMetadata {
+                    path: title.clone(),
+                    size: get_file_size(title.clone()),
+                    bitRate: props.audio_bitrate(),
+                    channels: props.channels(),
+                    bitDepth: props.bit_depth(),
+                    duration: props.duration().as_millis(),
+                });
+            }
+            Err(e) => {
+                eprintln!("⚠️ Failed to get metadata for {}: {}", title, e);
+                // Optional: skip or return Err here
+            }
         }
-        Err(e) => {
-            eprintln!("Error doing metadata: {}", e);
-            return Err(Error::InvalidPath);
-        }
-    };
+    }
+
+    Ok(results)
 }
 
 // #[tauri::command]

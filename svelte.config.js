@@ -10,6 +10,10 @@ const config = {
 		adapter: adapter(),
 		csrf: false
 	},
+	 onwarn: (warning, handler) => {
+    	if (warning.code === 'a11y-click-events-have-key-events') return
+    	handler(warning)
+  	},
 
 	vitePlugin: {
 		// This enables compile-time warnings to be

@@ -19,6 +19,11 @@ pub enum Error {
 
     #[error("No default track found for")]
     NoDefaultTrackFound,
+
+    #[error("No audio data")]
+    NoAudioData,
+    #[error("No audio data")]
+    PlaybackError,
 }
 
 #[derive(serde::Serialize)]
@@ -31,6 +36,8 @@ pub enum ErrorKind {
     Symphonia(String),
     HoundWriteError(String),
     NoDefaultTrackFound(String),
+    NoAudioData(String),
+    PlaybackError(String),
 }
 
 impl serde::Serialize for Error {
@@ -46,6 +53,8 @@ impl serde::Serialize for Error {
             Self::Symphonia(_) => ErrorKind::Symphonia(error_message),
             Self::HoundWriteError(_) => ErrorKind::HoundWriteError(error_message),
             Self::NoDefaultTrackFound => ErrorKind::NoDefaultTrackFound(error_message),
+            Self::NoAudioData => ErrorKind::NoAudioData(error_message),
+            Self::PlaybackError => ErrorKind::PlaybackError(error_message),
         };
         error_kind.serialize(serializer)
     }
