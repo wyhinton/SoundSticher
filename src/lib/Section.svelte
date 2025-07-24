@@ -44,7 +44,9 @@
                 $appState.playProgress < 1){
                    pause_song()
                 } else {
-                  play_song(file.path)
+                  console.log(`%cHERE LINE :47 %c`,'color: yellow; font-weight: bold', '');
+                  
+                   play_song(file.path)
                 }
                 }}
               ><td

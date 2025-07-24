@@ -21,6 +21,9 @@ export interface PerformanceState {
   combine_all_cached_samples: PerformanceMetric[];
   play_combined_audio: PerformanceMetric[];
   cancel_combine: PerformanceMetric[];
+  pause_combined_audio: PerformanceMetric[];
+  clear_audio_files: PerformanceMetric[];
+  export_combined_audio_as_wav: PerformanceMetric[];
 
 }
 
@@ -34,6 +37,9 @@ export const performanceStore = persisted<PerformanceState>("performanceState",{
   combine_all_cached_samples: [],
   play_combined_audio: [],
   cancel_combine: [],
+  pause_combined_audio: [],
+  clear_audio_files: [],
+  export_combined_audio_as_wav: []
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {

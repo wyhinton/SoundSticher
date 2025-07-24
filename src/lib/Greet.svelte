@@ -31,11 +31,16 @@
     if (ev.code === "Space") {
       ev.preventDefault(); // optional, if you want to prevent default scrolling
       console.log("Spacebar pressed");
-      invokeWithPerf("play_combined_audio")
-      appState.update((s)=>{
+
+      appState.update((s) => {
         s.playingCombined = !s.playingCombined;
+        if (s.playingCombined) {
+          invokeWithPerf("play_combined_audio");
+        } else {
+          invokeWithPerf("pause_combined_audio")
+        }
         return s;
-      })
+      });
       // Add your logic here
     }
   };
@@ -51,9 +56,7 @@
 
 <Toolbar></Toolbar>
 
-<div
-  class=""
->
+<div class="">
   <div class="px-0 d-flex">
     <Sources></Sources>
     <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->

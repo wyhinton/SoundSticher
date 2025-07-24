@@ -6,6 +6,7 @@ use rodio::{OutputStream, Sink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::File;
+use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
@@ -152,8 +153,9 @@ pub struct Section {
 pub fn update_inputs(
     sections: Vec<Section>,
     state: State<'_, Arc<AppState>>,
+    _app_handle: tauri::AppHandle,
 ) -> Result<String, Error> {
-    println!("SHOULD UPDATE");
+    println!("➡️➡️ SHOULD UPDATE");
 
     let mut audio_files = state.audio_files.lock().unwrap();
     let mut inserted_count = 0;
@@ -178,13 +180,15 @@ pub fn update_inputs(
     // Step 3: Insert any missing paths
     let mut combined: Vec<i16> = Vec::new();
 
-    for path in &valid_paths {
+    for (i, path) in valid_paths.iter().enumerate() {
         if !audio_files.contains_key(path) {
             let samples = get_samples(path)?;
             combined.extend(&samples); // Add to combined audio
             audio_files.insert(path.clone(), samples);
             println!("Inserted path {}", path);
             inserted_count += 1;
+            let progress = (i as f32) / (valid_paths.len() as f32);
+            let _ = _app_handle.emit("buffering-progress", progress);
         } else {
             println!("Path {} already exists", path);
         }
@@ -294,43 +298,68 @@ pub fn cancel_combine(state: State<'_, Arc<AppState>>) -> Result<(), Error> {
     Ok(())
 }
 
-// #[tauri::command]
-// pub fn combine_all_cached_samples(
-//     state: State<'_, Arc<AppState>>,
-//     app: AppHandle,
-// ) -> Result<String, Error> {
-//     let audio_files = state.audio_files.lock().unwrap();
+#[tauri::command]
+pub fn export_combined_audio_as_wav(
+    state: State<'_, Arc<AppState>>,
+    outputPath: String,
+) -> Result<String, String> {
+    // Get a lock on the combined audio
+    let combined_audio = state.combined_audio.lock().unwrap();
+    let Some(samples) = &*combined_audio else {
+        return Err("No combined audio available".to_string());
+    };
 
-//     let mut combined_samples: Vec<i16> = Vec::new();
+    if samples.is_empty() {
+        return Err("Combined audio is empty".to_string());
+    }
 
-//     for (path, samples) in audio_files.iter() {
-//         println!("Adding {} samples from {}", samples.len(), path);
-//         combined_samples.extend(samples);
-//     }
+    // Define WAV format
+    let spec = WavSpec {
+        channels: 2,
+        sample_rate: 44100,
+        bits_per_sample: 16,
+        sample_format: SampleFormat::Int,
+    };
 
-//     let svg_path = generate_waveform_path(&combined_samples, 1000, 70);
-//     let sample_count = combined_samples.len();
+    // Create file
+    let path = Path::new(&outputPath);
+    let writer = WavWriter::create(&path, spec).map_err(|e| e.to_string())?;
 
-//     let sample_rate = 44100.0;
-//     let duration = (sample_count as f64 / sample_rate);
+    // Write samples
+    let mut writer = writer;
+    for sample in samples {
+        writer.write_sample(*sample).map_err(|e| e.to_string())?;
+    }
 
-//     let mut combined_audio = state.combined_audio.lock().unwrap();
-//     *combined_audio = Some(combined_samples);
+    writer.finalize().map_err(|e| e.to_string())?;
 
-//     let _ = app.emit(
-//         "combined-cached",
-//         CachedCombineResult { svg_path, duration },
-//     );
-
-//     Ok("✅ Successfully combined cached samples".to_string())
-// }
+    Ok(format!("WAV file successfully saved to {}", outputPath))
+}
 
 #[tauri::command]
-pub fn play_combined_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
+pub fn play_combined_audio(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    start_seconds: Option<f32>,
+) {
     let state = state.inner().clone();
 
     thread::spawn(move || {
-        // Lock the combined audio
+        let mut current_song = state.current_song.lock().unwrap();
+
+        // If already playing or paused, resume instead
+        // if let Some(sink) = &*current_song {
+        //     if sink.is_paused() {
+        //         println!("RESUMING");
+        //         sink.play(); // resume
+        //         return;
+        //     } else if !sink.empty() {
+        //         eprintln!("Audio is already playing.");
+        //         return;
+        //     }
+        // }
+
+        // Fetch audio
         let combined_samples = {
             let guard = state.combined_audio.lock().unwrap();
             guard.clone()
@@ -346,6 +375,18 @@ pub fn play_combined_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
             return;
         }
 
+        let sample_rate = 44100;
+        let channels = 2;
+        let total_samples = samples.len();
+        let start_sample_index =
+            (start_seconds.unwrap_or(0.0) * sample_rate as f32 * channels as f32).round() as usize;
+
+        if start_sample_index >= total_samples {
+            eprintln!("Start time exceeds audio length.");
+            return;
+        }
+
+        let trimmed_samples = &samples[start_sample_index..];
         let (_stream, stream_handle) = match OutputStream::try_default() {
             Ok(output) => output,
             Err(e) => {
@@ -362,41 +403,47 @@ pub fn play_combined_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
             }
         };
 
-        // Assume 2 channels (stereo), 44100Hz
-        let source = SamplesBuffer::new(2, 44100, samples.clone());
-        let duration = samples.len() as f32 / (2.0 * 44100.0); // in seconds
+        let duration = trimmed_samples.len() as f32 / (channels as f32 * sample_rate as f32);
         let start = Instant::now();
 
+        let source = SamplesBuffer::new(channels as u16, sample_rate, trimmed_samples.to_vec());
         sink.append(source);
         sink.set_volume(1.0);
         sink.play();
 
-        {
-            let mut current_song = state.current_song.lock().unwrap();
-
-            if let Some(ref current) = *current_song {
-                current.stop(); // Stop previous sink
-            }
-
-            *current_song = Some(Arc::clone(&sink));
-        }
+        *current_song = Some(Arc::clone(&sink));
 
         let sink_clone = Arc::clone(&sink);
-
         thread::spawn(move || {
             while !sink_clone.empty() {
                 let elapsed = start.elapsed().as_secs_f32();
                 let progress = (elapsed / duration).min(1.0);
-
-                let _ = app.emit("song-progress", progress);
+                let _ = app.emit("combined-progress", progress);
                 std::thread::sleep(Duration::from_millis(200));
             }
 
-            let _ = app.emit("song-progress", 1.0);
+            let _ = app.emit("combined-progress", 1.0);
         });
 
         sink.sleep_until_end();
     });
+}
+
+#[tauri::command]
+pub fn pause_combined_audio(state: State<'_, Arc<AppState>>) {
+    println!("PAUSING");
+    let current_song = state.current_song.lock().unwrap();
+    if let Some(sink) = &*current_song {
+        sink.pause();
+    }
+}
+
+#[tauri::command]
+pub fn resume_combined_audio(state: State<'_, Arc<AppState>>) {
+    let current_song = state.current_song.lock().unwrap();
+    if let Some(sink) = &*current_song {
+        sink.play();
+    }
 }
 
 fn get_samples(file_path: &str) -> Result<Vec<i16>, Error> {

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import * as d3 from "d3";
   import { appState } from "./state/state.svelte";
+  import { listen } from "@tauri-apps/api/event";
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -34,6 +35,11 @@
     console.log(height);
   }
   
+  listen<number>("combined-progress", (event)=>{
+    console.log(`%cHERE LINE :39 %c`,'color: yellow; font-weight: bold', '');
+    console.log(event)
+    playHeadPosition = event.payload;
+  })
 
 function handleClick(event: MouseEvent) {
   const rect = container.getBoundingClientRect();

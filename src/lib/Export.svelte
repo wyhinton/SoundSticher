@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { save as testSave } from '@tauri-apps/plugin-dialog';
+  import { invokeWithPerf } from './state/performance';
   const dispatch = createEventDispatcher();
 
   export let settings = {
@@ -14,6 +16,23 @@
     settings = { ...settings, [k]: v };
     dispatch('exportSettingsChanged', settings);
   };
+
+
+
+  const saveAudio = () =>{
+      const z = testSave({
+      filters: [
+        {
+          name: 'Audio Files',
+          extensions: ['.wav'],
+        },
+      ],
+    }).then(z=>{
+      invokeWithPerf("export_combined_audio_as_wav", {outputPath: z})
+      console.log(z)
+    });
+  }
+
 </script>
 
 <div style="font-size: 0.9rem" class="px-2">
@@ -59,7 +78,7 @@
           </label>
       </div>
       <div class="col-2 mt-3">
-        <button class="btn btn-sm btn-success">Export <i class="fa-solid fa-right-to-bracket"></i> </button>
+        <button class="btn btn-sm btn-success" on:click={(e)=>{saveAudio()}}>Export <i class="fa-solid fa-right-to-bracket"></i> </button>
       </div>
   </div>
 
