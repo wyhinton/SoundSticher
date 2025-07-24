@@ -285,30 +285,36 @@ appState.subscribe((newValue) => {
   }));
   if (prevValue !== undefined) {
     if (JSON.stringify(oldSends) !== JSON.stringify(newSends)) {
-      console.log(oldSends)
-      console.log(newSends)
+      console.log(oldSends);
+      console.log(newSends);
       const allNewPaths = newSends.map((s) => s.paths).flat();
       if (allNewPaths.length === 0) {
-        invokeWithPerf("cancel_combine")
-        appState.update((s)=>{
+        invokeWithPerf("cancel_combine");
+        invokeWithPerf("clear_audio_files")
+        appState.update((s) => {
           s.combinedFileLength = 0;
-          s.combinedFile.svgPath = ""
+          s.combinedFile.svgPath = "";
           return s;
-        })
+        });
       } else {
-        invokeWithPerf("update_inputs", { sections: newSends }).then((r) => {
-          appState.update((s) => {
-            s.combinedFile.svgPath = "";
-            return s;
-          });
-          invokeWithPerf<CombineAudioResult>("combine_all_cached_samples").then(
-            (r) => {
+        setTimeout(() => {
+          console.log(newSends)
+          invokeWithPerf("update_inputs", { sections: newSends }).then((r) => {
+            console.log(r)
+            appState.update((s) => {
+              s.combinedFile.svgPath = "";
+              return s;
+            });
+            invokeWithPerf<CombineAudioResult>(
+              "combine_all_cached_samples"
+            ).then((r) => {
               invoke("get_app_state").then((c) => {
                 console.log(c);
               });
-            }
-          );
-        });
+            });
+          });
+        }, 1000);
+
         console.log("appState changed:", { old: prevValue, new: newValue });
       }
     }

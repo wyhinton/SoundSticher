@@ -182,12 +182,14 @@
               </div>
             </td>
             <td>
-              <button
-                class="text-danger"
-                onclick={() => deleteSection(sectionIndex)}
-              >
-                X
-              </button>
+              <div class="d-flex justify-content-center">
+                <button
+                  class="text-danger"
+                  onclick={() => deleteSection(sectionIndex)}
+                >
+                  X
+                </button>
+              </div>
             </td>
           </tr>
         {/each}

@@ -177,6 +177,8 @@
     "fs:read-dirs",
     "fs:read-files",
     "fs:read-meta",
-    "clipboard:allow-write-text"
+    "clipboard:allow-write-text",
+    "dialog:allow-save",
+    "dialog:default"
   ]
 }

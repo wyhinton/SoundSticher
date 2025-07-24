@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{metadata, File};
 use std::io::BufReader;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
@@ -28,6 +28,7 @@ pub struct AppState {
     pub audio_files: Mutex<HashMap<String, Vec<i16>>>,
     pub combined_audio: Mutex<Option<Vec<i16>>>,
     pub cancel_flag: AtomicBool,
+    pub cancel_playback: AtomicBool,
 }
 
 pub struct Song {
@@ -101,12 +102,20 @@ fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
     println!("Total valid files: {}", paths.len());
     Ok(paths)
 }
+
+#[tauri::command]
+fn clear_audio_files(state: State<'_, Arc<AppState>>) {
+    let mut audio_files = state.audio_files.lock().unwrap();
+    audio_files.clear();
+    println!("All audio files have been cleared.");
+}
+
 #[tauri::command]
 fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
     let path = title.clone();
-    // let path = format!("../assets/test_audio/{}", title);
     let state = state.inner().clone();
     log::info!("Got request to play_song {}", title);
+    state.cancel_playback.store(false, Ordering::Relaxed);
 
     match metadata(&path) {
         Ok(meta) => {
@@ -119,6 +128,14 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
             eprintln!("Error accessing file metadata for {}: {}", path, e);
             return;
         }
+    }
+
+    {
+        let mut current_song = state.current_song.lock().unwrap();
+        if let Some(ref current) = *current_song {
+            current.stop(); // ❗ Ensure previous song is stopped
+        }
+        *current_song = None; // Clear it before continuing
     }
 
     thread::spawn(move || {
@@ -154,40 +171,47 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
             }
         }
 
+        // Save the new sink
+        {
+            let mut current_song = state.current_song.lock().unwrap();
+            *current_song = Some(Arc::clone(&sink));
+        }
+
         let duration = metadata::get_duration(&path);
         let start = Instant::now();
 
-        // Progress emit thread
         let sink_clone = Arc::clone(&sink);
+        let app_clone = app.clone();
 
         thread::spawn(move || {
-            while !sink_clone.empty() {
+            let mut done_emitted = false;
+            // let cancel_flag = state.cancel_playback.load(Ordering::Relaxed); // pass into the thread
+            // println!("{}", cancel_flag);
+            while !sink_clone.empty()
+                && !done_emitted
+                && !state.cancel_flag.load(Ordering::Relaxed)
+                && !sink_clone.is_paused()
+            {
+                // println!("{}", cancel_flag);
                 let elapsed = start.elapsed();
                 let elapsed_secs = elapsed.as_secs_f32();
 
                 if let Some(duration) = duration {
                     let progress = (elapsed_secs / duration).min(1.0);
+                    let _ = app_clone.emit("song-progress", progress);
 
-                    // 🔥 Emit progress event
-                    let _ = app.emit("song-progress", progress);
+                    if progress >= 1.0 {
+                        done_emitted = true;
+                        break;
+                    }
                 }
 
                 std::thread::sleep(Duration::from_millis(200));
             }
 
-            // Final emit at end
-            let _ = app.emit("song-progress", 1.0);
+            let _ = app_clone.emit("song-progress", 1.0);
+            sink_clone.clear();
         });
-
-        {
-            let mut current_song = state.current_song.lock().unwrap();
-
-            if let Some(ref current) = *current_song {
-                current.stop(); // Stop the previous song
-            }
-
-            *current_song = Some(Arc::clone(&sink)); // Track the new one
-        }
 
         sink.set_volume(1.0);
         sink.sleep_until_end();
@@ -200,6 +224,8 @@ fn pause_song(state: State<'_, Arc<AppState>>) {
     if let Some(ref sink) = *current_song {
         println!("PAUSING!!!!");
         sink.pause();
+        state.cancel_playback.store(true, Ordering::Relaxed);
+        // *current_song = None;
     } else {
         println!("FAILED!!")
     }
@@ -230,7 +256,7 @@ fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard::init())
@@ -248,6 +274,7 @@ pub fn run() {
             audio_files: Mutex::new(HashMap::new()),
             combined_audio: Mutex::new(None),
             cancel_flag: AtomicBool::new(false),
+            cancel_playback: AtomicBool::new(false),
         }))
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -261,7 +288,10 @@ pub fn run() {
             combine::combine_all_cached_samples,
             combine::play_combined_audio,
             combine::cancel_combine,
+            combine::pause_combined_audio,
+            combine::export_combined_audio_as_wav,
             get_app_state,
+            clear_audio_files,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
