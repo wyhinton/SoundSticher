@@ -2,7 +2,7 @@
   import { listen } from "@tauri-apps/api/event";
   import Progress from "./Progress.svelte";
 
-  import { appState, combiningAudio } from "./state/state.svelte";
+  import { appState } from "./state/state.svelte";
   import { formatBytes, formatMilliseconds } from "./utils/format";
 
   let bufferingProgress = 0;
@@ -26,14 +26,14 @@
       </div>
       <div class="d-flex gap-1">
         Length: <div
-          class:skeleton={$combiningAudio}
+          class:skeleton={$appState.isCombiningFile}
         >
           {formatMilliseconds($appState.combineFileMeta.duration)}
         </div>
       </div>
 
       <div class="d-flex gap-1">
-        Size: <div class:skeleton={$combiningAudio}>{formatBytes($appState.combineFileMeta.size)}</div>
+        Size: <div class:skeleton={$appState.isCombiningFile}>{formatBytes($appState.combineFileMeta.size)}</div>
       </div>
             <div class="d-flex">
         Buffering Status: {bufferingProgress.toFixed(2)}

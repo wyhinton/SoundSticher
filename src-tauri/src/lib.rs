@@ -1,35 +1,22 @@
 use log;
 use rodio::{Decoder, OutputStream, Sink};
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::{metadata, File};
 use std::io::BufReader;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering, AtomicU64};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
 use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_log::{Target, TargetKind};
 
 use crate::error::Error;
 use crate::metadata::get_metadata;
+use crate::state::AppState;
 mod combine;
 mod error;
 mod metadata;
-
-#[derive(Serialize)]
-pub struct SerializableAppState {
-    pub audio_files: HashMap<String, usize>,
-}
-
-pub struct AppState {
-    current_song: Mutex<Option<Arc<Sink>>>,
-    pub audio_files: Mutex<HashMap<String, Vec<i16>>>,
-    pub combined_audio: Mutex<Option<Vec<i16>>>,
-    pub cancel_flag: AtomicBool,
-    pub cancel_playback: AtomicBool,
-}
+mod state;
 
 pub struct Song {
     pub title: String,
@@ -63,51 +50,97 @@ fn get_songs() -> Vec<Song> {
     return music_files;
 }
 
+
+
 #[tauri::command]
-fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
-    let mut paths = Vec::new();
+fn get_file_paths_in_folder(folder_paths: Vec<String>) -> Result<HashMap<String, Vec<String>>, Error> {
+    let mut all_paths: HashMap<String, Vec<String>> = HashMap::new();
 
-    let entries = std::fs::read_dir(folder_path)?; // Uses `From` to convert into AppError
+    for folder_path in folder_paths {
+        let mut valid_files = Vec::new();
+        let entries = std::fs::read_dir(&folder_path)?;
 
-    for entry in entries {
-        let entry = entry?; // Also converts into AppError
-        let path = entry.path();
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
 
-        println!("entry {}", &path.display());
-
-        if path.is_file() {
-            // ❌ Skip hidden metadata files like "._track.mp3"
-            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                if file_name.starts_with("._") {
-                    continue;
+            if path.is_file() {
+                if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                    if file_name.starts_with("._") {
+                        continue;
+                    }
                 }
-            }
 
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                let ext = ext.to_lowercase();
-
-                // ✅ Allow common audio file extensions
-                if [
-                    "mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff", "alac", "aif",
-                ]
-                .contains(&ext.as_str())
-                {
-                    let path_str = path.to_str().ok_or(Error::InvalidPath)?;
-                    paths.push(path_str.to_string());
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    let ext = ext.to_lowercase();
+                    if [
+                        "mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff", "alac", "aif",
+                    ]
+                    .contains(&ext.as_str())
+                    {
+                        let path_str = path.to_str().ok_or(Error::InvalidPath)?;
+                        valid_files.push(path_str.to_string());
+                    }
                 }
             }
         }
+
+        println!("{}: {} files", folder_path, valid_files.len());
+        all_paths.insert(folder_path, valid_files);
     }
 
-    println!("Total valid files: {}", paths.len());
-    Ok(paths)
+    Ok(all_paths)
 }
 
+
+// #[tauri::command]
+// fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
+//     let mut paths = Vec::new();
+
+//     let entries = std::fs::read_dir(folder_path)?; // Uses `From` to convert into AppError
+
+//     for entry in entries {
+//         let entry = entry?; // Also converts into AppError
+//         let path = entry.path();
+
+//         println!("entry {}", &path.display());
+
+//         if path.is_file() {
+//             // ❌ Skip hidden metadata files like "._track.mp3"
+//             if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+//                 if file_name.starts_with("._") {
+//                     continue;
+//                 }
+//             }
+
+//             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+//                 let ext = ext.to_lowercase();
+//                 if [
+//                     "mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff", "alac", "aif",
+//                 ]
+//                 .contains(&ext.as_str())
+//                 {
+//                     let path_str = path.to_str().ok_or(Error::InvalidPath)?;
+//                     paths.push(path_str.to_string());
+//                 }
+//             }
+//         }
+//     }
+
+//     println!("Total valid files: {}", paths.len());
+//     Ok(paths)
+// }
+
 #[tauri::command]
-fn clear_audio_files(state: State<'_, Arc<AppState>>) {
+fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
+    state.cancel_flag.store(true, Ordering::Relaxed);
     let mut audio_files = state.audio_files.lock().unwrap();
     audio_files.clear();
-    println!("All audio files have been cleared.");
+    state.cancel_flag.store(false, Ordering::Relaxed);
+    let mut combined_audio = state.combined_audio.lock().unwrap();
+    *combined_audio = None;
+    let _ = app.emit("buffering-progress", 0.);
+    println!("🗑️  All audio files have been cleared.");
 }
 
 #[tauri::command]
@@ -232,20 +265,6 @@ fn pause_song(state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
-fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
-    let audio_files = state.audio_files.lock().unwrap();
-
-    let audio_file_lengths: HashMap<String, usize> = audio_files
-        .iter()
-        .map(|(path, samples)| (path.clone(), samples.len()))
-        .collect();
-
-    SerializableAppState {
-        audio_files: audio_file_lengths,
-    }
-}
-
-#[tauri::command]
 fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
     let mut current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
@@ -263,18 +282,21 @@ pub fn run() {
         .setup(|app| {
             {
                 let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
-                window.close_devtools();
+                // window.open_devtools();
+                // window.close_devtools();
                 app.listen("download-started", |event| {});
             }
             Ok(())
         })
         .manage(Arc::new(AppState {
             current_song: Mutex::new(None),
-            audio_files: Mutex::new(HashMap::new()),
+            audio_files: Mutex::new(std::collections::BTreeMap::new()),
             combined_audio: Mutex::new(None),
             cancel_flag: AtomicBool::new(false),
             cancel_playback: AtomicBool::new(false),
+            buffering_samples: AtomicBool::new(false),
+            svg_path: Mutex::new(None),
+            cancel_token: AtomicU64::new(0)
         }))
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -290,7 +312,7 @@ pub fn run() {
             combine::cancel_combine,
             combine::pause_combined_audio,
             combine::export_combined_audio_as_wav,
-            get_app_state,
+            state::get_app_state,
             clear_audio_files,
         ])
         .plugin(
@@ -298,6 +320,17 @@ pub fn run() {
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Webview,
                 ))
+                // .filter(|metadata| {
+                //     // Print all targets to console
+                //     println!("Log target: {}", metadata.target());
+
+                //     // You can still filter here if needed
+                //     true
+                // })
+                .filter(|metadata| {
+                    let target = metadata.target();
+                    !target.contains("symphonia") && !target.contains("lofty")
+                })
                 .build(),
         )
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -306,3 +339,27 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+
+// struct AsyncProcInputTx {
+//     inner: Mutex<mpsc::Sender<String>>,
+// }
+
+// // A function that sends a message from Rust to JavaScript via a Tauri Event
+// fn rs2js<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
+//     println!({}," message");
+//     manager
+//         .("rs2js", message)
+//         .unwrap();
+// }
+
+// // The Tauri command that gets called when Tauri `invoke` JavaScript API is
+// // called
+// #[tauri::command]
+// async fn js2rs(message: String, state: tauri::State<'_, AsyncProcInputTx>) -> Result<(), String> {
+//     let async_proc_input_tx = state.inner.lock().await;
+//     async_proc_input_tx
+//         .send(message)
+//         .await
+//         .map_err(|e| e.to_string())
+// }

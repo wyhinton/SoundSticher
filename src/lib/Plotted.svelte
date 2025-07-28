@@ -10,7 +10,6 @@
   let pathGroup: SVGGElement;
 
   const height = 100;
-  // const durationSeconds = $appState?.combinedFileLength;
   $: durationSeconds = $appState?.combinedFileLength ?? 0;
   $: if ($appState?.combinedFileLength && width > 0) {
     updateScales();

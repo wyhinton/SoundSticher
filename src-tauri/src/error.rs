@@ -17,6 +17,9 @@ pub enum Error {
     #[error(transparent)]
     HoundWriteError(#[from] hound::Error),
 
+    #[error(transparent)]
+    TauriError(#[from] tauri::Error),
+
     #[error("No default track found for")]
     NoDefaultTrackFound,
 
@@ -38,6 +41,7 @@ pub enum ErrorKind {
     NoDefaultTrackFound(String),
     NoAudioData(String),
     PlaybackError(String),
+    TauriError(String),
 }
 
 impl serde::Serialize for Error {
@@ -55,6 +59,7 @@ impl serde::Serialize for Error {
             Self::NoDefaultTrackFound => ErrorKind::NoDefaultTrackFound(error_message),
             Self::NoAudioData => ErrorKind::NoAudioData(error_message),
             Self::PlaybackError => ErrorKind::PlaybackError(error_message),
+            Self::TauriError(_) => ErrorKind::TauriError(error_message),
         };
         error_kind.serialize(serializer)
     }

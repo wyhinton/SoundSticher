@@ -47,6 +47,7 @@
 
   onMount(() => {
     window.addEventListener("keyup", handleSpaceBar);
+    
   });
 
   onDestroy(() => {
