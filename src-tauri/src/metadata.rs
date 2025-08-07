@@ -93,7 +93,7 @@ pub fn get_metadata(titles: Vec<String>) -> Result<Vec<FileMetadata>, Error> {
         match read_from_path(&title) {
             Ok(tagged_file) => {
                 let props = tagged_file.properties();
-                log::info!("✅ Successfully retrieved metadata for: {}", title);
+                // log::info!("✅ Successfully retrieved metadata for: {}", title);
                 results.push(FileMetadata {
                     path: title.clone(),
                     size: get_file_size(title.clone()),

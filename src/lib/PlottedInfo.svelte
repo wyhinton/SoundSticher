@@ -28,12 +28,13 @@
         Length: <div
           class:skeleton={$appState.isCombiningFile}
         >
-          {formatMilliseconds($appState.combineFileMeta.duration)}
+          
+          {$appState.combinedFileLength?formatMilliseconds($appState.combinedFileLength):"0"}
         </div>
       </div>
 
       <div class="d-flex gap-1">
-        Size: <div class:skeleton={$appState.isCombiningFile}>{formatBytes($appState.combineFileMeta.size)}</div>
+        <!-- // Size: <div class:skeleton={$appState.isCombiningFile}>{formatBytes($appState.combineFileMeta.size)}</div> -->
       </div>
             <div class="d-flex">
         Buffering Status: {bufferingProgress.toFixed(2)}

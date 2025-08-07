@@ -6,7 +6,7 @@
     type PerformanceMetric,
   } from "$lib/state/performance";
   import { addNewFolderOnDrop, positionStore } from "$lib/state/position";
-  import { appState, resetAppState } from "$lib/state/state.svelte";
+  import { addSection, appState, resetAppState } from "$lib/state/state.svelte";
   import Prism from "prismjs";
   import "prismjs/components/prism-json";
   import clipboard from "tauri-plugin-clipboard-api";
@@ -16,6 +16,8 @@
   import { toSource } from "$lib/utils/format";
   import { examples } from "$lib/utils/examples";
   import { onDestroy, onMount } from "svelte";
+  import { Channel } from "@tauri-apps/api/core";
+  import type { CombineAudioEvent } from "$lib/state/events";
   let highlighted = "";
   let appStateContainer: HTMLElement;
   let appBackendState: HTMLElement;
@@ -62,7 +64,6 @@
   interface AppStateDebug {
     audio_files: { [key: string]: number };
     combined_audio: string;
-    cancel_flag: boolean;
   }
 
   let appStateDebug: undefined | AppStateDebug = undefined;
@@ -78,6 +79,44 @@
     }
   }
 
+  const addTwoSections = () =>{
+    addSection("C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley")
+    setTimeout(() => {
+      addSection("C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX")
+    }, 100);
+
+  }
+
+  const combineTest = () =>{
+    const onCombineAudioEvent = new Channel<CombineAudioEvent>();
+  
+    onCombineAudioEvent.onmessage = (message) => {
+      if (message.event === "started") {
+        appState.update((state) => {
+          state.isCombiningFile = true;
+          state.combinedFileLength = message.data.duration;
+          return state;
+        });
+      }
+      if (message.event === "progress") {
+            appState.update((s) => {
+          s.combinedFile = { svgPath: message.data.svgPath };
+          return s;
+        });
+      }
+      if (message.event === "finished") {
+        console.log(message);
+        appState.update((s) => {
+          s.isCombiningFile = false;
+          s.combinedFile = { svgPath: message.data.svgPath };
+          return s;
+        });
+        console.log(message.event);
+      }
+    };
+    
+    invokeWithPerf("combine_all_cached_samples", {onEvent: onCombineAudioEvent})
+  }
   let intervalId: number;
   // Make sure to clear the waveform path on mount if no combined audio is present
   onMount(() => {
@@ -102,7 +141,7 @@
       } finally {
         isFetching = false;
       }
-    }, 100);
+    }, 1000);
   });
 
   onDestroy(() => {
@@ -135,6 +174,18 @@
       applyExampleState(selectedKey);
     }}
     class="btn btn-sm">Apply example state</button
+  >
+  <button
+    on:click={() => {
+      addTwoSections();
+    }}
+    class="btn btn-sm">Add two sections</button
+  >
+  <button
+    on:click={() => {
+      combineTest();
+    }}
+    class="btn btn-sm">Combine Test</button
   >
   <pre class="language-json">
       <code class="language-json" bind:this={appStateContainer}></code>
