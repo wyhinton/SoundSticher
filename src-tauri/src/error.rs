@@ -11,6 +11,9 @@ pub enum Error {
     #[error("Invalid path")]
     InvalidPath,
 
+    #[error("Unknown encoder format: {0}")]
+    UnknownEncoderFormat(String),
+
     #[error(transparent)]
     Symphonia(#[from] symphonia::core::errors::Error),
 
@@ -25,8 +28,15 @@ pub enum Error {
 
     #[error("No audio data")]
     NoAudioData,
+
     #[error("No audio data")]
     PlaybackError,
+
+    #[error("MP3 encoder build error: {0}")]
+    MP3EncoderError(String),
+
+    #[error("Uneven Number of Samples Provided")]
+    UnevenNumberOfSamples,
 }
 
 #[derive(serde::Serialize)]
@@ -36,12 +46,15 @@ pub enum ErrorKind {
     Io(String),
     Utf8(String),
     InvalidPath,
+    UnknownEncoderFormat(String),
     Symphonia(String),
     HoundWriteError(String),
     NoDefaultTrackFound(String),
     NoAudioData(String),
     PlaybackError(String),
     TauriError(String),
+    MP3EncoderError(String),
+    UnevenNumberOfSamples,
 }
 
 impl serde::Serialize for Error {
@@ -54,12 +67,15 @@ impl serde::Serialize for Error {
             Self::Io(_) => ErrorKind::Io(error_message),
             Self::Utf8(_) => ErrorKind::Utf8(error_message),
             Self::InvalidPath => ErrorKind::InvalidPath,
+            Self::UnknownEncoderFormat(_) => ErrorKind::UnknownEncoderFormat(error_message),
             Self::Symphonia(_) => ErrorKind::Symphonia(error_message),
             Self::HoundWriteError(_) => ErrorKind::HoundWriteError(error_message),
             Self::NoDefaultTrackFound => ErrorKind::NoDefaultTrackFound(error_message),
             Self::NoAudioData => ErrorKind::NoAudioData(error_message),
             Self::PlaybackError => ErrorKind::PlaybackError(error_message),
             Self::TauriError(_) => ErrorKind::TauriError(error_message),
+            Self::MP3EncoderError(_) => ErrorKind::MP3EncoderError(error_message),
+            Self::UnevenNumberOfSamples => ErrorKind::UnevenNumberOfSamples,
         };
         error_kind.serialize(serializer)
     }

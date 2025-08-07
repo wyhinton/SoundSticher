@@ -17,6 +17,7 @@ mod combine;
 mod error;
 mod metadata;
 mod state;
+mod encoder;
 
 pub struct Song {
     pub title: String,
@@ -133,10 +134,8 @@ fn get_file_paths_in_folder(folder_paths: Vec<String>) -> Result<HashMap<String,
 
 #[tauri::command]
 fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
-    state.cancel_flag.store(true, Ordering::Relaxed);
     let mut audio_files = state.audio_files.lock().unwrap();
     audio_files.clear();
-    state.cancel_flag.store(false, Ordering::Relaxed);
     let mut combined_audio = state.combined_audio.lock().unwrap();
     *combined_audio = None;
     let _ = app.emit("buffering-progress", 0.);
@@ -222,7 +221,6 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
             // println!("{}", cancel_flag);
             while !sink_clone.empty()
                 && !done_emitted
-                && !state.cancel_flag.load(Ordering::Relaxed)
                 && !sink_clone.is_paused()
             {
                 // println!("{}", cancel_flag);
@@ -292,11 +290,11 @@ pub fn run() {
             current_song: Mutex::new(None),
             audio_files: Mutex::new(std::collections::BTreeMap::new()),
             combined_audio: Mutex::new(None),
-            cancel_flag: AtomicBool::new(false),
             cancel_playback: AtomicBool::new(false),
             buffering_samples: AtomicBool::new(false),
             svg_path: Mutex::new(None),
-            cancel_token: AtomicU64::new(0)
+            cancel_token: AtomicU64::new(0),
+            combine_process: Arc::new(Mutex::new(0)),
         }))
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -305,7 +303,6 @@ pub fn run() {
             play_song,
             pause_song,
             get_metadata,
-            combine::combine_audio_files,
             combine::update_inputs,
             combine::combine_all_cached_samples,
             combine::play_combined_audio,
@@ -314,6 +311,7 @@ pub fn run() {
             combine::export_combined_audio_as_wav,
             state::get_app_state,
             clear_audio_files,
+            encoder::export_audio
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -340,26 +338,3 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-
-// struct AsyncProcInputTx {
-//     inner: Mutex<mpsc::Sender<String>>,
-// }
-
-// // A function that sends a message from Rust to JavaScript via a Tauri Event
-// fn rs2js<R: tauri::Runtime>(message: String, manager: &impl Manager<R>) {
-//     println!({}," message");
-//     manager
-//         .("rs2js", message)
-//         .unwrap();
-// }
-
-// // The Tauri command that gets called when Tauri `invoke` JavaScript API is
-// // called
-// #[tauri::command]
-// async fn js2rs(message: String, state: tauri::State<'_, AsyncProcInputTx>) -> Result<(), String> {
-//     let async_proc_input_tx = state.inner.lock().await;
-//     async_proc_input_tx
-//         .send(message)
-//         .await
-//         .map_err(|e| e.to_string())
-// }
