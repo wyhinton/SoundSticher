@@ -1,5 +1,5 @@
 use crate::error::Error;
-use crate::state::AppState;
+use crate::state::{AppState, AudioFile};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
@@ -158,7 +158,7 @@ pub async fn update_inputs(
             if !audio_files.contains_key(path) {
                 let samples = get_samples(path)?; // Keep this cheap if possible
                 combined.extend(&samples);
-                audio_files.insert(path.clone(), samples);
+                audio_files.insert(path.clone(), AudioFile{samples, start_offset: 0.});
                 let progress = (i as f32) / ((valid_paths.len() - 1) as f32);
                 let _ = app_handle.emit("buffering-progress", progress);
                 inserted_count += 1;
@@ -216,19 +216,19 @@ pub async fn combine_all_cached_samples(
         println!("ORIGIN: {}, COUNT: {}", orig, count.lock().unwrap());
         state.buffering_samples.store(true, Ordering::Relaxed);
 
-        let audio_files = state.audio_files.lock().unwrap();
+        let mut audio_files = state.audio_files.lock().unwrap();
         let sample_rate = 44100.0;
         let full_waveform_width = 1000.0;
 
         let mut combined_samples: Vec<i16> = Vec::new();
         let mut total_samples = 0;
 
-        for (_, samples) in audio_files.iter() {
+        for (_, audio_file) in audio_files.iter() {
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
                 return Ok("stopped".to_string());
             }
-            total_samples += samples.len();
+            total_samples += audio_file.samples.len();
         }
 
         let duration = total_samples as f64 / sample_rate;
@@ -253,22 +253,23 @@ pub async fn combine_all_cached_samples(
 
         let mut current_sample_offset = 0;
         let mut combined_svg_string = String::from("");
-        for (path, samples) in audio_files.iter() {
+        for (path, audio_file) in audio_files.iter_mut() {
             println!("test: {}", *process_count.lock().unwrap());
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
                 return Ok("stopped".to_string());
             }
-            combined_samples.extend(samples);
+            audio_file.start_offset = (current_sample_offset as f64)/(total_samples as f64);
+            combined_samples.extend(&audio_file.samples);
 
-            let segment_width = full_waveform_width * (samples.len() as f64 / total_samples as f64);
+            let segment_width = full_waveform_width * (audio_file.samples.len() as f64 / total_samples as f64);
             let x_offset =
                 full_waveform_width * (current_sample_offset as f64 / total_samples as f64);
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
                 return Ok("stopped".to_string());
             }
-            let svg_path = generate_waveform_path(samples, segment_width as usize, 70, x_offset);
+            let svg_path = generate_waveform_path(&audio_file.samples, segment_width as usize, 70, x_offset);
             on_event
                 .send(CombineAudioEvent::Progress {
                     svg_path: svg_path.clone(),
@@ -279,7 +280,7 @@ pub async fn combine_all_cached_samples(
                 return Ok("stopped".to_string());
             }
             combined_svg_string.push_str(&svg_path);
-            current_sample_offset += samples.len();
+            current_sample_offset += audio_file.samples.len();
         }
 
         println!("✅ Successfully combined all samples");
