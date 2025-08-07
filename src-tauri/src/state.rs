@@ -8,12 +8,12 @@ use tauri::State;
 #[derive(Clone)]
 pub struct AudioFile {
     pub samples: Vec<i16>,
-    pub start_offset: usize,
+    pub start_offset: f64,
 }
 
 pub struct AppState {
     pub current_song: Mutex<Option<Arc<Sink>>>,
-    pub audio_files: Mutex<BTreeMap<String, Vec<i16>>>,
+    pub audio_files: Mutex<BTreeMap<String, AudioFile>>,
     pub combined_audio: Mutex<Option<Vec<i16>>>,
     pub cancel_playback: AtomicBool,
     pub buffering_samples: AtomicBool,
@@ -23,8 +23,14 @@ pub struct AppState {
 }
 
 #[derive(Serialize)]
+pub struct AudioFileDebug {
+    samples: usize,
+    start_offset: f64,
+}
+
+#[derive(Serialize)]
 pub struct SerializableAppState {
-    pub audio_files: BTreeMap<String, usize>,
+    pub audio_files: BTreeMap<String, AudioFileDebug>,
     pub combined_audio: String,
     pub buffering_samples: bool,
     pub svg_path: String,
@@ -35,10 +41,17 @@ pub struct SerializableAppState {
 #[tauri::command]
 pub fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
     let audio_files = state.audio_files.lock().unwrap();
-
-    let audio_file_lengths: BTreeMap<String, usize> = audio_files
+    let audio_file_debugs: BTreeMap<String, AudioFileDebug> = audio_files
         .iter()
-        .map(|(path, samples)| (path.clone(), samples.len()))
+        .map(|(path, audio_file)| {
+            (
+                path.clone(),
+                AudioFileDebug {
+                    samples: audio_file.samples.len(),
+                    start_offset: audio_file.start_offset,
+                },
+            )
+        })
         .collect();
 
     let combined = state.combined_audio.lock().unwrap();
@@ -53,7 +66,7 @@ pub fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
     };
 
     SerializableAppState {
-        audio_files: audio_file_lengths,
+        audio_files: audio_file_debugs,
         combined_audio: combined_audio_string,
         buffering_samples: state.buffering_samples.load(Ordering::Relaxed),
         svg_path: svg_string,
