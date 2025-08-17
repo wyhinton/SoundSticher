@@ -303,6 +303,7 @@ pub fn run() {
             play_song,
             pause_song,
             get_metadata,
+            combine::test_async,
             combine::update_inputs,
             combine::combine_all_cached_samples,
             combine::play_combined_audio,

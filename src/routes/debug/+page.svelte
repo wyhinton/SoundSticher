@@ -6,7 +6,7 @@
     type PerformanceMetric,
   } from "$lib/state/performance";
   import { addNewFolderOnDrop, positionStore } from "$lib/state/position";
-  import { addSection, appState, resetAppState } from "$lib/state/state.svelte";
+  import { addSection, appState, hoveredSourceItem, resetAppState } from "$lib/state/state.svelte";
   import Prism from "prismjs";
   import "prismjs/components/prism-json";
   import clipboard from "tauri-plugin-clipboard-api";
@@ -16,7 +16,7 @@
   import { toSource } from "$lib/utils/format";
   import { examples } from "$lib/utils/examples";
   import { onDestroy, onMount } from "svelte";
-  import { Channel } from "@tauri-apps/api/core";
+  import { Channel, invoke } from "@tauri-apps/api/core";
   import type { CombineAudioEvent } from "$lib/state/events";
   let highlighted = "";
   let appStateContainer: HTMLElement;
@@ -45,6 +45,20 @@
     x: JSON.stringify($positionStore),
   };
 
+  let seconds = 0;
+  let interval;
+
+  onMount(() => {
+    interval = setInterval(() => {
+      seconds += 50;
+    }, 50);
+
+    // Cleanup when component is destroyed
+    onDestroy(() => {
+      clearInterval(interval);
+    });
+  });
+
   async function copyStateToClipboard() {
     return await clipboard.writeText(toSource(get(appState)));
   }
@@ -52,6 +66,10 @@
   const applyExampleState = (k: string) => {
     appState.set(examples[k]);
   };
+
+  function test_async(){
+    invokeWithPerf("test_async")
+  }
 
   const sortedPerformance = derived(performanceStore, ($store) => {
     return Object.entries($store).sort((a, b) => {
@@ -122,26 +140,27 @@
   onMount(() => {
     let isFetching = false;
 
-    intervalId = setInterval(async () => {
-      if (isFetching) return;
-      isFetching = true;
+    // intervalId = setInterval(async () => {
+    //   if (isFetching) return;
+    //   isFetching = true;
 
-      try {
-        appStateDebug = await invokeWithPerf<AppStateDebug>("get_app_state");
+    //   try {
+    //     appStateDebug = await invokeWithPerf<AppStateDebug>("get_app_state");
 
-        if (appStateDebug.combined_audio === "empty") {
-          appState.update((s) => {
-            if (s.combinedFile) s.combinedFile.svgPath = undefined;
-            s.combinedFileLength = undefined;
-            return s;
-          });
-        }
-      } catch (err) {
-        console.error("Failed to fetch app state", err);
-      } finally {
-        isFetching = false;
-      }
-    }, 1000);
+    //     if (appStateDebug.combined_audio === "empty") {
+    //       appState.update((s) => {
+    //         if (s.combinedFile) s.combinedFile.svgPath = undefined;
+    //         s.combinedFileLength = undefined;
+    //         s.timelineItems = [];
+    //         return s;
+    //       });
+    //     }
+    //   } catch (err) {
+    //     console.error("Failed to fetch app state", err);
+    //   } finally {
+    //     isFetching = false;
+    //   }
+    // }, 1000);
   });
 
   onDestroy(() => {
@@ -163,6 +182,12 @@
       copyStateToClipboard();
     }}
     class="btn btn-sm">Copy state to clipboard</button
+  >
+  <button
+    on:click={() => {
+      test_async();
+    }}
+    class="btn btn-sm">Test async</button
   >
   <select bind:value={selectedKey}>
     {#each Object.keys(examples) as key}
@@ -193,6 +218,9 @@
   <pre class="language-json">
       <code class="language-json" bind:this={appBackendState}></code>
     </pre>
+    <div>{$hoveredSourceItem}</div>
+  <div>HoveredItem: {$hoveredSourceItem === null ? 'None' : $hoveredSourceItem}</div>
+  <div>{seconds}</div>
   <div>
     <div class="d-flex bg-black">
       <button

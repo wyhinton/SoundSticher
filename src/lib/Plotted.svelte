@@ -3,19 +3,22 @@
   import * as d3 from "d3";
   import { appState } from "./state/state.svelte";
   import { listen } from "@tauri-apps/api/event";
+  import { formatFileName } from "./utils/format";
+  import TimelineSegment from "./TimelineSegment.svelte";
+  import LabelLayer from "./LabelLayer.svelte";
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
   let axisGroup: SVGGElement;
   let pathGroup: SVGGElement;
+  let labelGroup: SVGGElement
 
-  const height = 100;
+  const height = 120;
   $: durationSeconds = $appState?.combinedFileLength ?? 0;
   $: if ($appState?.combinedFileLength && width > 0) {
     updateScales();
   }
 
-  const rawPath = $appState?.combinedFile?.svgPath;
   const originalPathWidth = 1000;
   let currentTransform = d3.zoomIdentity;
   let width = 0;
@@ -33,25 +36,23 @@
     renderAxis(xScale);
     console.log(height);
   }
-  
-  listen<number>("combined-progress", (event)=>{
-    console.log(`%cHERE LINE :39 %c`,'color: yellow; font-weight: bold', '');
-    console.log(event)
-    playHeadPosition = event.payload;
-  })
 
-function handleClick(event: MouseEvent) {
-  const rect = container.getBoundingClientRect();
-  const relativeX = event.clientX - rect.left;
-  console.log(relativeX)
-  const clickedTime = currentTransform
-    .rescaleX(d3.scaleLinear().domain([0, durationSeconds]).range([0, width]))
-    .invert(relativeX);
-    console.log(clickedTime)
-  playHeadPosition =  Math.max(0, Math.min(clickedTime, durationSeconds));
-  console.log(playHeadPosition)
-  // playHeadX = relativeX;
-}
+  listen<number>("combined-progress", (event) => {
+    playHeadPosition = event.payload;
+  });
+
+  function handleClick(event: MouseEvent) {
+    const rect = container.getBoundingClientRect();
+    const relativeX = event.clientX - rect.left;
+    console.log(relativeX);
+    const clickedTime = currentTransform
+      .rescaleX(d3.scaleLinear().domain([0, durationSeconds]).range([0, width]))
+      .invert(relativeX);
+    console.log(clickedTime);
+    playHeadPosition = Math.max(0, Math.min(clickedTime, durationSeconds));
+    console.log(playHeadPosition);
+    // playHeadX = relativeX;
+  }
 
   function renderAxis(scale: d3.ScaleLinear<number, number>) {
     const axis = d3
@@ -97,6 +98,8 @@ function handleClick(event: MouseEvent) {
   function setupZoom() {
     const pathGroupD3 = d3.select(pathGroup);
 
+    const labelGroupD3 = d3.select(labelGroup);
+
     d3.select(svgEl).call(
       d3
         .zoom<SVGSVGElement, unknown>()
@@ -116,12 +119,22 @@ function handleClick(event: MouseEvent) {
             "transform",
             `translate(${event.transform.x}, 0) scale(${event.transform.k}, 1)`
           );
+          console.log(event.transform.x)
+          console.log(event.transform.k)
+          console.log(event.transform.x/event.transform.k)
+          // labelGroupD3.attr(
+          //   "transform",
+          //   `translate(${event.transform.x}, 0)`
+          // );
           const newXScale = currentTransform.rescaleX(
             d3.scaleLinear().domain([0, durationSeconds]).range([0, width])
           );
           renderAxis(newXScale);
         })
     );
+
+
+ 
   }
 
   onMount(() => {
@@ -162,14 +175,17 @@ function handleClick(event: MouseEvent) {
 </script>
 
 <div class="svg-container position-relative">
-  <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important">
+  <div
+    class="position-absolute"
+    style="font-size: 10px; color: #9d9d9d !important; bottom:20px"
+  >
     <!-- {playHeadX} -->
     <!-- {scaleX} -->
     {currentTransform.k.toFixed(2)}x
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <!-- x={playHeadX / (0.5 - currentTransform.k)} -->
+  <!-- x={playHeadX / (0.5 - currentTransform.k)} -->
   <div
     on:click={(e) => {
       handleClick(e);
@@ -177,25 +193,68 @@ function handleClick(event: MouseEvent) {
     bind:this={container}
     style="width: 100%;"
   >
-    <svg bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
-      <g bind:this={pathGroup}>
-        <path
-          d={$appState?.combinedFile?.svgPath}
-          stroke="#3091f1"
-          fill="none"
-          stroke-width="2"
-          transform={`scale(${scaleX}, 1)`}
-          pointer-events="none"
-        />
+    <svg class="waveform-svg-parent" bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
+      <g transform={`translate(0, ${20})`}>
+        <g bind:this={pathGroup} transform={``}>
+          <path
+            d={$appState?.combinedFile?.svgPath}
+            stroke="#3091f1"
+            fill="none"
+            stroke-width="2"
+            transform={`scale(${scaleX}, 1) `}
+            pointer-events="none"
+            id="waveform-path"
+          />
+          <rect
+            x={playHeadX}
+            y={0}
+            width={1 / currentTransform.k}
+            height="80"
+            fill="red"
+          />
+          <!-- {#if $appState?.timelneItems} -->
+          {#if $appState?.timelineItems.length>0}
+            {#each $appState?.timelineItems as timelineItem, i}
+              <TimelineSegment
+                scaleX={scaleX}
+                index={i}
+                startOffset={timelineItem.startOffset}
+                size={timelineItem.size}
+                label={formatFileName(timelineItem.fileName)}
+                originalPathWidth={originalPathWidth}
+                zoomTransform={currentTransform}
+              />
+              <!-- <text
+                x={(timelineItem.startOffset * originalPathWidth) + 4}
+                y={40}
+                dominant-baseline="middle"
+                fill="white"
+                font-size="10"
+                font-family="monospace"
+                pointer-events="none"
+              >{formatFileName(timelineItem.fileName)}</text>
               <rect
-              x={playHeadX}
-        y={0}
-        width={1/ currentTransform.k}
-        height="80"
-        fill="red"
-      />
+                x={timelineItem.startOffset * originalPathWidth}
+                y={0}
+                width={timelineItem.size*originalPathWidth}
+                height="80"
+                fill="rgba(0, 200, 255, 0.15)"
+                stroke="rgba(0, 200, 255, 0.5)"
+                stroke-width="0.5"
+              /> -->
+            {/each}
+          {/if}
+        
+        </g>
       </g>
-      <rect x="0" y={80} {width} height="20" fill="var(--bs-dark-bg-subtle);" />
+    {#if $appState?.timelineItems.length > 0}
+            <LabelLayer xScale={xScale} scaleX={scaleX} items={$appState?.timelineItems} originalPathWidth={originalPathWidth} currentTransform={currentTransform}></LabelLayer>
+    {/if}
+      <g>
+
+  </g>
+    <!-- TIMELINE BACKGROUND -->
+      <rect x="0" y={100} {width} height="20" fill="var(--bs-dark-bg-subtle);" />
       <!-- PLAYHEAD -->
 
       <g bind:this={axisGroup} transform={`translate(0, ${height - 20})`} />
@@ -204,6 +263,9 @@ function handleClick(event: MouseEvent) {
 </div>
 
 <style>
+  .waveform-svg-parent{
+    margin-bottom: 6px;
+  }
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
   }

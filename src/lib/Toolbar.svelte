@@ -6,6 +6,8 @@
     appState,
     combine_audio_files,
     getAllFiles,
+    hoveredTimelineItem,
+    hoveredSourceItem
   } from "./state/state.svelte";
   import type { Event, UnlistenFn } from "@tauri-apps/api/event";
   import { get } from "svelte/store";
@@ -31,6 +33,8 @@
 </script>
 
 <div class="d-flex justify-content-center p-2">
+  {$hoveredTimelineItem}
+  {$hoveredSourceItem}
   <!-- <div class="pixel-font">!Test</div> -->
   <button class="btn btn-sm" onclick={()=>addSection()}><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button>
 

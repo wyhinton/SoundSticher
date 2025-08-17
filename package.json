@@ -25,6 +25,7 @@
     "@tauri-apps/plugin-updater": "^2.9.0",
     "@tauri-apps/plugin-window-state": "^2.3.0",
     "@thisux/sveltednd": "^0.0.20",
+    "@types/d3": "^7.4.3",
     "boostrap": "^2.0.0",
     "d3": "^7.9.0",
     "lodash-es": "^4.17.21",
