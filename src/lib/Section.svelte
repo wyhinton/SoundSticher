@@ -3,8 +3,12 @@
   import {
     appState,
     getAllFiles,
+    hoveredSourceItem,
+    hoveredTimelineItem,
     pause_song,
     play_song,
+    setHoveredItem,
+    setUnderMouse,
     type Section,
   } from "./state/state.svelte";
 
@@ -37,6 +41,14 @@
         <tbody>
           {#each getAllFiles(sections) as file, fileIndex}
             <tr
+              onmouseenter={()=>{
+                hoveredSourceItem.set(fileIndex)
+                setHoveredItem(fileIndex)}
+                }
+              onmouseleave={()=>{
+                setHoveredItem(null)}
+                }
+              class:timeline-hovered={$hoveredTimelineItem===fileIndex}
               class:playing={file.path === $appState.playingSong &&
                 $appState.playProgress < 1}
               onclick={() => {
@@ -52,7 +64,7 @@
               ><td
                 >
                 <div class="d-flex align-items-center">
-         
+                  {$hoveredTimelineItem===fileIndex}
                 <div
                   class="file-name ms-1"
                 >
@@ -185,6 +197,11 @@
     background-position: 0% 0%;
     animation: gradientShift 1s linear infinite;
     border: 1px dotted white;
+  }
+
+  .timeline-hovered{
+    color: red;
+    border: 1px dotted white !important;
   }
 
   @keyframes gradientShift {

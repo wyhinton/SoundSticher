@@ -27,6 +27,8 @@ export interface PerformanceState {
   clear_audio_files: PerformanceMetric[];
   export_combined_audio_as_wav: PerformanceMetric[];
   get_app_state: PerformanceMetric[];
+  test_async: PerformanceMetric[];
+
 
 }
 
@@ -43,7 +45,8 @@ export const performanceStore = persisted<PerformanceState>("performanceState",{
   pause_combined_audio: [],
   clear_audio_files: [],
   export_combined_audio_as_wav: [],
-  get_app_state: []
+  get_app_state: [],
+  test_async: []
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {
@@ -104,12 +107,18 @@ export async function updateInputs(sections: Section[] ){
         appState.update((state) => {
           state.isCombiningFile = true;
           state.combinedFileLength = message.data.duration;
+          state.timelineItems = [];
           return state;
         });
       }
       if (message.event === "progress") {
-            appState.update((s) => {
+          appState.update((s) => {
+          const curwaveform = document.getElementById("waveform-path").getAttribute("d");
           s.combinedFile = { svgPath: message.data.svgPath };
+          if (curwaveform){
+            s.combinedFile.svgPath = curwaveform + message.data.svgPath;
+          }
+          s.timelineItems.push(message.data)
           return s;
         });
       }
