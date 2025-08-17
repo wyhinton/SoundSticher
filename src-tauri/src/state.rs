@@ -9,6 +9,7 @@ use tauri::State;
 pub struct AudioFile {
     pub samples: Vec<i16>,
     pub start_offset: f64,
+    pub waveform_path: String,
 }
 
 pub struct AppState {
@@ -26,6 +27,7 @@ pub struct AppState {
 pub struct AudioFileDebug {
     samples: usize,
     start_offset: f64,
+    waveform_path: String,
 }
 
 #[derive(Serialize)]
@@ -49,6 +51,7 @@ pub fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
                 AudioFileDebug {
                     samples: audio_file.samples.len(),
                     start_offset: audio_file.start_offset,
+                    waveform_path: audio_file.waveform_path.clone(),
                 },
             )
         })

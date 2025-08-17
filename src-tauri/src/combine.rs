@@ -9,7 +9,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, sleep};
 use std::time::{Duration, Instant};
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
@@ -158,7 +158,7 @@ pub async fn update_inputs(
             if !audio_files.contains_key(path) {
                 let samples = get_samples(path)?; // Keep this cheap if possible
                 combined.extend(&samples);
-                audio_files.insert(path.clone(), AudioFile{samples, start_offset: 0.});
+                audio_files.insert(path.clone(), AudioFile{samples, start_offset: 0., waveform_path: String::from("")});
                 let progress = (i as f32) / ((valid_paths.len() - 1) as f32);
                 let _ = app_handle.emit("buffering-progress", progress);
                 inserted_count += 1;
@@ -191,6 +191,9 @@ pub enum CombineAudioEvent {
     },
     Progress {
         svg_path: String,
+        start_offset: f64,
+        file_name: String,
+        size: f64,
     },
     Finished {
         svg_path: String,
@@ -254,6 +257,7 @@ pub async fn combine_all_cached_samples(
         let mut current_sample_offset = 0;
         let mut combined_svg_string = String::from("");
         for (path, audio_file) in audio_files.iter_mut() {
+
             println!("test: {}", *process_count.lock().unwrap());
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
@@ -262,7 +266,8 @@ pub async fn combine_all_cached_samples(
             audio_file.start_offset = (current_sample_offset as f64)/(total_samples as f64);
             combined_samples.extend(&audio_file.samples);
 
-            let segment_width = full_waveform_width * (audio_file.samples.len() as f64 / total_samples as f64);
+            let relative_length = audio_file.samples.len() as f64 / total_samples as f64;
+            let segment_width = full_waveform_width * relative_length ;
             let x_offset =
                 full_waveform_width * (current_sample_offset as f64 / total_samples as f64);
             if *process_count.lock().unwrap() != orig {
@@ -270,15 +275,20 @@ pub async fn combine_all_cached_samples(
                 return Ok("stopped".to_string());
             }
             let svg_path = generate_waveform_path(&audio_file.samples, segment_width as usize, 70, x_offset);
+            audio_file.waveform_path = svg_path.clone();
             on_event
                 .send(CombineAudioEvent::Progress {
-                    svg_path: svg_path.clone(),
+                    file_name: path.clone(),
+                    svg_path: audio_file.waveform_path.clone(),
+                    start_offset: audio_file.start_offset,
+                    size: relative_length,
                 })
                 .unwrap();
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
                 return Ok("stopped".to_string());
             }
+                        // sleep(Duration::from_millis(500)); // slow down 200ms per file
             combined_svg_string.push_str(&svg_path);
             current_sample_offset += audio_file.samples.len();
         }
@@ -296,6 +306,24 @@ pub async fn combine_all_cached_samples(
         *state_svg_path = Some(combined_svg_string);
 
         Ok("⏳ Combining started in background thread".to_string())
+    })
+    .await? // <-- This unwraps spawn_blocking Result
+}
+#[tauri::command]
+pub async fn test_async(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    on_event: Channel<CombineAudioEvent>,
+) -> Result<String, Error> {
+    let state = Arc::clone(&state); // Clone for thread
+    let app = app.clone(); // Clone for thread
+
+    let count = state.combine_process.clone();
+    *count.lock().unwrap() += 1;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        sleep(Duration::from_millis(5000));
+        Ok("⏳Did it".to_string())
     })
     .await? // <-- This unwraps spawn_blocking Result
 }

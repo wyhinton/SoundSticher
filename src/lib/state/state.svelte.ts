@@ -1,6 +1,6 @@
 export const files = $state<string[]>([]);
 import { persisted } from "svelte-persisted-store";
-import { derived, get } from "svelte/store";
+import { derived, get, writable } from "svelte/store";
 import {
   ABLETON_COLORS,
   getNextAvailableColor,
@@ -41,6 +41,7 @@ export interface AppState {
   isCombiningFile: boolean;
   combineAudioFileProgress?: number;
   playingCombined: boolean;
+  timelineItems: TimelineItem[];
 }
 
 interface AudioFileItem {
@@ -70,13 +71,33 @@ interface FileMetadata {
   duration: number;
 }
 
+export interface TimelineItem{
+  svgPath: string;
+  startOffset: number;
+  fileName: string;
+  size: number;
+}
+
+
 export const appState = persisted<AppState>("appState", {
   sections: [],
   isCombiningFile: false,
   combinedFileLength: 0,
   playingCombined: false,
   combinedFile: undefined,
+  timelineItems: [],
 });
+
+export const hoveredSourceItem = writable<null|number>(null);
+export const hoveredTimelineItem = writable<null|number>(null);
+
+
+export const setHoveredItem = (index: number|null) => {
+  // hoveredItem.update((state) => {
+  //   return index;
+  // })
+  hoveredSourceItem.set(index);
+} 
 
 const DEFAULT_FOLDER =
   "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_time-leeuwarden";
@@ -149,6 +170,8 @@ export function deleteSection(index: number) {
     if (state.sections.length === 0) {
       invokeWithPerf("clear_audio_files");
       state.sections = [];
+      state.timelineItems = [];
+      state.combinedFile = undefined
       return state;
     } else {
       updateInputs(state.sections)
@@ -314,6 +337,10 @@ interface AudioSend {
   path: string;
 }
 
+export function setUnderMouse(fileIndex: number){
+  
+
+}
 // appState.subscribe((newValue) => {
 //   const newSends: SectionSend[] = newValue.sections.map((s) => ({
 //     folderPath: s.folderPath,
@@ -375,6 +402,10 @@ interface AudioSend {
 
 //   prevValue = newValue;
 // });
+// appState.subscribe((s)=>{
+//   const sum = s.timelineItems.reduce((acc, obj) => acc + obj.size, 0);
+//   console.log(sum);
+// })
 
 listen<number>("song-progress", (event) => {
   appState.update((state) => {
@@ -392,11 +423,15 @@ interface CachedCombineResult {
 listen<CachedCombineResult>("combined-cached", (event) => {
   console.log(event);
   appState.update((state) => {
-    console.log(event);
-    state.combinedFile = {
-      ...state.combinedFile,
-      svgPath: state.combinedFile.svgPath + event.payload.svgPath,
-    };
+    // console.log(event);
+    // console.log(state.combinedFile)
+
+    // state.combinedFile = {
+    //   ...state.combinedFile,
+    //   svgPath: state.combinedFile.svgPath + event.payload.svgPath,
+    // };
+    state.combinedFile.svgPath += event.payload.svgPath
+    console.log(state.combinedFile.svgPath.length);
     state.combinedFileLength = event.payload.duration;
     return state;
   });
