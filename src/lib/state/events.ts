@@ -30,6 +30,9 @@ export type CombineAudioEvent =
       event: 'progress';
       data: {
         svgPath: string;
+        startOffset: number;
+        fileName: string;
+        size: number;
       };
     }
   | {
