@@ -71,13 +71,12 @@ interface FileMetadata {
   duration: number;
 }
 
-export interface TimelineItem{
+export interface TimelineItem {
   svgPath: string;
   startOffset: number;
   fileName: string;
   size: number;
 }
-
 
 export const appState = persisted<AppState>("appState", {
   sections: [],
@@ -88,69 +87,79 @@ export const appState = persisted<AppState>("appState", {
   timelineItems: [],
 });
 
-export const hoveredSourceItem = writable<null|number>(null);
-export const hoveredTimelineItem = writable<null|number>(null);
+export const hoveredSourceItem = writable<null | number>(null);
+export const hoveredTimelineItem = writable<null | number>(null);
 
-
-export const setHoveredItem = (index: number|null) => {
+export const setHoveredItem = (index: number | null) => {
   // hoveredItem.update((state) => {
   //   return index;
   // })
   hoveredSourceItem.set(index);
-} 
+};
 
 const DEFAULT_FOLDER =
   "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_time-leeuwarden";
-
 
 let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
 export async function addSection(paths?: string | string[]) {
-  console.log(`%cHERE LINE :89 %c`, 'color: brown; font-weight: bold', '');
+  console.log(`%cHERE LINE :89 %c`, "color: brown; font-weight: bold", "");
 
   const color = ABLETON_COLORS[0];
   const folderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
 
   try {
     // Get file paths for each folder
-    const filesMap: Record<string, string[]> = await invokeWithPerf("get_file_paths_in_folder", {
-      folderPaths: folderPaths,
-    });
-    console.log("Files map:", filesMap);
+    const filesResult = await invokeWithPerf<Record<string, string[]>>(
+      "get_file_paths_in_folder",
+      {
+        folderPaths: folderPaths,
+      }
+    );
+    
+    if (filesResult.ok === true) {
+      // Flatten all file paths to request metadata at once
+      const allFilePaths: string[] = Object.values(filesResult.value).flat();
+      console.log(allFilePaths)
+      // Get metadata
+      const metadataList = await invokeWithPerf<FileMetadata[]>(
+        "get_metadata",
+        {
+          titles: allFilePaths,
+        }
+      );
+      if (metadataList.ok === true) {
+        const newSections: Section[] = Object.entries(filesResult.value).map(
+          ([folderPath, files]) => {
+            const withMeta: AudioFileItem[] = files
+              .map((fp) => {
+                const meta = metadataList.value.find((m) => m.path === fp);
+                return meta ? { path: fp, color, ...meta } : null;
+              })
+              .filter(Boolean) as AudioFileItem[];
 
-    // Flatten all file paths to request metadata at once
-    const allFilePaths = Object.values(filesMap).flat();
+            return {
+              folderPath,
+              files: withMeta,
+              errors: [],
+              metaData: [],
+              color,
+            };
+          }
+        );
 
-    // Get metadata
-    const metadataList: FileMetadata[] = await invokeWithPerf("get_metadata", {
-      titles: allFilePaths,
-    });
-
-    const newSections: Section[] = Object.entries(filesMap).map(([folderPath, files]) => {
-      const withMeta: AudioFileItem[] = files.map((fp) => {
-        const meta = metadataList.find((m) => m.path === fp);
-        return meta ? { path: fp, color, ...meta } : null;
-      }).filter(Boolean) as AudioFileItem[];
-
-      return {
-        folderPath,
-        files: withMeta,
-        errors: [],
-        metaData: [],
-        color,
-      };
-    });
-
-    // Update app state with new sections
-    appState.update((state) => {
-      return {
-        ...state,
-        combinedFile: undefined,
-        combinedFileLength: undefined,
-        sections: [...newSections, ...state.sections],
-      };
-    });
+        // Update app state with new sections
+        appState.update((state) => {
+          return {
+            ...state,
+            combinedFile: undefined,
+            combinedFileLength: undefined,
+            sections: [...newSections, ...state.sections],
+          };
+        });
+      }
+    }
 
     // Send updated sections to backend/input processor
     const s = get(appState);
@@ -159,7 +168,6 @@ export async function addSection(paths?: string | string[]) {
     console.error("Error in addSection:", error);
   }
 }
-
 
 export function deleteSection(index: number) {
   console.log(`%cHERE LINE :150 %c`, "color: yellow; font-weight: bold", "");
@@ -171,10 +179,10 @@ export function deleteSection(index: number) {
       invokeWithPerf("clear_audio_files");
       state.sections = [];
       state.timelineItems = [];
-      state.combinedFile = undefined
+      state.combinedFile = undefined;
       return state;
     } else {
-      updateInputs(state.sections)
+      updateInputs(state.sections);
     }
     return state;
   });
@@ -217,22 +225,41 @@ export async function combine_audio_files(
   input_files: string[],
   output_path: string
 ) {
-  await invokeWithPerf<CombineAudioResult>("combine_audio_files", {
-    inputFiles: input_files,
-    outputPath: output_path,
-  }).then((f) => {
-    const metadata = invokeWithPerf<FileMetadata>("get_metadata", {
+  const combineAudioFilesRes = await invokeWithPerf<CombineAudioResult>(
+    "combine_audio_files",
+    {
+      inputFiles: input_files,
+      outputPath: output_path,
+    }
+  );
+  if (combineAudioFilesRes.ok === true) {
+    const getMetadataRes = await invokeWithPerf<FileMetadata>("get_metadata", {
       title:
         "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav",
-    }).then((m) => {
-      console.log(m);
+    });
+    if (getMetadataRes.ok === true) {
       appState.update((state) => {
-        state.combinedFile = { path: f.output, svgPath: f.svgPath };
+        state.combinedFile = {
+          path: combineAudioFilesRes.value.output,
+          svgPath: combineAudioFilesRes.value.svgPath,
+        };
         return state;
       });
-      console.log(f);
-    });
-  });
+    }
+  }
+  // then((f) => {
+  //   const metadata = invokeWithPerf<FileMetadata>("get_metadata", {
+  //     title:
+  //       "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav",
+  //   }).then((m) => {
+  //     console.log(m);
+  //     appState.update((state) => {
+  //       state.combinedFile = { path: f.output, svgPath: f.svgPath };
+  //       return state;
+  //     });
+  //     console.log(f);
+  //   });
+  // });
 }
 
 export async function get_file_paths_in_folder(sectionIndex: number) {
@@ -337,10 +364,7 @@ interface AudioSend {
   path: string;
 }
 
-export function setUnderMouse(fileIndex: number){
-  
-
-}
+export function setUnderMouse(fileIndex: number) {}
 // appState.subscribe((newValue) => {
 //   const newSends: SectionSend[] = newValue.sections.map((s) => ({
 //     folderPath: s.folderPath,
@@ -430,7 +454,7 @@ listen<CachedCombineResult>("combined-cached", (event) => {
     //   ...state.combinedFile,
     //   svgPath: state.combinedFile.svgPath + event.payload.svgPath,
     // };
-    state.combinedFile.svgPath += event.payload.svgPath
+    state.combinedFile.svgPath += event.payload.svgPath;
     console.log(state.combinedFile.svgPath.length);
     state.combinedFileLength = event.payload.duration;
     return state;
