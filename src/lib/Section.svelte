@@ -64,7 +64,6 @@
               ><td
                 >
                 <div class="d-flex align-items-center">
-                  {$hoveredTimelineItem===fileIndex}
                 <div
                   class="file-name ms-1"
                 >

@@ -1,12 +1,18 @@
 <script lang="ts">
   import {
+    exportAudio,
     invokeWithPerf,
     performanceStore,
     resetPerformance,
     type PerformanceMetric,
   } from "$lib/state/performance";
   import { addNewFolderOnDrop, positionStore } from "$lib/state/position";
-  import { addSection, appState, hoveredSourceItem, resetAppState } from "$lib/state/state.svelte";
+  import {
+    addSection,
+    appState,
+    hoveredSourceItem,
+    resetAppState,
+  } from "$lib/state/state.svelte";
   import Prism from "prismjs";
   import "prismjs/components/prism-json";
   import clipboard from "tauri-plugin-clipboard-api";
@@ -17,10 +23,12 @@
   import { examples } from "$lib/utils/examples";
   import { onDestroy, onMount } from "svelte";
   import { Channel, invoke } from "@tauri-apps/api/core";
-  import type { CombineAudioEvent } from "$lib/state/events";
+  import type { CombineAudioEvent, ExportAudioEvent } from "$lib/state/events";
+  import { exportState } from "$lib/state/export";
   let highlighted = "";
   let appStateContainer: HTMLElement;
   let appBackendState: HTMLElement;
+  let appExportState: HTMLElement;
 
   // Reactive derived state for simplified display
   $: forPrint = {
@@ -34,8 +42,12 @@
 
   // FRONTEND JSON VISUALIZER
   $: {
-    const json = JSON.stringify(forPrint, null, 2);
-    highlighted = Prism.highlight(json, Prism.languages.json, "json");
+    const frontendStateJSON = JSON.stringify(forPrint, null, 2);
+    highlighted = Prism.highlight(
+      frontendStateJSON,
+      Prism.languages.json,
+      "json"
+    );
     if (appStateContainer) {
       appStateContainer.innerHTML = highlighted;
     }
@@ -67,10 +79,23 @@
     appState.set(examples[k]);
   };
 
-  function test_async(){
-    invokeWithPerf("test_async")
+  function test_async() {
+    invokeWithPerf("test_async");
   }
 
+  const openAudioFolder = () => {
+    invokeWithPerf("open_in_explorer", {
+      path: "C:\\Users\\Primary User\\Desktop\\AUDIO",
+    });
+  };
+  const testExport = () => {
+    const s = get(exportState);
+    console.log(s)
+    exportAudio(
+      s.settings,
+      `C:\\Users\\Primary User\\Desktop\\AUDIO\\test_audio2.${s.settings.format.toLowerCase()}`
+    );
+  };
   const sortedPerformance = derived(performanceStore, ($store) => {
     return Object.entries($store).sort((a, b) => {
       const lastA = a[1][a[1].length - 1] ?? 0;
@@ -89,25 +114,45 @@
   // BACKEND JSON VISUALIZER
   $: {
     if (appStateDebug) {
-      const json = JSON.stringify(appStateDebug, null, 2);
-      highlighted = Prism.highlight(json, Prism.languages.json, "json");
+      const backendStateJSON = JSON.stringify(appStateDebug, null, 2);
+      highlighted = Prism.highlight(
+        backendStateJSON,
+        Prism.languages.json,
+        "json"
+      );
       if (appBackendState) {
         appBackendState.innerHTML = highlighted;
       }
     }
   }
 
-  const addTwoSections = () =>{
-    addSection("C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley")
-    setTimeout(() => {
-      addSection("C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX")
-    }, 100);
-
+  $: {
+    const exportStateJSON = JSON.stringify(get(exportState), null, 2);
+    console.log()
+    highlighted = Prism.highlight(
+      exportStateJSON,
+      Prism.languages.json,
+      "json"
+    );
+    if (appExportState) {
+      appExportState.innerHTML = highlighted;
+    }
   }
 
-  const combineTest = () =>{
+  const addTwoSections = () => {
+    addSection(
+      "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley"
+    );
+    setTimeout(() => {
+      addSection(
+        "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX"
+      );
+    }, 100);
+  };
+
+  const combineTest = () => {
     const onCombineAudioEvent = new Channel<CombineAudioEvent>();
-  
+
     onCombineAudioEvent.onmessage = (message) => {
       if (message.event === "started") {
         appState.update((state) => {
@@ -117,7 +162,7 @@
         });
       }
       if (message.event === "progress") {
-            appState.update((s) => {
+        appState.update((s) => {
           s.combinedFile = { svgPath: message.data.svgPath };
           return s;
         });
@@ -132,9 +177,11 @@
         console.log(message.event);
       }
     };
-    
-    invokeWithPerf("combine_all_cached_samples", {onEvent: onCombineAudioEvent})
-  }
+
+    invokeWithPerf("combine_all_cached_samples", {
+      onEvent: onCombineAudioEvent,
+    });
+  };
   let intervalId: number;
   // Make sure to clear the waveform path on mount if no combined audio is present
   onMount(() => {
@@ -175,19 +222,32 @@
     on:click={() => {
       resetAppState();
     }}
-    class="btn btn-sm">Reset AppState</button
+    class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Reset AppState</button
   >
   <button
     on:click={() => {
       copyStateToClipboard();
     }}
-    class="btn btn-sm">Copy state to clipboard</button
+    class="btn btn-sm"
+    ><i class="fa fa-clipboard"></i>Copy state to clipboard</button
   >
   <button
     on:click={() => {
       test_async();
     }}
     class="btn btn-sm">Test async</button
+  >
+  <button
+    on:click={() => {
+      testExport();
+    }}
+    class="btn btn-sm">Test Export</button
+  >
+  <button
+    on:click={() => {
+      openAudioFolder();
+    }}
+    class="btn btn-sm">Open Audio Folder</button
   >
   <select bind:value={selectedKey}>
     {#each Object.keys(examples) as key}
@@ -218,8 +278,13 @@
   <pre class="language-json">
       <code class="language-json" bind:this={appBackendState}></code>
     </pre>
-    <div>{$hoveredSourceItem}</div>
-  <div>HoveredItem: {$hoveredSourceItem === null ? 'None' : $hoveredSourceItem}</div>
+  <pre class="language-json">
+      <code class="language-json" bind:this={appExportState}></code>
+    </pre>
+  <div>{$hoveredSourceItem}</div>
+  <div>
+    HoveredItem: {$hoveredSourceItem === null ? "None" : $hoveredSourceItem}
+  </div>
   <div>{seconds}</div>
   <div>
     <div class="d-flex bg-black">
@@ -271,5 +336,8 @@
   td,
   th {
     font-size: 10px;
+  }
+  .btn {
+    border: 1px solid white !important;
   }
 </style>

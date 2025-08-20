@@ -23,35 +23,6 @@ pub struct Song {
     pub title: String,
 }
 
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
-fn get_songs() -> Vec<Song> {
-    let mut music_files = Vec::new();
-    let entries = fs::read_dir("../../src/assets/test_audio").unwrap();
-
-    for entry in entries {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(file_name) = path.file_name() {
-                if let Some(file_name_str) = file_name.to_str() {
-                    let song = Song {
-                        title: file_name_str.to_string(),
-                    };
-                    music_files.push(song);
-                }
-            }
-        }
-    }
-    return music_files;
-}
-
-
 
 #[tauri::command]
 fn get_file_paths_in_folder(folder_paths: Vec<String>) -> Result<HashMap<String, Vec<String>>, Error> {
@@ -270,6 +241,12 @@ fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
     }
 }
 
+#[tauri::command]
+fn open_in_explorer(state: State<'_, Arc<AppState>>, file_to_open: String){
+    println!("SHOWING IN EXP");
+    showfile::show_path_in_file_manager(file_to_open);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -297,7 +274,6 @@ pub fn run() {
             combine_process: Arc::new(Mutex::new(0)),
         }))
         .invoke_handler(tauri::generate_handler![
-            greet,
             set_volume,
             get_file_paths_in_folder,
             play_song,
@@ -312,7 +288,8 @@ pub fn run() {
             combine::export_combined_audio_as_wav,
             state::get_app_state,
             clear_audio_files,
-            encoder::export_audio
+            encoder::export_audio,
+            open_in_explorer,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

@@ -33,15 +33,6 @@
 </script>
 
 <div class="d-flex justify-content-center p-2">
-  {$hoveredTimelineItem}
-  {$hoveredSourceItem}
-  <!-- <div class="pixel-font">!Test</div> -->
-  <button class="btn btn-sm" onclick={()=>addSection()}><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button>
 
-  <button class:disabled={$appState.sections.length === 0} class="btn btn-sm" onclick={() => combine_audio_files(getAllFiles($appState.sections).map(f=>f.path),TEST_OUTPUT_DIR)}
-    ><i class="me-1 fas fa-layer-group text-success"></i>Combine Files</button
-  >
-    <button class="btn btn-sm" onclick={() => console.log($appState)}
-    >Log App State</button
-  >
+
 </div>
