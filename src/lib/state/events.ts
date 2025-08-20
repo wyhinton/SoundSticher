@@ -41,3 +41,25 @@ export type CombineAudioEvent =
         svgPath: string;
       };
     };
+
+
+export type ExportAudioEvent =
+  | {
+      event: 'started';
+      data: {
+        outputPath: string;
+      };
+    }
+  | {
+      event: 'progress';
+      data: {
+        progress: number;
+        message: string;
+      };
+    }
+  | {
+      event: 'finished';
+      data: {
+          outputPath: string;
+      };
+    };

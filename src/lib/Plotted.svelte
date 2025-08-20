@@ -14,7 +14,7 @@
   let labelGroup: SVGGElement
 
   const height = 120;
-  $: durationSeconds = $appState?.combinedFileLength ?? 0;
+  $: durationSeconds = $appState?.combinedFileLength && $appState.sections.length>0 ? $appState.combinedFileLength : 30;
   $: if ($appState?.combinedFileLength && width > 0) {
     updateScales();
   }
@@ -30,11 +30,9 @@
   $: playHeadX = xScale?.(playHeadPosition) ?? 0;
 
   function updateScales() {
-    console.log(durationSeconds);
     xScale = d3.scaleLinear().domain([0, durationSeconds]).range([0, width]);
     scaleX = width / originalPathWidth;
     renderAxis(xScale);
-    console.log(height);
   }
 
   listen<number>("combined-progress", (event) => {
@@ -119,13 +117,6 @@
             "transform",
             `translate(${event.transform.x}, 0) scale(${event.transform.k}, 1)`
           );
-          console.log(event.transform.x)
-          console.log(event.transform.k)
-          console.log(event.transform.x/event.transform.k)
-          // labelGroupD3.attr(
-          //   "transform",
-          //   `translate(${event.transform.x}, 0)`
-          // );
           const newXScale = currentTransform.rescaleX(
             d3.scaleLinear().domain([0, durationSeconds]).range([0, width])
           );
@@ -146,8 +137,6 @@
 
     const ticks = d3.selectAll(".x-axis .tick text");
     const t = d3.selectAll("g.tick");
-    console.log(t);
-    console.log(ticks);
     ticks
       .filter((_, i, nodes) => i === 0)
       .attr("text-anchor", "start")
@@ -255,8 +244,6 @@
   </g>
     <!-- TIMELINE BACKGROUND -->
       <rect x="0" y={100} {width} height="20" fill="var(--bs-dark-bg-subtle);" />
-      <!-- PLAYHEAD -->
-
       <g bind:this={axisGroup} transform={`translate(0, ${height - 20})`} />
     </svg>
   </div>

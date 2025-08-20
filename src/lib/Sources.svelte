@@ -2,13 +2,20 @@
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
   import { stat } from "@tauri-apps/plugin-fs";
-  import { addSection, appState, deleteSection, updatePath } from "./state/state.svelte";
+  import {
+    addSection,
+    appState,
+    deleteSection,
+    updatePath,
+  } from "./state/state.svelte";
   import { toCssRgb } from "./utils/colors";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { isPointInRect } from "./utils/dragdrop";
+  import lottie from "lottie-web";
+
   import {
-  addNewFolderOnDrop,
+    addNewFolderOnDrop,
     clearUnderMouse,
     positionStore,
     setInputsUnderMouse,
@@ -44,6 +51,9 @@
   let x;
   let y;
   let scaleFactor = 1;
+
+  let lottieContainer: HTMLDivElement;
+  let lottieSize = 150;
 
   onMount(async () => {
     positionStore.reset();
@@ -98,18 +108,16 @@
                     updatePath(atDrop[0], paths[0]);
                   }
                 });
-                      positionStore.reset();
-              clearUnderMouse();
+                positionStore.reset();
+                clearUnderMouse();
               });
               inputsUnderMouse = [];
-       
             }
-            if (addNewFolderOnDrop && atDrop.length === 0){
+            if (addNewFolderOnDrop && atDrop.length === 0) {
               addSection(paths[0]);
             }
             positionStore.reset();
             clearUnderMouse();
-            
           }
           break;
         case "leave":
@@ -121,6 +129,21 @@
       }
     });
   });
+  let animation;
+    async function initLottie() {
+    await tick(); // wait for DOM to update
+    if (lottieContainer) {
+      animation?.destroy(); // destroy previous animation if exists
+      animation = lottie.loadAnimation({
+        container: lottieContainer,
+        renderer: "svg",
+        loop: true,
+        autoplay: true,
+        path: "FOLDER_ANIM.json",
+      });
+    }
+  }
+  
 </script>
 
 <div class="position-relative">
@@ -133,10 +156,18 @@
   >
     {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
       <!-- <SineWaveShader></SineWaveShader> -->
-      <div class="position-absolute no-inputs-warning">No inputs! Drag and Drop a folder of samples or add a section</div>
+      <div class="position-absolute no-inputs-warning ">
+        <div id="lottie-container"
+        class="m-auto" style={`width: ${lottieSize}px; height: ${lottieSize}px;`} bind:this={lottieContainer} ></div>
+        <div class="text-center">No inputs! Drag and Drop a folder of samples or add a section</div>
+        <button class="btn btn-sm m-auto mt-2"  onclick={()=>addSection()}><i class="me-1  fas fa-plus-circle text-success"></i>Add section</button>
+      </div>
+        {@html (() => { initLottie(); return '' })()}
     {/if}
     {#if $addNewFolderOnDrop}
-      <div class="position-absolute no-inputs-warning"><i class="fa fas-plus">+</i></div>
+      <div class="position-absolute no-inputs-warning">
+        <i class="fa fas-plus">+</i>
+      </div>
     {/if}
     <table class="w-100 table m-0">
       <thead>
@@ -198,16 +229,11 @@
   </div>
 </div>
 
-<!-- <div style:font-size="9px">
-  x: {x}
-  y: {y}
-  {JSON.stringify(isOver)}
-  {JSON.stringify(test)}
-  {JSON.stringify(rects)}
-  {JSON.stringify(inputsUnderMouse)}
-</div> -->
 <style>
-  .drop-add{
+  #lottie-container{
+    opacity: .8
+  }
+  .drop-add {
     border: 2px solid green;
   }
   .source-row {
@@ -248,9 +274,12 @@
 
   .no-inputs-warning {
     position: absolute;
-    top: 65%;
+    top: 100%;
     left: 50%;
     transform: translate(-50%, -150%);
     font-size: 12px;
+    display: flex;
+    flex-direction: column;
+
   }
 </style>

@@ -37,6 +37,12 @@ pub enum Error {
 
     #[error("Uneven Number of Samples Provided")]
     UnevenNumberOfSamples,
+
+    #[error("FLAC encode error: {0}")]
+    FlacEncodeError(String),
+
+    #[error("FLAC output error: {0}")]
+    FlacOutputError(String),
 }
 
 #[derive(serde::Serialize)]
@@ -55,6 +61,8 @@ pub enum ErrorKind {
     TauriError(String),
     MP3EncoderError(String),
     UnevenNumberOfSamples,
+    FlacEncodeError(String),
+    FlacOutputError(String),
 }
 
 impl serde::Serialize for Error {
@@ -76,6 +84,8 @@ impl serde::Serialize for Error {
             Self::TauriError(_) => ErrorKind::TauriError(error_message),
             Self::MP3EncoderError(_) => ErrorKind::MP3EncoderError(error_message),
             Self::UnevenNumberOfSamples => ErrorKind::UnevenNumberOfSamples,
+            Self::FlacEncodeError(_) => ErrorKind::FlacEncodeError(error_message),
+            Self::FlacOutputError(_) => ErrorKind::FlacOutputError(error_message),
         };
         error_kind.serialize(serializer)
     }
