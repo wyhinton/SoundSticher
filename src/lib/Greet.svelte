@@ -11,6 +11,7 @@
   import { onDestroy, onMount } from "svelte";
   import { invokeWithPerf } from "./state/performance";
   import Export from "./Export.svelte";
+  import { exportState } from "./state/export";
 
   WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
@@ -47,6 +48,12 @@
 
   onMount(() => {
     window.addEventListener("keyup", handleSpaceBar);
+    exportState.update((s)=>{
+      s.message = undefined;
+      s.progress = undefined;
+      s.error = undefined;
+      return s;
+    })
     
   });
 
