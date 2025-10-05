@@ -2,9 +2,10 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { persisted } from 'svelte-persisted-store';
 import { writable } from 'svelte/store';
-import { appState, type CombineAudioResult, type Section, type SectionSend } from './state.svelte';
+import { appState, getAllFiles, type CombineAudioResult, type Section, type SectionSend } from './state.svelte';
 import type { BufferAudioEvent, CombineAudioEvent, ExportAudioEvent } from './events';
 import { exportState, type ExportSettings, type ExportState } from './export';
+import { CLEAR_COMMAND } from 'tauri-plugin-clipboard-api';
 
 
 export interface PerformanceMetric{
@@ -31,7 +32,8 @@ export interface PerformanceState {
   test_async: PerformanceMetric[];
   export_audio: PerformanceMetric[];
   open_in_explorer: PerformanceMetric[];
-
+  update_sorting: PerformanceMetric[];
+  combine_all_cached_samples_with_custom_order: PerformanceMetric[];
 
 }
 
@@ -52,6 +54,8 @@ export const performanceStore = persisted<PerformanceState>("performanceState",{
   test_async: [],
   export_audio: [],
   open_in_explorer: [],
+  update_sorting: [],
+  combine_all_cached_samples_with_custom_order: []
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {
@@ -134,7 +138,25 @@ export async function updateInputs(sections: Section[] ){
           if (curwaveform){
             s.combinedFile.svgPath = curwaveform + message.data.svgPath;
           }
-          s.timelineItems.push(message.data)
+          console.log(message)
+          console.log(s.timelineItems)
+          let timelineItemToUpdate = s.timelineItems.find(clip=>clip.id==message.data.id);
+          console.log(timelineItemToUpdate)
+          console.log("HEREEEE")
+          console.log(s.timelineItems.map(t=>t.id));
+          console.log(message.data.id)
+          // console.log(message.data.id)
+          if (!timelineItemToUpdate){
+            console.log(`%cHERE LINE :143 %c`,'color: brown; font-weight: bold', '');
+            
+            s.timelineItems.push({type: "audio-file", ...message.data})
+          } else {
+            console.log(message.data)
+            timelineItemToUpdate = {type: "audio-file", ...message.data}
+          }
+          const toGiveId =  getAllFiles(s.sections).find(f=>f.path === message.data.fileName);
+          toGiveId.id = message.data.id;
+          s.sections = s.sections;
           return s;
         });
       }
@@ -152,7 +174,7 @@ export async function updateInputs(sections: Section[] ){
     const onBufferAudioEvent = new Channel<BufferAudioEvent>();
     onBufferAudioEvent.onmessage = (message) => {
       if (message.event === "finished") {
-        invokeWithPerf<CombineAudioResult>("combine_all_cached_samples", {
+        invokeWithPerf<CombineAudioResult>("combine_all_cached_samples_with_custom_order", {
           onEvent: onCombineAudioEvent,
         });
       }
@@ -172,7 +194,7 @@ export async function exportAudio(settings: ExportSettings, outputPath: string) 
       console.log(message);
       if (message.event === "started") {
         console.log("STARTED ENCODE");
-      }
+    }
       if (message.event === "progress") {
         exportState.update((s)=>{
           s.progress = message.data.progress

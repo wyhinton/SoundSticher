@@ -9,13 +9,36 @@
     play_song,
     setHoveredItem,
     setUnderMouse,
+    sortedFiles,
     type Section,
   } from "./state/state.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  const isDev = import.meta.env.TAURI_ENV_DEBUG; 
 
   export let sections: Section[];
+  function toggleSort(key: keyof ReturnType<typeof getAllFiles>[0]) {
+    
+    if ($appState.sortKey === key) {
+      appState.update(s => ({
+        ...s,
+        sortDirection: s.sortDirection === "asc" ? "desc" : "asc"
+      }));
+    } else {
+      appState.update(s => ({
+        ...s,
+        sortKey: key,
+        sortDirection: "asc"
+      }));
+    }
+  }
+
+ 
 </script>
 
-<div style:width="-webkit-fill-available" class="card d-flex flex-column position-relative " >
+<div
+  style:width="-webkit-fill-available"
+  class="card d-flex flex-column position-relative"
+>
   <div class="d-flex flex-column" style:background-color="#080808">
     <div class="d-flex flex-column">
       <!-- {#each section.errors as sectionError, errorIndex}
@@ -30,56 +53,78 @@
       <table class="table table-xs border-0">
         <thead>
           <tr class="">
-            <th class="file-column">File</th>
-            <th class="text-center">Size</th>
-            <th class="text-center">bitRate</th>
-            <th class="text-center">Channels</th>
-            <th class="text-center">bitDepth</th>
-            <th class="text-center">Duration</th>
+           <th class="number-column">
+              # 
+            </th>
+           <th class="file-column" onclick={() => toggleSort("path")}>
+              File {$appState.sortKey === "path" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th class="text-center" onclick={() => toggleSort("size")}>
+              Size {$appState.sortKey === "size" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th class="text-center" onclick={() => toggleSort("bitRate")}>
+              bitRate {$appState.sortKey === "bitRate" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th class="text-center" onclick={() => toggleSort("channels")}>
+              Channels {$appState.sortKey === "channels" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th class="text-center" onclick={() => toggleSort("bitDepth")}>
+              bitDepth {$appState.sortKey === "bitDepth" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            </th>
+            <th class="text-center" onclick={() => toggleSort("duration")}>
+              Duration {$appState.sortKey === "duration" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            </th>
+            {#if import.meta.env.DEV}
+      <!-- <DevPanel /> -->
+          {/if}
           </tr>
         </thead>
         <tbody>
-          {#each getAllFiles(sections) as file, fileIndex}
+          {#each $sortedFiles as file, fileIndex}
             <tr
-              onmouseenter={()=>{
-                hoveredSourceItem.set(fileIndex)
-                setHoveredItem(fileIndex)}
-                }
-              onmouseleave={()=>{
-                setHoveredItem(null)}
-                }
-              class:timeline-hovered={$hoveredTimelineItem===fileIndex}
+              onmouseenter={() => {
+                hoveredSourceItem.set(fileIndex);
+                setHoveredItem(fileIndex);
+              }}
+              onmouseleave={() => {
+                setHoveredItem(null);
+              }}
+              class:timeline-hovered={$hoveredTimelineItem === fileIndex}
               class:playing={file.path === $appState.playingSong &&
                 $appState.playProgress < 1}
               onclick={() => {
-                if (file.path === $appState.playingSong &&
-                $appState.playProgress < 1){
-                   pause_song()
+                if (
+                  file.path === $appState.playingSong &&
+                  $appState.playProgress < 1
+                ) {
+                  pause_song();
                 } else {
-                  console.log(`%cHERE LINE :47 %c`,'color: yellow; font-weight: bold', '');
-                  
-                   play_song(file.path)
+                  console.log(
+                    `%cHERE LINE :47 %c`,
+                    "color: yellow; font-weight: bold",
+                    ""
+                  );
+
+                  play_song(file.path);
                 }
-                }}
-              ><td
-                >
+              }}
+              >
+              <td>
+                <div class="align-items-center text-center">{file.index}</div>
+              </td>
+              <td>
                 <div class="d-flex align-items-center">
-                <div
-                  class="file-name ms-1"
-                >
-                  {file.path.split(/[/\\]/).pop()}
-                </div>
-                {#if file.path === $appState.playingSong &&
-                $appState.playProgress < 1}
-                  <i class="ms-1 fas fa-play text-success"></i>
-                   <!-- content here -->
-                {/if}
-              <!-- <div class="color-indicator ms-1" style:background-color={toCssRgb(file.color.rgb, 1)}>
+                  <div class="file-name ms-1">
+                    {file.path.split(/[/\\]/).pop()}
+                  </div>
+                  {#if file.path === $appState.playingSong && $appState.playProgress < 1}
+                    <i class="ms-1 fas fa-play text-success"></i>
+                    <!-- content here -->
+                  {/if}
+                  <!-- <div class="color-indicator ms-1" style:background-color={toCssRgb(file.color.rgb, 1)}>
                 </div> -->
                 </div>
-                
-                </td
-              >
+              </td>
               <td class="audio-number">{formatBytes(file.size)}</td>
               <td class="audio-number">{file.bitRate}</td>
               <td class="audio-number">{file.channels}</td>
@@ -97,15 +142,15 @@
 
 <style>
   .dot-grid-background {
-  background-image: radial-gradient(circle, #141313 1px, transparent 1px);
-  background-size: 5px 5px;
-}
-  .color-indicator{
+    background-image: radial-gradient(circle, #141313 1px, transparent 1px);
+    background-size: 5px 5px;
+  }
+  .color-indicator {
     height: 5px;
     width: 5px;
   }
 
-  .no-inputs-warning{
+  .no-inputs-warning {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -145,8 +190,8 @@
     font-size: 12px;
   }
 
-  td > div > div{
-    font-family: 'Fira Code'
+  td > div > div {
+    font-family: "Fira Code";
   }
 
   tr:hover > td {
@@ -198,7 +243,7 @@
     border: 1px dotted white;
   }
 
-  .timeline-hovered{
+  .timeline-hovered {
     color: red;
     border: 1px dotted white !important;
   }

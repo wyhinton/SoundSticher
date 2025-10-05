@@ -18,7 +18,8 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::default::{get_codecs, get_probe};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Emitter, Manager, State}; // Add to Cargo.toml
+use tauri::{AppHandle, Emitter, State}; // Add to Cargo.toml
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -111,7 +112,6 @@ pub async fn update_inputs(
         let mut audio_files = state.audio_files.lock().unwrap();
         let mut inserted_count = 0;
         let mut removed_count = 0;
-        let my_token = current_token;
 
         let valid_paths: HashSet<String> = sections
             .iter()
@@ -124,6 +124,18 @@ pub async fn update_inputs(
             })
             .unwrap();
 
+        // Collect IDs of files that will be removed
+        let removed_ids: Vec<Uuid> = audio_files
+            .iter()
+            .filter_map(|(path, file)| {
+                if !valid_paths.contains(path) {
+                    Some(file.id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         audio_files.retain(|path, _| {
             if valid_paths.contains(path) {
                 true
@@ -133,35 +145,33 @@ pub async fn update_inputs(
             }
         });
 
+        // Remove corresponding IDs from custom_order
+        if !removed_ids.is_empty() {
+            let mut custom_order = state.custom_order.lock().unwrap();
+            custom_order.retain(|id| !removed_ids.contains(id));
+            println!("Removed {} IDs from custom_order", removed_ids.len());
+        }
+
         let mut combined: Vec<i16> = Vec::new();
-
+        //TODO: DUPLICATE FILES
         for (i, path) in valid_paths.iter().enumerate() {
-            // let orig = *count.clone().lock().unwrap();
-
-            // if *state.combine_process.lock().unwrap() != orig {
-            //     println!("SUPER CANCELED");
-            //     return Ok("CANCELED HERE!!!!!!!".into());
-            // }
-            // println!("MY TOKEN {}", my_token);
-            // println!("CANCEL TOKEN {}", state.cancel_token.load(Ordering::SeqCst));
-            // if state.cancel_token.load(Ordering::SeqCst) != current_token {
-            //     println!("Cancelled by newer task");
-            //     return Ok("Cancelled by newer request".into());
-            // }
-
-            // if state.cancel_flag.load(Ordering::Relaxed) {
-            //     println!("Cancelled");
-            //     state.cancel_flag.store(false, Ordering::Relaxed);
-            //     return Ok("Cancelled".into());
-            // }
-
             if !audio_files.contains_key(path) {
-                let samples = get_samples(path)?; // Keep this cheap if possible
+                let samples = get_samples(path)?;
                 combined.extend(&samples);
-                audio_files.insert(path.clone(), AudioFile{samples, start_offset: 0., waveform_path: String::from("")});
+                audio_files.insert(
+                    path.clone(),
+                    AudioFile {
+                        samples,
+                        start_offset: 0.,
+                        waveform_path: String::from(""),
+                        id: Uuid::new_v4(),
+                        path: path.clone(),
+                    },
+                );
                 let progress = (i as f32) / ((valid_paths.len() - 1) as f32);
                 let _ = app_handle.emit("buffering-progress", progress);
                 inserted_count += 1;
+                println!("INSERTING {} into BTree", path.clone());
             }
         }
 
@@ -194,6 +204,7 @@ pub enum CombineAudioEvent {
         start_offset: f64,
         file_name: String,
         size: f64,
+        id: String,
     },
     Finished {
         svg_path: String,
@@ -205,6 +216,7 @@ pub async fn combine_all_cached_samples(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
     on_event: Channel<CombineAudioEvent>,
+    custom_order: Option<Vec<Uuid>>, // Optional custom order
 ) -> Result<String, Error> {
     let state = Arc::clone(&state); // Clone for thread
     let app = app.clone(); // Clone for thread
@@ -226,7 +238,23 @@ pub async fn combine_all_cached_samples(
         let mut combined_samples: Vec<i16> = Vec::new();
         let mut total_samples = 0;
 
-        for (_, audio_file) in audio_files.iter() {
+        // Collect files in the specified order (custom or default BTreeMap order)
+        let ordered_files: Vec<AudioFile> = if let Some(order) = custom_order {
+            println!("USING CUSTOM ORDER");
+            // Use custom order
+            order
+                .iter()
+                .filter_map(|id| audio_files.values().find(|f| &f.id == id))
+                .cloned()
+                .collect()
+        } else {
+            println!("USING DEFAULT BTREE ORDER");
+            // Use default BTreeMap order
+            audio_files.values().cloned().collect()
+        };
+
+        for audio_file in &ordered_files {
+            println!("adding to samples: {}", audio_file.path);
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
                 return Ok("stopped".to_string());
@@ -237,7 +265,7 @@ pub async fn combine_all_cached_samples(
         let duration = total_samples as f64 / sample_rate;
         on_event
             .send(CombineAudioEvent::Started {
-                content_length: audio_files.len(),
+                content_length: ordered_files.len(),
                 duration,
             })
             .unwrap();
@@ -256,46 +284,63 @@ pub async fn combine_all_cached_samples(
 
         let mut current_sample_offset = 0;
         let mut combined_svg_string = String::from("");
-        for (path, audio_file) in audio_files.iter_mut() {
 
+        // Process files in the specified order
+        for audio_file in ordered_files {
             println!("test: {}", *process_count.lock().unwrap());
+            println!("audio file: {} ", audio_file.path.clone());
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");
                 return Ok("stopped".to_string());
             }
-            audio_file.start_offset = (current_sample_offset as f64)/(total_samples as f64);
-            combined_samples.extend(&audio_file.samples);
 
-            let relative_length = audio_file.samples.len() as f64 / total_samples as f64;
-            let segment_width = full_waveform_width * relative_length ;
-            let x_offset =
-                full_waveform_width * (current_sample_offset as f64 / total_samples as f64);
-            if *process_count.lock().unwrap() != orig {
-                println!("🛑 Stopped while adding samples");
-                return Ok("stopped".to_string());
+            // Update the original file in the BTreeMap with new start_offset and waveform_path
+            if let Some(original_file) = audio_files.values_mut().find(|f| f.id == audio_file.id) {
+                original_file.start_offset =
+                    (current_sample_offset as f64) / (total_samples as f64);
+                combined_samples.extend(&audio_file.samples);
+
+                let relative_length = audio_file.samples.len() as f64 / total_samples as f64;
+                let segment_width = full_waveform_width * relative_length;
+                let x_offset =
+                    full_waveform_width * (current_sample_offset as f64 / total_samples as f64);
+                if *process_count.lock().unwrap() != orig {
+                    println!("🛑 Stopped while adding samples");
+                    return Ok("stopped".to_string());
+                }
+                let svg_path = generate_waveform_path(
+                    &audio_file.samples,
+                    segment_width as usize,
+                    70,
+                    x_offset,
+                );
+                original_file.waveform_path = svg_path.clone();
+                on_event
+                    .send(CombineAudioEvent::Progress {
+                        file_name: audio_file.path.clone(),
+                        svg_path: original_file.waveform_path.clone(),
+                        start_offset: original_file.start_offset,
+                        size: relative_length,
+                        id: audio_file.id.to_string(),
+                    })
+                    .unwrap();
+                if *process_count.lock().unwrap() != orig {
+                    println!("🛑 Stopped while adding samples");
+                    return Ok("stopped".to_string());
+                }
+                // sleep(Duration::from_millis(500)); // slow down 200ms per file
+                combined_svg_string.push_str(&svg_path);
+                current_sample_offset += audio_file.samples.len();
             }
-            let svg_path = generate_waveform_path(&audio_file.samples, segment_width as usize, 70, x_offset);
-            audio_file.waveform_path = svg_path.clone();
-            on_event
-                .send(CombineAudioEvent::Progress {
-                    file_name: path.clone(),
-                    svg_path: audio_file.waveform_path.clone(),
-                    start_offset: audio_file.start_offset,
-                    size: relative_length,
-                })
-                .unwrap();
-            if *process_count.lock().unwrap() != orig {
-                println!("🛑 Stopped while adding samples");
-                return Ok("stopped".to_string());
-            }
-                        // sleep(Duration::from_millis(500)); // slow down 200ms per file
-            combined_svg_string.push_str(&svg_path);
-            current_sample_offset += audio_file.samples.len();
         }
 
         println!("✅ Successfully combined all samples");
         let _ = app.emit("combine-complete", ());
         state.buffering_samples.store(false, Ordering::Relaxed);
+
+        // Store the combined samples in state
+        let mut combined_audio = state.combined_audio.lock().unwrap();
+        *combined_audio = Some(combined_samples);
 
         let mut state_svg_path = state.svg_path.lock().unwrap();
         on_event
@@ -342,11 +387,11 @@ pub fn export_combined_audio_as_wav(
     // Get a lock on the combined audio
     let combined_audio = state.combined_audio.lock().unwrap();
     let Some(samples) = &*combined_audio else {
-        return Err("No combined audio available".to_string());
+        return Err("⚠️ No combined audio available".to_string());
     };
 
     if samples.is_empty() {
-        return Err("Combined audio is empty".to_string());
+        return Err("⚠️ Combined audio is empty".to_string());
     }
 
     // Define WAV format
@@ -379,22 +424,9 @@ pub fn play_combined_audio(
     start_seconds: Option<f32>,
 ) {
     let state = state.inner().clone();
+    println!("starting play thread");
 
     thread::spawn(move || {
-        let mut current_song = state.current_song.lock().unwrap();
-
-        // If already playing or paused, resume instead
-        // if let Some(sink) = &*current_song {
-        //     if sink.is_paused() {
-        //         println!("RESUMING");
-        //         sink.play(); // resume
-        //         return;
-        //     } else if !sink.empty() {
-        //         eprintln!("Audio is already playing.");
-        //         return;
-        //     }
-        // }
-
         // Fetch audio
         let combined_samples = {
             let guard = state.combined_audio.lock().unwrap();
@@ -447,20 +479,27 @@ pub fn play_combined_audio(
         sink.set_volume(1.0);
         sink.play();
 
-        *current_song = Some(Arc::clone(&sink));
+        // Store the sink and immediately release the lock
+        {
+            let mut current_song = state.current_song.lock().unwrap();
+            *current_song = Some(Arc::clone(&sink));
+        } // Lock is released here
 
+        // Progress tracking in a separate thread
         let sink_clone = Arc::clone(&sink);
+        let app_clone = app.clone();
         thread::spawn(move || {
             while !sink_clone.empty() {
                 let elapsed = start.elapsed().as_secs_f32();
                 let progress = (elapsed / duration).min(1.0);
-                let _ = app.emit("combined-progress", progress);
-                std::thread::sleep(Duration::from_millis(200));
+                let _ = app_clone.emit("combined-progress", progress);
+                std::thread::sleep(Duration::from_millis(16)); // 20 FPS for smooth animation
             }
 
-            let _ = app.emit("combined-progress", 1.0);
+            let _ = app_clone.emit("combined-progress", 1.0);
         });
 
+        // This blocks, but now it's in its own thread and doesn't hold any locks
         sink.sleep_until_end();
     });
 }
@@ -470,7 +509,10 @@ pub fn pause_combined_audio(state: State<'_, Arc<AppState>>) {
     println!("PAUSING");
     let current_song = state.current_song.lock().unwrap();
     if let Some(sink) = &*current_song {
-        sink.pause();
+        sink.stop(); // Use stop() instead of pause() for immediate effect
+        sink.clear(); // Clear any buffered audio
+    } else {
+        println!("PAUSE FAILED");
     }
 }
 
@@ -512,4 +554,30 @@ fn get_samples(file_path: &str) -> Result<Vec<i16>, Error> {
     }
 
     Ok(samples)
+}
+
+#[tauri::command]
+pub fn get_custom_order(state: State<'_, Arc<AppState>>) -> Result<Vec<Uuid>, Error> {
+    let custom_order = state.custom_order.lock().map_err(|_| Error::LockPoisoned)?;
+    Ok(custom_order.clone())
+}
+
+#[tauri::command]
+pub async fn combine_all_cached_samples_with_custom_order(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    on_event: Channel<CombineAudioEvent>,
+) -> Result<String, Error> {
+    // Get the stored custom order
+    let custom_order = {
+        let order = state.custom_order.lock().map_err(|_| Error::LockPoisoned)?;
+        if order.is_empty() {
+            None
+        } else {
+            Some(order.clone())
+        }
+    };
+
+    // Call the main combine function with the custom order
+    combine_all_cached_samples(state, app, on_event, custom_order).await
 }

@@ -105,7 +105,10 @@ impl AudioEncoder for FlacEncoder {
             return Err(Error::UnevenNumberOfSamples);
         }
 
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Converting to i32 PCM".into() });
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Converting to i32 PCM".into(),
+        });
         // Convert to i32 PCM (flacenc expects i32 sample slices)
         let to_i32 = |s: f32| ((s.clamp(-1.0, 1.0)) * i16::MAX as f32).round() as i32;
 
@@ -117,16 +120,25 @@ impl AudioEncoder for FlacEncoder {
             message: "FLAC encoding started".into(),
         });
 
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Building encoder config".into() });
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Building encoder config".into(),
+        });
         // Build encoder config
         let config = FlacConfig::default()
             .into_verified()
             .map_err(|_| Error::FlacEncodeError("Invalid config".into()))?;
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Building mem source".into() });
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Building mem source".into(),
+        });
         // Build MemSource
         let source =
             MemSource::from_samples(&pcm, num_channels, bits_per_sample, sample_rate as usize);
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Encoding to flac stream".into() });
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Encoding to flac stream".into(),
+        });
         // Encode into a FLAC stream
         let flac_stream = encode_with_fixed_block_size(&config, source, config.block_size)
             .map_err(|_| Error::FlacEncodeError("Flac encode error".into()))?;
@@ -198,19 +210,28 @@ impl AudioEncoder for Mp3Encoder {
         if samples.len() % num_channels != 0 {
             return Err(Error::UnevenNumberOfSamples);
         }
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Converting to u16 PCM".into() });
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Converting to u16 PCM".into(),
+        });
         let to_u16 = |s: f32| (((s.clamp(-1.0, 1.0) + 1.0) / 2.0) * u16::MAX as f32).round() as u16;
 
         let mut left = Vec::with_capacity(samples.len() / 2);
         let mut right = Vec::with_capacity(samples.len() / 2);
 
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Chucking channel samples".into() });
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Chucking channel samples".into(),
+        });
         for chunk in samples.chunks_exact(2) {
             left.push(to_u16(chunk[0]));
             right.push(to_u16(chunk[1]));
         }
-        
-        channel.send(ExportAudioEvent::Progress { progress: -1., message: "Building encoder".into() });
+
+        channel.send(ExportAudioEvent::Progress {
+            progress: -1.,
+            message: "Building encoder".into(),
+        });
         // Configure encoder
         let mut builder =
             Builder::new().ok_or_else(|| Error::MP3EncoderError("Failed to build".to_string()))?;
@@ -252,7 +273,7 @@ impl AudioEncoder for Mp3Encoder {
                 right: r_chunk,
             };
 
-            // Reserve enough capacity for this block
+            // Reserve enough capacity for this block-
             mp3_out.reserve(max_required_buffer_size(input.left.len()));
             let encoded = encoder
                 .encode(input, mp3_out.spare_capacity_mut())
@@ -347,7 +368,6 @@ pub async fn export_audio(
     let state = state.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-    
         // lock audio_files
         let audio_files = state.audio_files.lock().unwrap();
         println!("ENCODING STARTED of {} audio files", audio_files.len());
