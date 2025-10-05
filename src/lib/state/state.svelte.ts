@@ -3,14 +3,12 @@ import { persisted } from "svelte-persisted-store";
 import { derived, get, writable } from "svelte/store";
 import {
   ABLETON_COLORS,
-  getNextAvailableColor,
   type AbletonColor,
 } from "$lib/utils/colors";
 import { invokeWithPerf, updateInputs } from "./performance";
-import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
-import type { BufferAudioEvent, CombineAudioEvent } from "./events";
+import { Channel, invoke } from "@tauri-apps/api/core";
+import { generateProgressChannel, type SortAudioEvent } from "./events";
 
 export type ErrorKind = {
   kind: "io" | "utf8";
@@ -42,9 +40,13 @@ export interface AppState {
   combineAudioFileProgress?: number;
   playingCombined: boolean;
   timelineItems: TimelineItem[];
+  sortKey?: keyof AudioFileItem;
+  sortDirection?: "asc"|"desc"
+  
 }
 
 interface AudioFileItem {
+  index: number;
   path: string;
   color: AbletonColor;
   size?: number;
@@ -52,6 +54,8 @@ interface AudioFileItem {
   channels?: number;
   bitDepth?: number;
   duration?: number;
+  id: string;
+
 }
 
 export interface Section {
@@ -69,14 +73,30 @@ interface FileMetadata {
   channels?: number;
   bitDepth?: number;
   duration: number;
+  id: string;
 }
 
-export interface TimelineItem {
+export type TimelineItemType = "audio-file" | "spacer";
+
+export interface BaseTimelineItem {
+  id: string;          // useful for identifying items
+  type: TimelineItemType;
+  startOffset: number; // common field
+}
+
+export interface AudioFileTimelineItem extends BaseTimelineItem {
+  type: "audio-file";  
   svgPath: string;
-  startOffset: number;
   fileName: string;
   size: number;
 }
+
+export interface SpacerTimelineItem extends BaseTimelineItem {
+  type: "spacer";      // discriminator
+  length: number;      // unique property
+}
+
+export type TimelineItem = AudioFileTimelineItem | SpacerTimelineItem;
 
 export const appState = persisted<AppState>("appState", {
   sections: [],
@@ -86,6 +106,24 @@ export const appState = persisted<AppState>("appState", {
   combinedFile: undefined,
   timelineItems: [],
 });
+
+const defaults: AppState = {
+  sections: [],
+  isCombiningFile: false,
+  combinedFileLength: 0,
+  playingCombined: false,
+  combinedFile: undefined,
+  timelineItems: [],
+};
+
+
+// appState.update(($appState) => ({
+//   ...$appState,
+//   isCombiningFile: defaults.isCombiningFile,
+//   combinedFileLength: defaults.combinedFileLength,
+//   playingCombined: defaults.playingCombined,
+//   combinedFile: defaults.combinedFile,
+// }));
 
 export const hoveredSourceItem = writable<null | number>(null);
 export const hoveredTimelineItem = writable<null | number>(null);
@@ -103,7 +141,7 @@ const DEFAULT_FOLDER =
 let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
-export async function addSection(paths?: string | string[]) {
+export async function addSource(paths?: string | string[]) {
   console.log(`%cHERE LINE :89 %c`, "color: brown; font-weight: bold", "");
 
   const color = ABLETON_COLORS[0];
@@ -138,7 +176,7 @@ export async function addSection(paths?: string | string[]) {
                 return meta ? { path: fp, color, ...meta } : null;
               })
               .filter(Boolean) as AudioFileItem[];
-
+            
             return {
               folderPath,
               files: withMeta,
@@ -349,7 +387,8 @@ export function resetAppState() {
   });
 }
 
-export function getAllFiles(sections: Section[]) {
+export function 
+getAllFiles(sections: Section[]) {
   return sections.map((s) => s.files).flat();
 }
 
@@ -492,3 +531,128 @@ listen<number>("combine-audio-progress", (event) => {
     return state;
   });
 });
+
+
+
+export const sortedFiles = derived(
+  appState, // or however you hold `sections`
+  (appState) => {
+    let files = getAllFiles(appState.sections);
+    if (!appState.sortKey) {
+      files.forEach((f, i) => (f.index = i));
+      return files;
+    }
+
+    let sorted = [...files].sort((a, b) => {
+      let valA = a[appState.sortKey];
+      let valB = b[appState.sortKey];
+      if (typeof valA === "string" && typeof valB === "string") {
+        return appState.sortDirection === "asc"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      } else {
+        return appState.sortDirection === "asc"
+          ? (valA as number) - (valB as number)
+          : (valB as number) - (valA as number);
+      }
+    });
+
+
+    sorted.forEach((f, i) => (f.index = i));
+    
+    console.log(sorted)
+    return sorted;
+  }
+);
+
+
+function offsetX(path: string, dx: number): string {
+  // Regex matches commands followed by coordinate pairs
+  // Example: "M0.0,0.0" => command=M, x=0.0, y=0.0
+  return path.replace(/([MLCQTZHV])\s*(-?\d*\.?\d*)(?:,|\s*)(-?\d*\.?\d*)?/gi, (_, cmd, x, y) => {
+    if (x !== undefined && y !== undefined) {
+      const newX = (parseFloat(x) + dx).toFixed(1); // keep 1 decimal place like your input
+      return `${cmd}${newX},${y}`;
+    }
+    return `${cmd}${x ?? ""}${y ?? ""}`;
+  });
+}
+
+
+// let prevSortKey: string | null = null;
+// let prevSortDirection: "asc" | "desc" | null = null;
+// let debounceTimeout: number | undefined;
+
+// appState.subscribe(($appState) => {
+//   // Clear the previous timeout if it exists
+//   if (debounceTimeout) clearTimeout(debounceTimeout);
+
+//   debounceTimeout = window.setTimeout(() => {
+//     if (!$appState.sortKey || !$appState.sortDirection) return;
+
+//     // Only proceed if sortKey or sortDirection changed
+//     if (
+//       $appState.sortKey === prevSortKey &&
+//       $appState.sortDirection === prevSortDirection
+//     ) {
+//       return;
+//     }
+
+//     prevSortKey = $appState.sortKey;
+//     prevSortDirection = $appState.sortDirection;
+ 
+
+//     // Compute new sorted order
+//     const files = get(sortedFiles);
+//     console.log(files);
+
+//     // Build array for Rust: { id, index }
+//     const updates = files.map((file, index) => ({
+//       id: file.id, // UUID string
+//       index,
+//     }));
+
+//     console.log(updates);
+
+//     const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
+//       started: (data) => {
+//         console.log("STARTED SORT");
+//       },
+//       progress: (data) => {
+//         // appState.update((state) => {
+//         //   const s = state.sections;
+//         //   const allFiles = getAllFiles(s);
+//         //   allFiles.forEach((f) => {
+//         //     if (f.id === data.id) {
+//         //       console.log("FOUND MATCH ");
+//         //     }
+//         //   });
+//         //   state.sections = s;
+
+//         //   const t = state.timelineItems;
+//         //   t.forEach((timelineItem) => {
+//         //     if (timelineItem.id === data.id) {
+//         //       timelineItem.startOffset = data.startOffset;
+//         //     }
+//         //   });
+//         //   t.sort((a, b) => a.startOffset - b.startOffset);
+//         //   state.timelineItems = t;
+
+//         //   return state;
+//         // });
+//         // console.log(data);
+//         // console.log("PROGRESS");
+//       },
+//       finished: (data) => {
+//         console.log("FINISHED SORT");
+//       },
+//     });
+
+//     invoke("update_sorting", { updates, onEvent })
+//       .then((newOrder) => {
+//         updateInputs($appState.sections)
+//         console.log(newOrder);
+//       })
+//       .catch((err) => console.error("Tauri invoke failed", err));
+//   }, 100); // 100ms debounce
+// });

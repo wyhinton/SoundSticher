@@ -1,0 +1,16 @@
+node_modules
+build
+dist
+.svelte-kit
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+*.log
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/
+target/
+src-tauri/target/
+*.min.js
+*.min.css

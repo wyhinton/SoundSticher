@@ -2,16 +2,17 @@
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   import { appState } from "./state/state.svelte";
-  import Section from "./Section.svelte";
-  import Plotted from "./Plotted.svelte";
+  import Section from "./FileTable.svelte";
+  import Plotted from "./Timeline.svelte";
   import Sources from "./Sources.svelte";
   import PlottedInfo from "./PlottedInfo.svelte";
   import type { Event, UnlistenFn } from "@tauri-apps/api/event";
   import Toolbar from "./Toolbar.svelte";
   import { onDestroy, onMount } from "svelte";
-  import { invokeWithPerf } from "./state/performance";
+  import { invokeWithPerf, updateInputs } from "./state/performance";
   import Export from "./Export.svelte";
   import { exportState } from "./state/export";
+  import { get } from "svelte/store";
 
   WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
@@ -54,6 +55,8 @@
       s.error = undefined;
       return s;
     })
+    updateInputs(get(appState).sections);
+    
     
   });
 

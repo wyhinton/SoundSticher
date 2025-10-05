@@ -1,5 +1,5 @@
 {
-  "productName": "tauri-v2-sveltekit-template",
+  "productName": "Sound Stitch",
   "version": "0.0.0",
   "identifier": "audio.app",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "tauri-v2-sveltekit-template",
+        "title": "Sound Stitch",
         "width": 1266,
         "height": 800
       },

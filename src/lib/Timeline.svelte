@@ -1,20 +1,23 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import * as d3 from "d3";
-  import { appState } from "./state/state.svelte";
-  import { listen } from "@tauri-apps/api/event";
-  import { formatFileName } from "./utils/format";
-  import TimelineSegment from "./TimelineSegment.svelte";
-  import LabelLayer from "./LabelLayer.svelte";
+  import { onMount } from 'svelte';
+  import * as d3 from 'd3';
+  import { appState } from './state/state.svelte';
+  import { listen } from '@tauri-apps/api/event';
+  import { formatFileName } from './utils/format';
+  import TimelineSegment from './TimelineSegment.svelte';
+  import LabelLayer from './LabelLayer.svelte';
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
   let axisGroup: SVGGElement;
   let pathGroup: SVGGElement;
-  let labelGroup: SVGGElement
+  let labelGroup: SVGGElement;
 
   const height = 120;
-  $: durationSeconds = $appState?.combinedFileLength && $appState.sections.length>0 ? $appState.combinedFileLength : 30;
+  $: durationSeconds =
+    $appState?.combinedFileLength && $appState.sections.length > 0
+      ? $appState.combinedFileLength
+      : 30;
   $: if ($appState?.combinedFileLength && width > 0) {
     updateScales();
   }
@@ -35,8 +38,9 @@
     renderAxis(xScale);
   }
 
-  listen<number>("combined-progress", (event) => {
-    playHeadPosition = event.payload;
+  listen<number>('combined-progress', event => {
+    console.log(event.payload);
+    playHeadPosition = event.payload * durationSeconds;
   });
 
   function handleClick(event: MouseEvent) {
@@ -59,38 +63,38 @@
       .tickFormat((d: number) => {
         const m = Math.floor(d / 60);
         const s = Math.floor(d % 60);
-        return `${m}:${s.toString().padStart(2, "0")}`;
+        return `${m}:${s.toString().padStart(2, '0')}`;
       });
 
     d3.select(axisGroup).call(axis);
 
     d3.select(axisGroup)
       .call(axis)
-      .selectAll("text")
-      .style("font-family", "monospace")
-      .style("font-size", "10px"); // optional
+      .selectAll('text')
+      .style('font-family', 'monospace')
+      .style('font-size', '10px'); // optional
 
     d3.select(axisGroup)
       .call(axis)
-      .selectAll("text")
-      .style("font-family", "monospace")
-      .style("font-size", "10px"); // optional
+      .selectAll('text')
+      .style('font-family', 'monospace')
+      .style('font-size', '10px'); // optional
 
-    const ticks = d3.selectAll("g.tick");
+    const ticks = d3.selectAll('g.tick');
 
     ticks
       .filter((_, i, nodes) => i === 0)
-      .attr("text-anchor", "start")
-      .attr("dx", "0.5em");
+      .attr('text-anchor', 'start')
+      .attr('dx', '0.5em');
     //   .attr('color', 'red')
 
     ticks
       .filter((_, i, nodes) => i === nodes.length - 1)
-      .attr("text-anchor", "end")
-      .attr("dx", "-0.5em");
+      .attr('text-anchor', 'end')
+      .attr('dx', '-0.5em');
     //   .attr('color', 'red')
 
-    ticks.filter((_, i, nodes) => i !== 0).attr("color", "white");
+    ticks.filter((_, i, nodes) => i !== 0).attr('color', 'white');
   }
 
   function setupZoom() {
@@ -111,10 +115,10 @@
           [width, 0],
         ])
         // .extent([[0, 0], [width, height]])
-        .on("zoom", (event) => {
+        .on('zoom', event => {
           currentTransform = event.transform;
           pathGroupD3.attr(
-            "transform",
+            'transform',
             `translate(${event.transform.x}, 0) scale(${event.transform.k}, 1)`
           );
           const newXScale = currentTransform.rescaleX(
@@ -123,9 +127,6 @@
           renderAxis(newXScale);
         })
     );
-
-
- 
   }
 
   onMount(() => {
@@ -135,28 +136,28 @@
       setupZoom();
     });
 
-    const ticks = d3.selectAll(".x-axis .tick text");
-    const t = d3.selectAll("g.tick");
+    const ticks = d3.selectAll('.x-axis .tick text');
+    const t = d3.selectAll('g.tick');
     ticks
       .filter((_, i, nodes) => i === 0)
-      .attr("text-anchor", "start")
-      .attr("dx", "0.5em")
-      .attr("color", "red");
+      .attr('text-anchor', 'start')
+      .attr('dx', '0.5em')
+      .attr('color', 'red');
 
     ticks
       .filter((_, i, nodes) => i === nodes.length - 1)
-      .attr("text-anchor", "end")
-      .attr("dx", "-0.5em");
+      .attr('text-anchor', 'end')
+      .attr('dx', '-0.5em');
 
-    d3.selectAll("g.tick")
+    d3.selectAll('g.tick')
       .filter(function (d) {
         return d == 50;
       })
       //only ticks that returned true for the filter will be included
       //in the rest of the method calls:
-      .select("line") //grab the tick line
-      .attr("class", "quadrantBorder") //style with a custom class and CSS
-      .style("stroke-width", 5);
+      .select('line') //grab the tick line
+      .attr('class', 'quadrantBorder') //style with a custom class and CSS
+      .style('stroke-width', 5);
 
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
@@ -164,10 +165,7 @@
 </script>
 
 <div class="svg-container position-relative">
-  <div
-    class="position-absolute"
-    style="font-size: 10px; color: #9d9d9d !important; bottom:20px"
-  >
+  <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     <!-- {playHeadX} -->
     <!-- {scaleX} -->
     {currentTransform.k.toFixed(2)}x
@@ -176,7 +174,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- x={playHeadX / (0.5 - currentTransform.k)} -->
   <div
-    on:click={(e) => {
+    on:click={e => {
       handleClick(e);
     }}
     bind:this={container}
@@ -194,24 +192,19 @@
             pointer-events="none"
             id="waveform-path"
           />
-          <rect
-            x={playHeadX}
-            y={0}
-            width={1 / currentTransform.k}
-            height="80"
-            fill="red"
-          />
+          <rect x={playHeadX} y={0} width={1 / currentTransform.k} height="80" fill="red" />
           <!-- {#if $appState?.timelneItems} -->
-          {#if $appState?.timelineItems.length>0}
+          {#if $appState?.timelineItems.length > 0}
             {#each $appState?.timelineItems as timelineItem, i}
               <TimelineSegment
-                scaleX={scaleX}
+                {scaleX}
                 index={i}
                 startOffset={timelineItem.startOffset}
                 size={timelineItem.size}
                 label={formatFileName(timelineItem.fileName)}
-                originalPathWidth={originalPathWidth}
+                {originalPathWidth}
                 zoomTransform={currentTransform}
+                itemType={timelineItem.type}
               />
               <!-- <text
                 x={(timelineItem.startOffset * originalPathWidth) + 4}
@@ -233,16 +226,19 @@
               /> -->
             {/each}
           {/if}
-        
         </g>
       </g>
-    {#if $appState?.timelineItems.length > 0}
-            <LabelLayer xScale={xScale} scaleX={scaleX} items={$appState?.timelineItems} originalPathWidth={originalPathWidth} currentTransform={currentTransform}></LabelLayer>
-    {/if}
-      <g>
-
-  </g>
-    <!-- TIMELINE BACKGROUND -->
+      {#if $appState?.timelineItems.length > 0}
+        <LabelLayer
+          {xScale}
+          {scaleX}
+          items={$appState?.timelineItems}
+          {originalPathWidth}
+          {currentTransform}
+        ></LabelLayer>
+      {/if}
+      <g> </g>
+      <!-- TIMELINE BACKGROUND -->
       <rect x="0" y={100} {width} height="20" fill="var(--bs-dark-bg-subtle);" />
       <g bind:this={axisGroup} transform={`translate(0, ${height - 20})`} />
     </svg>
@@ -250,7 +246,7 @@
 </div>
 
 <style>
-  .waveform-svg-parent{
+  .waveform-svg-parent {
     margin-bottom: 6px;
   }
   .svg-container {
