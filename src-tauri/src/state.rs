@@ -1,15 +1,18 @@
 use rodio::Sink;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::State;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AudioFile {
     pub samples: Vec<i16>,
     pub start_offset: f64,
     pub waveform_path: String,
+    pub id: Uuid,
+    pub path: String,
 }
 
 pub struct AppState {
@@ -21,6 +24,7 @@ pub struct AppState {
     pub svg_path: Mutex<Option<String>>,
     pub cancel_token: AtomicU64,
     pub combine_process: Arc<Mutex<i32>>,
+    pub custom_order: Mutex<Vec<Uuid>>, // Store the custom order
 }
 
 #[derive(Serialize)]
@@ -28,6 +32,7 @@ pub struct AudioFileDebug {
     samples: usize,
     start_offset: f64,
     waveform_path: String,
+    id: String,
 }
 
 #[derive(Serialize)]
@@ -52,6 +57,7 @@ pub fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
                     samples: audio_file.samples.len(),
                     start_offset: audio_file.start_offset,
                     waveform_path: audio_file.waveform_path.clone(),
+                    id: audio_file.id.to_string(),
                 },
             )
         })

@@ -13,6 +13,7 @@ use symphonia::core::probe::ProbeResult;
 use symphonia::default::get_probe;
 
 use lofty;
+use uuid::Uuid;
 
 use crate::error::Error;
 

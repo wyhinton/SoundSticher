@@ -1,6 +1,6 @@
 <script lang="ts">
 import * as d3 from "d3";
-  import { hoveredSourceItem, hoveredTimelineItem } from "./state/state.svelte";
+  import { hoveredSourceItem, hoveredTimelineItem, type TimelineItemType } from "./state/state.svelte";
   import { tweened } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
   export let index: number;
@@ -10,6 +10,7 @@ import * as d3 from "d3";
   export let scaleX: number;
   export let originalPathWidth: number;
   export let zoomTransform: d3.ZoomTransform; // pass currentTransform from parent
+  export let itemType: TimelineItemType;
 
   // Compute zoomed positions
   $: rectX = startOffset * originalPathWidth;

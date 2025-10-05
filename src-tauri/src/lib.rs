@@ -3,7 +3,7 @@ use rodio::{Decoder, OutputStream, Sink};
 use std::collections::HashMap;
 use std::fs::{metadata, File};
 use std::io::BufReader;
-use std::sync::atomic::{AtomicBool, Ordering, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
@@ -14,18 +14,20 @@ use crate::error::Error;
 use crate::metadata::get_metadata;
 use crate::state::AppState;
 mod combine;
+mod encoder;
 mod error;
 mod metadata;
+mod sorting;
 mod state;
-mod encoder;
 
 pub struct Song {
     pub title: String,
 }
 
-
 #[tauri::command]
-fn get_file_paths_in_folder(folder_paths: Vec<String>) -> Result<HashMap<String, Vec<String>>, Error> {
+fn get_file_paths_in_folder(
+    folder_paths: Vec<String>,
+) -> Result<HashMap<String, Vec<String>>, Error> {
     let mut all_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     for folder_path in folder_paths {
@@ -63,7 +65,6 @@ fn get_file_paths_in_folder(folder_paths: Vec<String>) -> Result<HashMap<String,
 
     Ok(all_paths)
 }
-
 
 // #[tauri::command]
 // fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
@@ -109,6 +110,8 @@ fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
     audio_files.clear();
     let mut combined_audio = state.combined_audio.lock().unwrap();
     *combined_audio = None;
+    let mut custom_order = state.custom_order.lock().unwrap();
+    custom_order.clear();
     let _ = app.emit("buffering-progress", 0.);
     println!("🗑️  All audio files have been cleared.");
 }
@@ -190,10 +193,7 @@ fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
             let mut done_emitted = false;
             // let cancel_flag = state.cancel_playback.load(Ordering::Relaxed); // pass into the thread
             // println!("{}", cancel_flag);
-            while !sink_clone.empty()
-                && !done_emitted
-                && !sink_clone.is_paused()
-            {
+            while !sink_clone.empty() && !done_emitted && !sink_clone.is_paused() {
                 // println!("{}", cancel_flag);
                 let elapsed = start.elapsed();
                 let elapsed_secs = elapsed.as_secs_f32();
@@ -242,7 +242,7 @@ fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
-fn open_in_explorer(state: State<'_, Arc<AppState>>, file_to_open: String){
+fn open_in_explorer(state: State<'_, Arc<AppState>>, file_to_open: String) {
     println!("SHOWING IN EXP");
     showfile::show_path_in_file_manager(file_to_open);
 }
@@ -272,6 +272,7 @@ pub fn run() {
             svg_path: Mutex::new(None),
             cancel_token: AtomicU64::new(0),
             combine_process: Arc::new(Mutex::new(0)),
+            custom_order: Mutex::new(Vec::new()),
         }))
         .invoke_handler(tauri::generate_handler![
             set_volume,
@@ -282,6 +283,8 @@ pub fn run() {
             combine::test_async,
             combine::update_inputs,
             combine::combine_all_cached_samples,
+            combine::combine_all_cached_samples_with_custom_order,
+            combine::get_custom_order,
             combine::play_combined_audio,
             combine::cancel_combine,
             combine::pause_combined_audio,
@@ -290,6 +293,7 @@ pub fn run() {
             clear_audio_files,
             encoder::export_audio,
             open_in_explorer,
+            sorting::update_sorting,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -299,7 +303,6 @@ pub fn run() {
                 // .filter(|metadata| {
                 //     // Print all targets to console
                 //     println!("Log target: {}", metadata.target());
-
                 //     // You can still filter here if needed
                 //     true
                 // })
@@ -315,4 +318,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { tick } from 'svelte';
 
   export let fullPath = "/some/long/path/filename.txt";
   let isEditing = false;
