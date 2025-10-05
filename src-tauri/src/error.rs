@@ -43,6 +43,9 @@ pub enum Error {
 
     #[error("FLAC output error: {0}")]
     FlacOutputError(String),
+
+    #[error("Lock poisoned")]
+    LockPoisoned,
 }
 
 #[derive(serde::Serialize)]
@@ -86,6 +89,7 @@ impl serde::Serialize for Error {
             Self::UnevenNumberOfSamples => ErrorKind::UnevenNumberOfSamples,
             Self::FlacEncodeError(_) => ErrorKind::FlacEncodeError(error_message),
             Self::FlacOutputError(_) => ErrorKind::FlacOutputError(error_message),
+            Self::LockPoisoned => ErrorKind::UnevenNumberOfSamples,
         };
         error_kind.serialize(serializer)
     }

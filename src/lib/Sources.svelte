@@ -3,9 +3,11 @@
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
   import { stat } from "@tauri-apps/plugin-fs";
   import {
-    addSection,
+    addSource,
     appState,
+    combine_audio_files,
     deleteSection,
+    sortedFiles,
     updatePath,
   } from "./state/state.svelte";
   import { toCssRgb } from "./utils/colors";
@@ -23,6 +25,10 @@
   } from "./state/position";
   import SineWaveShader from "./SineWaveShader.svelte";
   import EditableInput from "./EditableInput.svelte";
+  import { get } from "svelte/store";
+  import { generateProgressChannel, type SortAudioEvent } from "./state/events";
+  import { Channel, invoke } from "@tauri-apps/api/core";
+  import { updateInputs } from "./state/performance";
   WebviewWindow.getCurrent()
     .once<null>("initialized", (event) => {})
     .then((v) => {
@@ -114,7 +120,7 @@
               inputsUnderMouse = [];
             }
             if (addNewFolderOnDrop && atDrop.length === 0) {
-              addSection(paths[0]);
+              addSource(paths[0]);
             }
             positionStore.reset();
             clearUnderMouse();
@@ -144,6 +150,64 @@
     }
   }
   
+  
+let prevSortKey: string | null = null;
+let prevSortDirection: "asc" | "desc" | null = null;
+let debounceTimeout: number | undefined;
+
+appState.subscribe(($appState) => {
+  // Clear the previous timeout if it exists
+  if (debounceTimeout) clearTimeout(debounceTimeout);
+
+  debounceTimeout = window.setTimeout(() => {
+    if (!$appState.sortKey || !$appState.sortDirection) return;
+
+    // Only proceed if sortKey or sortDirection changed
+    if (
+      $appState.sortKey === prevSortKey &&
+      $appState.sortDirection === prevSortDirection
+    ) {
+      return;
+    }
+
+    prevSortKey = $appState.sortKey;
+    prevSortDirection = $appState.sortDirection;
+ 
+
+    // Compute new sorted order
+    const files = get(sortedFiles);
+    console.log(files);
+
+    // Build array for Rust: { id, index }
+    const updates = files.map((file, index) => ({
+      id: file.id, // UUID string
+      index,
+    }));
+
+    console.log(updates);
+
+    const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
+      started: (data) => {
+        console.log("STARTED SORT");
+      },
+      progress: (data) => {
+        console.log(data)
+        // console.log("PROGRESS");
+      },
+      finished: (data) => {
+        console.log("FINISHED SORT");
+      },
+    });
+
+    invoke("update_sorting", { updates, onEvent })
+      .then((newOrder) => {
+        updateInputs($appState.sections)
+        console.log(newOrder);
+        
+      })
+      .catch((err) => console.error("Tauri invoke failed", err));
+  }, 100); // 100ms debounce
+});
 </script>
 
 <div class="position-relative">
@@ -160,7 +224,7 @@
         <div id="lottie-container"
         class="m-auto" style={`width: ${lottieSize}px; height: ${lottieSize}px;`} bind:this={lottieContainer} ></div>
         <div class="text-center">No inputs! Drag and Drop a folder of samples or add a section</div>
-        <button class="btn btn-sm m-auto mt-2"  onclick={()=>addSection()}><i class="me-1  fas fa-plus-circle text-success"></i>Add section</button>
+        <button class="btn btn-sm m-auto mt-2"  onclick={()=>addSource()}><i class="me-1  fas fa-plus-circle text-success"></i>Add section</button>
       </div>
         {@html (() => { initLottie(); return '' })()}
     {/if}

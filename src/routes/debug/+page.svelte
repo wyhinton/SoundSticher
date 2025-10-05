@@ -8,7 +8,7 @@
   } from "$lib/state/performance";
   import { addNewFolderOnDrop, positionStore } from "$lib/state/position";
   import {
-    addSection,
+    addSource,
     appState,
     hoveredSourceItem,
     resetAppState,
@@ -140,11 +140,11 @@
   }
 
   const addTwoSections = () => {
-    addSection(
+    addSource(
       "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley"
     );
     setTimeout(() => {
-      addSection(
+      addSource(
         "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX"
       );
     }, 100);
@@ -223,6 +223,12 @@
       resetAppState();
     }}
     class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Reset AppState</button
+  >
+  <button
+    on:click={() => {
+      console.log($appState)
+    }}
+    class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Log AppState</button
   >
   <button
     on:click={() => {

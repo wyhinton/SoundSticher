@@ -2,7 +2,7 @@
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
   import {
-    addSection,
+    addSource,
     appState,
     combine_audio_files,
     getAllFiles,

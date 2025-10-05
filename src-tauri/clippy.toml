@@ -1,0 +1,16 @@
+# Clippy configuration for Rust linting
+# Warns about unused imports and other common issues
+
+# Enable additional lints
+warn-on-all-wildcard-imports = true
+disallowed-methods = []
+disallowed-types = []
+
+# Additional lints to enable
+extra-lints = [
+    "unused_imports",
+    "dead_code",
+    "unused_variables",
+    "unused_mut",
+    "unreachable_code",
+]
