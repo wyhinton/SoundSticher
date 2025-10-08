@@ -18,7 +18,7 @@
         "height": 800
       },
       {
-        "label":"debug",
+        "label": "debug",
         "title": "debug",
         "width": 400,
         "height": 800,
@@ -26,25 +26,25 @@
       }
     ],
     "security": {
-          "capabilities": [
-                "main-capability",
-                {
-                    "identifier": "use-external-drives",
-                    "description": "Capability to be able to use library on external drives",
-                    "windows": ["*"],
-                    "permissions": [
-                        {
-                            "identifier": "fs:scope",
-                            "allow": ["**"]
-                        },
-                        "fs:default"
-                    ]
-                }
-            ],
-            "assetProtocol": {
-                "scope": ["**"],
-                "enable": true
+      "capabilities": [
+        "main-capability",
+        {
+          "identifier": "use-external-drives",
+          "description": "Capability to be able to use library on external drives",
+          "windows": ["*"],
+          "permissions": [
+            {
+              "identifier": "fs:scope",
+              "allow": ["**"]
             },
+            "fs:default"
+          ]
+        }
+      ],
+      "assetProtocol": {
+        "scope": ["**"],
+        "enable": true
+      },
       "csp": null
     }
   },
