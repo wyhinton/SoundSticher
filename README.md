@@ -73,14 +73,6 @@ The built application will be available in `src-tauri/target/release/bundle/`
 - Additional system dependencies may be required
 - Refer to [Tauri prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites)
 
-### **Troubleshooting**
-
-**Common Issues:**
-- **Build fails**: Ensure all prerequisites are correctly installed
-- **Audio not playing**: Check system audio permissions
-- **File loading errors**: Verify audio file formats are supported (WAV, FLAC, MP3, AIFF)
-
-For more help, [open an issue](https://github.com/yourusername/sound-stitch/issues) on GitHub.
 
 ## 🎯 **The Problem**
 
@@ -93,11 +85,11 @@ While samples remain a cornerstone of modern music production and sound design, 
 - **Slow iteration** without real-time preview capabilities
 - **Unwanted processing** like time-stretching or beat-matching
 
-## ✨ **The Sound Stitch Approach**
+## **The Sound Stitch**
 
 Sound Stitch reimagines audio joining as a **non-destructive, folder-based workflow** that aligns with how you already organize samples on your system.
 
-### **Key Features**
+### **Features**
 - **Real-time audio preview** of combined sequences before export
 - **Folder-based organization** - groups naturally map to your existing file structure
 - **Automatic clip alignment** - no manual positioning required
@@ -110,7 +102,7 @@ Sound Stitch reimagines audio joining as a **non-destructive, folder-based workf
 - Customizable encoding parameters
 - Batch processing capabilities
 
-## 🎵 **Use Cases**
+## 👥 **Use Cases**
 
 ### **Sound Designers & Musicians**
 - Quickly audition and combine samples from large libraries
@@ -127,7 +119,7 @@ Sound Stitch reimagines audio joining as a **non-destructive, folder-based workf
 - Create audio snippets and highlights from longer recordings
 - Build intro/outro sequences from component elements
 
-## 🚀 **Technical Innovation**
+## **Tech Stack**
 
 **Built with Tauri + Rust + SvelteKit** for optimal performance:
 - **Rust backend** handles intensive audio processing and file operations
@@ -136,18 +128,12 @@ Sound Stitch reimagines audio joining as a **non-destructive, folder-based workf
 
 The real-time combined audio preview system allows you to hear exactly how your sequence will sound before committing to an export - something traditional DAWs struggle to provide efficiently.
 
-## 🔄 **Workflow Philosophy**
+## **Workflow**
 
 Sound Stitch complements rather than replaces your existing DAW workflow. It excels in the specific niche of **sample exploration, auditioning, and intelligent joining** - areas where traditional DAWs are often cumbersome or slow.
 
 Think of it as a specialized tool that sits between your file browser and your DAW, making the journey from scattered audio files to cohesive sequences faster and more intuitive.
 
-## 🔮 **Future Vision**
-
-- **Cloud-based storage integration** for team collaboration
-- **Procedural audio modification** - automated trimming, gain adjustment, and pitch shifting
-- **Advanced selection algorithms** for intelligent sample choosing
-- **Cross-platform support** (Windows/Mac primary, Linux future)
 
 ---
 
