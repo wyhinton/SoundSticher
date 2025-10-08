@@ -169,4 +169,4 @@ Think of it as a specialized tool that sits between your file browser and your D
 
 ### Current UI
 
-![UI](./documentation/animation/UI_W_SHADOW2.gif)
+![UI](./documentation/UI_W_SHADOW2.gif)
