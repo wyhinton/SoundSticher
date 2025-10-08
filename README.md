@@ -8,6 +8,80 @@
 
 Sound Stitch addresses a fundamental gap in modern Digital Content Creation (DCC) workflows: the need for fast, intelligent, and non-destructive audio file joining (concatenation) that respects your existing sample organization.
 
+## 🚀 **Getting Started**
+
+### **Prerequisites**
+
+Before running Sound Stitch, ensure you have the following installed:
+
+1. **Node.js** (v18 or higher)
+   - Download from [nodejs.org](https://nodejs.org/)
+   - Verify installation: `node --version`
+
+2. **Rust** (latest stable)
+   - Install via [rustup.rs](https://rustup.rs/)
+   - Verify installation: `rustc --version`
+
+3. **pnpm** (package manager)
+   - Install globally: `npm install -g pnpm`
+   - Verify installation: `pnpm --version`
+
+### **Installation & Setup**
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/sound-stitch.git
+   cd sound-stitch
+   ```
+
+2. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+
+3. **Build and run in development mode**
+   ```bash
+   pnpm tauri dev
+   ```
+
+   This will:
+   - Compile the Rust backend
+   - Start the SvelteKit frontend
+   - Launch the Tauri application window
+
+### **Building for Production**
+
+To create a distributable build:
+
+```bash
+pnpm tauri build
+```
+
+The built application will be available in `src-tauri/target/release/bundle/`
+
+### **Platform-Specific Notes**
+
+#### **Windows**
+- Visual Studio Build Tools required for Rust compilation
+- Windows 10/11 recommended
+
+#### **macOS**
+- Xcode Command Line Tools required: `xcode-select --install`
+- macOS 10.15+ recommended
+
+#### **Linux** (experimental)
+- Additional system dependencies may be required
+- Refer to [Tauri prerequisites](https://tauri.app/v1/guides/getting-started/prerequisites)
+
+### **Troubleshooting**
+
+**Common Issues:**
+- **Build fails**: Ensure all prerequisites are correctly installed
+- **Audio not playing**: Check system audio permissions
+- **File loading errors**: Verify audio file formats are supported (WAV, FLAC, MP3, AIFF)
+
+For more help, [open an issue](https://github.com/yourusername/sound-stitch/issues) on GitHub.
+
 ## 🎯 **The Problem**
 
 While samples remain a cornerstone of modern music production and sound design, working with them in traditional DAWs involves frustrating limitations:
