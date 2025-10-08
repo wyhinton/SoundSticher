@@ -29,6 +29,7 @@ vite.config.ts.timestamp-*
 *.sln
 *.sw?
 
+/documentation/ae
 
 
 
