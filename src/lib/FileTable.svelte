@@ -1,44 +1,38 @@
 <script lang="ts">
-  import { formatBytes, formatMilliseconds } from "./utils/format";
+  import { formatBytes, formatMilliseconds } from './utils/format';
   import {
     appState,
     getAllFiles,
     hoveredSourceItem,
     hoveredTimelineItem,
-    pause_song,
-    play_song,
+    pause_sample_preview,
+    play_sample_preview,
     setHoveredItem,
     setUnderMouse,
     sortedFiles,
     type Section,
-  } from "./state/state.svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  const isDev = import.meta.env.TAURI_ENV_DEBUG; 
+  } from './state/state.svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  const isDev = import.meta.env.TAURI_ENV_DEBUG;
 
   export let sections: Section[];
   function toggleSort(key: keyof ReturnType<typeof getAllFiles>[0]) {
-    
     if ($appState.sortKey === key) {
       appState.update(s => ({
         ...s,
-        sortDirection: s.sortDirection === "asc" ? "desc" : "asc"
+        sortDirection: s.sortDirection === 'asc' ? 'desc' : 'asc',
       }));
     } else {
       appState.update(s => ({
         ...s,
         sortKey: key,
-        sortDirection: "asc"
+        sortDirection: 'asc',
       }));
     }
   }
-
- 
 </script>
 
-<div
-  style:width="-webkit-fill-available"
-  class="card d-flex flex-column position-relative"
->
+<div style:width="-webkit-fill-available" class="card d-flex flex-column position-relative">
   <div class="d-flex flex-column" style:background-color="#080808">
     <div class="d-flex flex-column">
       <!-- {#each section.errors as sectionError, errorIndex}
@@ -53,30 +47,52 @@
       <table class="table table-xs border-0">
         <thead>
           <tr class="">
-           <th class="number-column">
-              # 
+            <th class="number-column"> # </th>
+            <th class="file-column" onclick={() => toggleSort('path')}>
+              File {$appState.sortKey === 'path'
+                ? $appState.sortDirection === 'asc'
+                  ? '▲'
+                  : '▼'
+                : ''}
             </th>
-           <th class="file-column" onclick={() => toggleSort("path")}>
-              File {$appState.sortKey === "path" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            <th class="text-center" onclick={() => toggleSort('size')}>
+              Size {$appState.sortKey === 'size'
+                ? $appState.sortDirection === 'asc'
+                  ? '▲'
+                  : '▼'
+                : ''}
             </th>
-            <th class="text-center" onclick={() => toggleSort("size")}>
-              Size {$appState.sortKey === "size" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            <th class="text-center" onclick={() => toggleSort('bitRate')}>
+              bitRate {$appState.sortKey === 'bitRate'
+                ? $appState.sortDirection === 'asc'
+                  ? '▲'
+                  : '▼'
+                : ''}
             </th>
-            <th class="text-center" onclick={() => toggleSort("bitRate")}>
-              bitRate {$appState.sortKey === "bitRate" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            <th class="text-center" onclick={() => toggleSort('channels')}>
+              Channels {$appState.sortKey === 'channels'
+                ? $appState.sortDirection === 'asc'
+                  ? '▲'
+                  : '▼'
+                : ''}
             </th>
-            <th class="text-center" onclick={() => toggleSort("channels")}>
-              Channels {$appState.sortKey === "channels" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            <th class="text-center" onclick={() => toggleSort('bitDepth')}>
+              bitDepth {$appState.sortKey === 'bitDepth'
+                ? $appState.sortDirection === 'asc'
+                  ? '▲'
+                  : '▼'
+                : ''}
             </th>
-            <th class="text-center" onclick={() => toggleSort("bitDepth")}>
-              bitDepth {$appState.sortKey === "bitDepth" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
-            </th>
-            <th class="text-center" onclick={() => toggleSort("duration")}>
-              Duration {$appState.sortKey === "duration" ? ($appState.sortDirection === "asc" ? "▲" : "▼") : ""}
+            <th class="text-center" onclick={() => toggleSort('duration')}>
+              Duration {$appState.sortKey === 'duration'
+                ? $appState.sortDirection === 'asc'
+                  ? '▲'
+                  : '▼'
+                : ''}
             </th>
             {#if import.meta.env.DEV}
-      <!-- <DevPanel /> -->
-          {/if}
+              <!-- <DevPanel /> -->
+            {/if}
           </tr>
         </thead>
         <tbody>
@@ -90,25 +106,17 @@
                 setHoveredItem(null);
               }}
               class:timeline-hovered={$hoveredTimelineItem === fileIndex}
-              class:playing={file.path === $appState.playingSong &&
-                $appState.playProgress < 1}
+              class:playing={file.path === $appState.playingSong && $appState.playProgress < 1}
               onclick={() => {
-                if (
-                  file.path === $appState.playingSong &&
-                  $appState.playProgress < 1
-                ) {
-                  pause_song();
+                if (file.path === $appState.playingSong && $appState.playProgress < 1) {
+                  pause_sample_preview();
                 } else {
-                  console.log(
-                    `%cHERE LINE :47 %c`,
-                    "color: yellow; font-weight: bold",
-                    ""
-                  );
+                  console.log(`%cHERE LINE :47 %c`, 'color: yellow; font-weight: bold', '');
 
-                  play_song(file.path);
+                  play_sample_preview(file.path);
                 }
               }}
-              >
+            >
               <td>
                 <div class="align-items-center text-center">{file.index}</div>
               </td>
@@ -191,7 +199,7 @@
   }
 
   td > div > div {
-    font-family: "Fira Code";
+    font-family: 'Fira Code';
   }
 
   tr:hover > td {

@@ -171,7 +171,7 @@ pub async fn update_inputs(
                 let progress = (i as f32) / ((valid_paths.len() - 1) as f32);
                 let _ = app_handle.emit("buffering-progress", progress);
                 inserted_count += 1;
-                println!("INSERTING {} into BTree", path.clone());
+                println!("➡️📖 INSERTING {} into BTree", path.clone());
             }
         }
 
@@ -230,8 +230,8 @@ pub async fn combine_all_cached_samples(
 
         println!("ORIGIN: {}, COUNT: {}", orig, count.lock().unwrap());
         state.buffering_samples.store(true, Ordering::Relaxed);
-
         let mut audio_files = state.audio_files.lock().unwrap();
+
         let sample_rate = 44100.0;
         let full_waveform_width = 1000.0;
 
@@ -278,7 +278,7 @@ pub async fn combine_all_cached_samples(
                     duration: 0.0,
                 },
             );
-            println!("✅ No samples to combine");
+            println!("⚠️ No samples to combine");
             return Ok("No samples".to_string());
         }
 
@@ -415,113 +415,6 @@ pub fn export_combined_audio_as_wav(
     writer.finalize().map_err(|e| e.to_string())?;
 
     Ok(format!("WAV file successfully saved to {}", outputPath))
-}
-
-#[tauri::command]
-pub fn play_combined_audio(
-    state: State<'_, Arc<AppState>>,
-    app: AppHandle,
-    start_seconds: Option<f32>,
-) {
-    let state = state.inner().clone();
-    println!("starting play thread");
-
-    thread::spawn(move || {
-        // Fetch audio
-        let combined_samples = {
-            let guard = state.combined_audio.lock().unwrap();
-            guard.clone()
-        };
-
-        let Some(samples) = combined_samples else {
-            eprintln!("No combined audio available.");
-            return;
-        };
-
-        if samples.is_empty() {
-            eprintln!("Combined audio is empty.");
-            return;
-        }
-
-        let sample_rate = 44100;
-        let channels = 2;
-        let total_samples = samples.len();
-        let start_sample_index =
-            (start_seconds.unwrap_or(0.0) * sample_rate as f32 * channels as f32).round() as usize;
-
-        if start_sample_index >= total_samples {
-            eprintln!("Start time exceeds audio length.");
-            return;
-        }
-
-        let trimmed_samples = &samples[start_sample_index..];
-        let (_stream, stream_handle) = match OutputStream::try_default() {
-            Ok(output) => output,
-            Err(e) => {
-                eprintln!("Error creating audio output stream: {}", e);
-                return;
-            }
-        };
-
-        let sink = match Sink::try_new(&stream_handle) {
-            Ok(sink) => Arc::new(sink),
-            Err(e) => {
-                eprintln!("Error creating sink: {}", e);
-                return;
-            }
-        };
-
-        let duration = trimmed_samples.len() as f32 / (channels as f32 * sample_rate as f32);
-        let start = Instant::now();
-
-        let source = SamplesBuffer::new(channels as u16, sample_rate, trimmed_samples.to_vec());
-        sink.append(source);
-        sink.set_volume(1.0);
-        sink.play();
-
-        // Store the sink and immediately release the lock
-        {
-            let mut current_song = state.current_song.lock().unwrap();
-            *current_song = Some(Arc::clone(&sink));
-        } // Lock is released here
-
-        // Progress tracking in a separate thread
-        let sink_clone = Arc::clone(&sink);
-        let app_clone = app.clone();
-        thread::spawn(move || {
-            while !sink_clone.empty() {
-                let elapsed = start.elapsed().as_secs_f32();
-                let progress = (elapsed / duration).min(1.0);
-                let _ = app_clone.emit("combined-progress", progress);
-                std::thread::sleep(Duration::from_millis(16)); // 20 FPS for smooth animation
-            }
-
-            let _ = app_clone.emit("combined-progress", 1.0);
-        });
-
-        // This blocks, but now it's in its own thread and doesn't hold any locks
-        sink.sleep_until_end();
-    });
-}
-
-#[tauri::command]
-pub fn pause_combined_audio(state: State<'_, Arc<AppState>>) {
-    println!("PAUSING");
-    let current_song = state.current_song.lock().unwrap();
-    if let Some(sink) = &*current_song {
-        sink.stop(); // Use stop() instead of pause() for immediate effect
-        sink.clear(); // Clear any buffered audio
-    } else {
-        println!("PAUSE FAILED");
-    }
-}
-
-#[tauri::command]
-pub fn resume_combined_audio(state: State<'_, Arc<AppState>>) {
-    let current_song = state.current_song.lock().unwrap();
-    if let Some(sink) = &*current_song {
-        sink.play();
-    }
 }
 
 fn get_samples(file_path: &str) -> Result<Vec<i16>, Error> {

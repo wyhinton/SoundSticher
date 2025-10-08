@@ -1,24 +1,21 @@
 export const files = $state<string[]>([]);
-import { persisted } from "svelte-persisted-store";
-import { derived, get, writable } from "svelte/store";
-import {
-  ABLETON_COLORS,
-  type AbletonColor,
-} from "$lib/utils/colors";
-import { invokeWithPerf, updateInputs } from "./performance";
-import { listen } from "@tauri-apps/api/event";
-import { Channel, invoke } from "@tauri-apps/api/core";
-import { generateProgressChannel, type SortAudioEvent } from "./events";
+import { persisted } from 'svelte-persisted-store';
+import { derived, get, writable } from 'svelte/store';
+import { ABLETON_COLORS, type AbletonColor } from '$lib/utils/colors';
+import { invokeWithPerf, updateInputs } from './performance';
+import { listen } from '@tauri-apps/api/event';
+import { Channel, invoke } from '@tauri-apps/api/core';
+import { generateProgressChannel, type SortAudioEvent } from './events';
 
 export type ErrorKind = {
-  kind: "io" | "utf8";
+  kind: 'io' | 'utf8';
   message: string;
 };
 // First param `preferences` is the local storage key.
 // Second param is the initial value.
-export const preferences = persisted("preferences", {
-  theme: "dark",
-  pane: "50%",
+export const preferences = persisted('preferences', {
+  theme: 'dark',
+  pane: '50%',
 });
 
 interface Song {
@@ -41,8 +38,7 @@ export interface AppState {
   playingCombined: boolean;
   timelineItems: TimelineItem[];
   sortKey?: keyof AudioFileItem;
-  sortDirection?: "asc"|"desc"
-  
+  sortDirection?: 'asc' | 'desc';
 }
 
 interface AudioFileItem {
@@ -55,7 +51,6 @@ interface AudioFileItem {
   bitDepth?: number;
   duration?: number;
   id: string;
-
 }
 
 export interface Section {
@@ -76,29 +71,29 @@ interface FileMetadata {
   id: string;
 }
 
-export type TimelineItemType = "audio-file" | "spacer";
+export type TimelineItemType = 'audio-file' | 'spacer';
 
 export interface BaseTimelineItem {
-  id: string;          // useful for identifying items
+  id: string; // useful for identifying items
   type: TimelineItemType;
   startOffset: number; // common field
 }
 
 export interface AudioFileTimelineItem extends BaseTimelineItem {
-  type: "audio-file";  
+  type: 'audio-file';
   svgPath: string;
   fileName: string;
   size: number;
 }
 
 export interface SpacerTimelineItem extends BaseTimelineItem {
-  type: "spacer";      // discriminator
-  length: number;      // unique property
+  type: 'spacer'; // discriminator
+  length: number; // unique property
 }
 
 export type TimelineItem = AudioFileTimelineItem | SpacerTimelineItem;
 
-export const appState = persisted<AppState>("appState", {
+export const appState = persisted<AppState>('appState', {
   sections: [],
   isCombiningFile: false,
   combinedFileLength: 0,
@@ -115,7 +110,6 @@ const defaults: AppState = {
   combinedFile: undefined,
   timelineItems: [],
 };
-
 
 // appState.update(($appState) => ({
 //   ...$appState,
@@ -135,48 +129,41 @@ export const setHoveredItem = (index: number | null) => {
   hoveredSourceItem.set(index);
 };
 
-const DEFAULT_FOLDER =
-  "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_time-leeuwarden";
+const DEFAULT_FOLDER = 'C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_time-leeuwarden';
 
 let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
 export async function addSource(paths?: string | string[]) {
-  console.log(`%cHERE LINE :89 %c`, "color: brown; font-weight: bold", "");
+  console.log(`%cHERE LINE :89 %c`, 'color: brown; font-weight: bold', '');
 
   const color = ABLETON_COLORS[0];
   const folderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
 
   try {
     // Get file paths for each folder
-    const filesResult = await invokeWithPerf<Record<string, string[]>>(
-      "get_file_paths_in_folder",
-      {
-        folderPaths: folderPaths,
-      }
-    );
-    
+    const filesResult = await invokeWithPerf<Record<string, string[]>>('get_file_paths_in_folder', {
+      folderPaths: folderPaths,
+    });
+
     if (filesResult.ok === true) {
       // Flatten all file paths to request metadata at once
       const allFilePaths: string[] = Object.values(filesResult.value).flat();
-      console.log(allFilePaths)
+      console.log(allFilePaths);
       // Get metadata
-      const metadataList = await invokeWithPerf<FileMetadata[]>(
-        "get_metadata",
-        {
-          titles: allFilePaths,
-        }
-      );
+      const metadataList = await invokeWithPerf<FileMetadata[]>('get_metadata', {
+        titles: allFilePaths,
+      });
       if (metadataList.ok === true) {
         const newSections: Section[] = Object.entries(filesResult.value).map(
           ([folderPath, files]) => {
             const withMeta: AudioFileItem[] = files
-              .map((fp) => {
-                const meta = metadataList.value.find((m) => m.path === fp);
+              .map(fp => {
+                const meta = metadataList.value.find(m => m.path === fp);
                 return meta ? { path: fp, color, ...meta } : null;
               })
               .filter(Boolean) as AudioFileItem[];
-            
+
             return {
               folderPath,
               files: withMeta,
@@ -188,7 +175,7 @@ export async function addSource(paths?: string | string[]) {
         );
 
         // Update app state with new sections
-        appState.update((state) => {
+        appState.update(state => {
           return {
             ...state,
             combinedFile: undefined,
@@ -203,18 +190,18 @@ export async function addSource(paths?: string | string[]) {
     const s = get(appState);
     updateInputs(s.sections);
   } catch (error) {
-    console.error("Error in addSection:", error);
+    console.error('Error in addSection:', error);
   }
 }
 
 export function deleteSection(index: number) {
-  console.log(`%cHERE LINE :150 %c`, "color: yellow; font-weight: bold", "");
+  console.log(`%cHERE LINE :150 %c`, 'color: yellow; font-weight: bold', '');
 
-  appState.update((state) => {
+  appState.update(state => {
     // Remove the section at the specified index
     state.sections.splice(index, 1);
     if (state.sections.length === 0) {
-      invokeWithPerf("clear_audio_files");
+      invokeWithPerf('clear_audio_files');
       state.sections = [];
       state.timelineItems = [];
       state.combinedFile = undefined;
@@ -227,7 +214,7 @@ export function deleteSection(index: number) {
 }
 
 export function updatePath(sectionIndex: number, value: string) {
-  appState.update((state) => {
+  appState.update(state => {
     console.log(state.sections);
     state.sections[sectionIndex].folderPath = value;
     return state;
@@ -235,9 +222,9 @@ export function updatePath(sectionIndex: number, value: string) {
   get_file_paths_in_folder(sectionIndex);
 }
 
-export async function play_song(song: string) {
-  await invokeWithPerf<Song[]>("play_song", { title: song }).then((f) => {
-    appState.update((state) => {
+export async function play_sample_preview(song: string) {
+  await invokeWithPerf<Song[]>('play_sample_preview', { title: song }).then(f => {
+    appState.update(state => {
       state.playingSong = song;
       return state;
     });
@@ -245,9 +232,9 @@ export async function play_song(song: string) {
   });
 }
 
-export async function pause_song() {
-  await invokeWithPerf<Song[]>("pause_song", {}).then((f) => {
-    appState.update((state) => {
+export async function pause_sample_preview() {
+  await invokeWithPerf<Song[]>('pause_sample_preview', {}).then(f => {
+    appState.update(state => {
       state.playingSong = undefined;
       return state;
     });
@@ -259,24 +246,18 @@ export interface CombineAudioResult {
   svgPath: string;
 }
 
-export async function combine_audio_files(
-  input_files: string[],
-  output_path: string
-) {
-  const combineAudioFilesRes = await invokeWithPerf<CombineAudioResult>(
-    "combine_audio_files",
-    {
-      inputFiles: input_files,
-      outputPath: output_path,
-    }
-  );
+export async function combine_audio_files(input_files: string[], output_path: string) {
+  const combineAudioFilesRes = await invokeWithPerf<CombineAudioResult>('combine_audio_files', {
+    inputFiles: input_files,
+    outputPath: output_path,
+  });
   if (combineAudioFilesRes.ok === true) {
-    const getMetadataRes = await invokeWithPerf<FileMetadata>("get_metadata", {
+    const getMetadataRes = await invokeWithPerf<FileMetadata>('get_metadata', {
       title:
-        "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav",
+        'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav',
     });
     if (getMetadataRes.ok === true) {
-      appState.update((state) => {
+      appState.update(state => {
         state.combinedFile = {
           path: combineAudioFilesRes.value.output,
           svgPath: combineAudioFilesRes.value.svgPath,
@@ -371,12 +352,12 @@ export async function get_file_paths_in_folder(sectionIndex: number) {
   // }
 }
 
-appState.subscribe((s) => {
+appState.subscribe(s => {
   // console.log(s);
 });
 
 export function resetAppState() {
-  appState.update((state) => {
+  appState.update(state => {
     state.combinedFile = undefined;
     // state.sections = [];
     state.playingSong = undefined;
@@ -387,9 +368,8 @@ export function resetAppState() {
   });
 }
 
-export function 
-getAllFiles(sections: Section[]) {
-  return sections.map((s) => s.files).flat();
+export function getAllFiles(sections: Section[]) {
+  return sections.map(s => s.files).flat();
 }
 
 let prevValue = get(appState);
@@ -470,8 +450,8 @@ export function setUnderMouse(fileIndex: number) {}
 //   console.log(sum);
 // })
 
-listen<number>("song-progress", (event) => {
-  appState.update((state) => {
+listen<number>('song-progress', event => {
+  appState.update(state => {
     state.playProgress = event.payload;
     console.log(event);
     return state;
@@ -483,16 +463,9 @@ interface CachedCombineResult {
   duration: number;
 }
 
-listen<CachedCombineResult>("combined-cached", (event) => {
+listen<CachedCombineResult>('combined-cached', event => {
   console.log(event);
-  appState.update((state) => {
-    // console.log(event);
-    // console.log(state.combinedFile)
-
-    // state.combinedFile = {
-    //   ...state.combinedFile,
-    //   svgPath: state.combinedFile.svgPath + event.payload.svgPath,
-    // };
+  appState.update(state => {
     state.combinedFile.svgPath += event.payload.svgPath;
     console.log(state.combinedFile.svgPath.length);
     state.combinedFileLength = event.payload.duration;
@@ -500,8 +473,8 @@ listen<CachedCombineResult>("combined-cached", (event) => {
   });
 });
 
-listen<string>("processed-segment", (event) => {
-  appState.update((state) => {
+listen<string>('processed-segment', event => {
+  appState.update(state => {
     state.combinedFile = {
       ...state.combinedFile,
       svgPath: state.combinedFile.svgPath + event.payload,
@@ -510,16 +483,16 @@ listen<string>("processed-segment", (event) => {
   });
 });
 
-listen<number>("total-length", (event) => {
-  appState.update((state) => {
+listen<number>('total-length', event => {
+  appState.update(state => {
     console.log(event);
     state.combinedFileLength = event.payload;
     return state;
   });
 });
 
-listen<number>("combine-audio-progress", (event) => {
-  appState.update((state) => {
+listen<number>('combine-audio-progress', event => {
+  appState.update(state => {
     console.log(event);
     // state.playProgress = event.payload;
     state.combineAudioFileProgress = event.payload;
@@ -532,11 +505,9 @@ listen<number>("combine-audio-progress", (event) => {
   });
 });
 
-
-
 export const sortedFiles = derived(
   appState, // or however you hold `sections`
-  (appState) => {
+  appState => {
     let files = getAllFiles(appState.sections);
     if (!appState.sortKey) {
       files.forEach((f, i) => (f.index = i));
@@ -546,25 +517,23 @@ export const sortedFiles = derived(
     let sorted = [...files].sort((a, b) => {
       let valA = a[appState.sortKey];
       let valB = b[appState.sortKey];
-      if (typeof valA === "string" && typeof valB === "string") {
-        return appState.sortDirection === "asc"
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        return appState.sortDirection === 'asc'
           ? valA.localeCompare(valB)
           : valB.localeCompare(valA);
       } else {
-        return appState.sortDirection === "asc"
+        return appState.sortDirection === 'asc'
           ? (valA as number) - (valB as number)
           : (valB as number) - (valA as number);
       }
     });
 
-
     sorted.forEach((f, i) => (f.index = i));
-    
-    console.log(sorted)
+
+    console.log(sorted);
     return sorted;
   }
 );
-
 
 function offsetX(path: string, dx: number): string {
   // Regex matches commands followed by coordinate pairs
@@ -574,10 +543,9 @@ function offsetX(path: string, dx: number): string {
       const newX = (parseFloat(x) + dx).toFixed(1); // keep 1 decimal place like your input
       return `${cmd}${newX},${y}`;
     }
-    return `${cmd}${x ?? ""}${y ?? ""}`;
+    return `${cmd}${x ?? ''}${y ?? ''}`;
   });
 }
-
 
 // let prevSortKey: string | null = null;
 // let prevSortDirection: "asc" | "desc" | null = null;
@@ -600,7 +568,6 @@ function offsetX(path: string, dx: number): string {
 
 //     prevSortKey = $appState.sortKey;
 //     prevSortDirection = $appState.sortDirection;
- 
 
 //     // Compute new sorted order
 //     const files = get(sortedFiles);
