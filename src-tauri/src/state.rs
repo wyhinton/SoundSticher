@@ -25,6 +25,8 @@ pub struct AppState {
     pub cancel_token: AtomicU64,
     pub combine_process: Arc<Mutex<i32>>,
     pub custom_order: Mutex<Vec<Uuid>>, // Store the custom order
+    pub current_play_progress: Mutex<f32>, // Track normalized play progress (0.0-1.0)
+    pub seek_start_time: Mutex<f32>, // Time in seconds when seeking started (for accurate elapsed time)
 }
 
 #[derive(Serialize)]

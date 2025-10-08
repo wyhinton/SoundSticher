@@ -2,10 +2,11 @@
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
   import { appState } from './state/state.svelte';
-  import { listen } from '@tauri-apps/api/event';
+  import { listen, TauriEvent } from '@tauri-apps/api/event';
   import { formatFileName } from './utils/format';
   import TimelineSegment from './TimelineSegment.svelte';
   import LabelLayer from './LabelLayer.svelte';
+  import { invokeWithPerf } from './state/performance';
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -38,21 +39,24 @@
     renderAxis(xScale);
   }
 
-  listen<number>('combined-progress', event => {
-    console.log(event.payload);
+  listen<number>('timeline-progress', event => {
+    console.log(event.payload * durationSeconds);
     playHeadPosition = event.payload * durationSeconds;
+    // playHeadPosition = event.payload;
   });
 
   function handleClick(event: MouseEvent) {
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
-    console.log(relativeX);
     const clickedTime = currentTransform
       .rescaleX(d3.scaleLinear().domain([0, durationSeconds]).range([0, width]))
       .invert(relativeX);
     console.log(clickedTime);
-    playHeadPosition = Math.max(0, Math.min(clickedTime, durationSeconds));
-    console.log(playHeadPosition);
+    // playHeadPosition =
+    const newPlayPosition = Math.max(0, Math.min(clickedTime, durationSeconds));
+    console.log(newPlayPosition);
+    console.log(clickedTime);
+    invokeWithPerf('set_timeline_play_position', { position: clickedTime });
     // playHeadX = relativeX;
   }
 
