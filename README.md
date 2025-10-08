@@ -2,9 +2,9 @@
 
 # Sound Stitch
 
-**A specialized audio tool for seamless sample organization and non-destructive audio joining**
+**A specialized audio tool for seamless sample organization and non-destructive audio concatenation**
 
-Sound Stitch addresses a fundamental gap in modern Digital Content Creation (DCC) workflows: the need for fast, intelligent, and non-destructive audio file joining that respects your existing sample organization.
+Sound Stitch addresses a fundamental gap in modern Digital Content Creation (DCC) workflows: the need for fast, intelligent, and non-destructive audio file joining (concatenation) that respects your existing sample organization.
 
 ## 🎯 **The Problem**
 
