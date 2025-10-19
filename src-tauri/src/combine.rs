@@ -506,13 +506,13 @@ pub fn play_combined_audio(
 
 #[tauri::command]
 pub fn pause_combined_audio(state: State<'_, Arc<AppState>>) {
-    println!("PAUSING");
+    println!("⏸️ PAUSING");
     let current_song = state.current_song.lock().unwrap();
     if let Some(sink) = &*current_song {
         sink.stop(); // Use stop() instead of pause() for immediate effect
         sink.clear(); // Clear any buffered audio
     } else {
-        println!("PAUSE FAILED");
+        println!("⏸️❌ PAUSE FAILED");
     }
 }
 
