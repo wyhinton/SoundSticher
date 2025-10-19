@@ -29,18 +29,6 @@ vite.config.ts.timestamp-*
 *.sln
 *.sw?
 
-/documentation/ae
 
-/documentation/ref
-/documentation/ae
 
-# Large media files
-*.gif
-*.mov
-*.mp4
-*.avi
-*.wav
-documentation/animation/UI_W_SHADOW.gif
-documentation/UI_W_SHADOW2.gif
-assets/test_output/test.wav
-assets/test_audio/
+
