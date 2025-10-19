@@ -34,3 +34,5 @@ vite.config.ts.timestamp-*
 
 
 /documentation/ref
+/assets/test_audio
+/assets/test_output
