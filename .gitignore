@@ -29,7 +29,10 @@ vite.config.ts.timestamp-*
 *.sln
 *.sw?
 
+/documentation/ae
 
 
 
 /documentation/ref
+/assets/test_audio
+/assets/test_output
