@@ -56,7 +56,19 @@ pub fn update_sorting(
     // Print order before sorting
     println!("Order before sorting (by input order):");
     for (i, update) in updates.iter().enumerate() {
-        println!("  {}: ID {} -> index {}", i, update.id, update.index);
+        let audio_file = audio_files.values().find(|f| f.id == update.id);
+        let filename = if let Some(file) = audio_file {
+            std::path::Path::new(&file.path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&file.path)
+        } else {
+            "NOT FOUND"
+        };
+        println!(
+            "  {}: ID {} -> index {} {}",
+            i, update.id, update.index, filename
+        );
     }
 
     // Sort updates by index to get the new order
@@ -66,7 +78,19 @@ pub fn update_sorting(
     // Print order after sorting
     println!("Order after sorting (by index):");
     for (i, update) in ordered_updates.iter().enumerate() {
-        println!("  {}: ID {} -> index {}", i, update.id, update.index);
+        let audio_file = audio_files.values().find(|f| f.id == update.id);
+        let filename = if let Some(file) = audio_file {
+            std::path::Path::new(&file.path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&file.path)
+        } else {
+            "NOT FOUND"
+        };
+        println!(
+            "  {}: ID {} -> index {} {}",
+            i, update.id, update.index, filename
+        );
     }
 
     // Calculate total samples in the new order

@@ -1,5 +1,4 @@
 use log;
-use rodio::{Decoder, OutputStream, Sink};
 use std::collections::HashMap;
 use std::fs::{metadata, File};
 use std::io::BufReader;
@@ -17,8 +16,10 @@ mod combine;
 mod encoder;
 mod error;
 mod metadata;
+mod sample_playback;
 mod sorting;
 mod state;
+mod timeline_playback;
 
 pub struct Song {
     pub title: String,
@@ -66,44 +67,6 @@ fn get_file_paths_in_folder(
     Ok(all_paths)
 }
 
-// #[tauri::command]
-// fn get_file_paths_in_folder(folder_path: &str) -> Result<Vec<String>, Error> {
-//     let mut paths = Vec::new();
-
-//     let entries = std::fs::read_dir(folder_path)?; // Uses `From` to convert into AppError
-
-//     for entry in entries {
-//         let entry = entry?; // Also converts into AppError
-//         let path = entry.path();
-
-//         println!("entry {}", &path.display());
-
-//         if path.is_file() {
-//             // ❌ Skip hidden metadata files like "._track.mp3"
-//             if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-//                 if file_name.starts_with("._") {
-//                     continue;
-//                 }
-//             }
-
-//             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-//                 let ext = ext.to_lowercase();
-//                 if [
-//                     "mp3", "wav", "flac", "ogg", "m4a", "aac", "aiff", "alac", "aif",
-//                 ]
-//                 .contains(&ext.as_str())
-//                 {
-//                     let path_str = path.to_str().ok_or(Error::InvalidPath)?;
-//                     paths.push(path_str.to_string());
-//                 }
-//             }
-//         }
-//     }
-
-//     println!("Total valid files: {}", paths.len());
-//     Ok(paths)
-// }
-
 #[tauri::command]
 fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
     let mut audio_files = state.audio_files.lock().unwrap();
@@ -114,131 +77,6 @@ fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
     custom_order.clear();
     let _ = app.emit("buffering-progress", 0.);
     println!("🗑️  All audio files have been cleared.");
-}
-
-#[tauri::command]
-fn play_song(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
-    let path = title.clone();
-    let state = state.inner().clone();
-    log::info!("Got request to play_song {}", title);
-    state.cancel_playback.store(false, Ordering::Relaxed);
-
-    match metadata(&path) {
-        Ok(meta) => {
-            if !meta.is_file() {
-                eprintln!("Path exists but is not a file: {}", path);
-                return;
-            }
-        }
-        Err(e) => {
-            eprintln!("Error accessing file metadata for {}: {}", path, e);
-            return;
-        }
-    }
-
-    {
-        let mut current_song = state.current_song.lock().unwrap();
-        if let Some(ref current) = *current_song {
-            current.stop(); // ❗ Ensure previous song is stopped
-        }
-        *current_song = None; // Clear it before continuing
-    }
-
-    thread::spawn(move || {
-        let file = match File::open(&path) {
-            Ok(file) => file,
-            Err(e) => {
-                eprint!("Error opening file {}: {}", path, e);
-                return;
-            }
-        };
-
-        let (_stream, stream_handle) = match OutputStream::try_default() {
-            Ok(output) => output,
-            Err(e) => {
-                eprintln!("Error making stream {}:{}", title, e);
-                return;
-            }
-        };
-
-        let sink = match Sink::try_new(&stream_handle) {
-            Ok(sink) => Arc::new(sink),
-            Err(e) => {
-                eprintln!("Error creating sink: {}", e);
-                return;
-            }
-        };
-
-        match Decoder::new(BufReader::new(file)) {
-            Ok(source) => sink.append(source),
-            Err(e) => {
-                eprintln!("Error decoding audio file: {}", e);
-                return;
-            }
-        }
-
-        // Save the new sink
-        {
-            let mut current_song = state.current_song.lock().unwrap();
-            *current_song = Some(Arc::clone(&sink));
-        }
-
-        let duration = metadata::get_duration(&path);
-        let start = Instant::now();
-
-        let sink_clone = Arc::clone(&sink);
-        let app_clone = app.clone();
-
-        thread::spawn(move || {
-            let mut done_emitted = false;
-            // let cancel_flag = state.cancel_playback.load(Ordering::Relaxed); // pass into the thread
-            // println!("{}", cancel_flag);
-            while !sink_clone.empty() && !done_emitted && !sink_clone.is_paused() {
-                // println!("{}", cancel_flag);
-                let elapsed = start.elapsed();
-                let elapsed_secs = elapsed.as_secs_f32();
-
-                if let Some(duration) = duration {
-                    let progress = (elapsed_secs / duration).min(1.0);
-                    let _ = app_clone.emit("song-progress", progress);
-
-                    if progress >= 1.0 {
-                        done_emitted = true;
-                        break;
-                    }
-                }
-
-                std::thread::sleep(Duration::from_millis(200));
-            }
-
-            let _ = app_clone.emit("song-progress", 1.0);
-            sink_clone.clear();
-        });
-
-        sink.set_volume(1.0);
-        sink.sleep_until_end();
-    });
-}
-
-#[tauri::command]
-fn pause_song(state: State<'_, Arc<AppState>>) {
-    let mut current_song = state.current_song.lock().unwrap();
-    if let Some(ref sink) = *current_song {
-        println!("PAUSING!!!!");
-        sink.pause();
-        state.cancel_playback.store(true, Ordering::Relaxed);
-        // *current_song = None;
-    } else {
-        println!("FAILED!!")
-    }
-}
-
-#[tauri::command]
-fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
-    let mut current_song = state.current_song.lock().unwrap();
-    if let Some(ref sink) = *current_song {
-        sink.set_volume(vol);
-    }
 }
 
 #[tauri::command]
@@ -273,21 +111,25 @@ pub fn run() {
             cancel_token: AtomicU64::new(0),
             combine_process: Arc::new(Mutex::new(0)),
             custom_order: Mutex::new(Vec::new()),
+            current_play_progress: Mutex::new(0.0),
+            seek_start_time: Mutex::new(0.0),
         }))
         .invoke_handler(tauri::generate_handler![
-            set_volume,
             get_file_paths_in_folder,
-            play_song,
-            pause_song,
+            sample_playback::play_sample_preview,
+            sample_playback::pause_sample_preview,
+            timeline_playback::set_timeline_play_position,
+            timeline_playback::get_current_play_progress,
+            timeline_playback::play_timeline_audio,
+            timeline_playback::pause_timeline_audio,
+            timeline_playback::set_volume,
             get_metadata,
             combine::test_async,
             combine::update_inputs,
             combine::combine_all_cached_samples,
             combine::combine_all_cached_samples_with_custom_order,
             combine::get_custom_order,
-            combine::play_combined_audio,
             combine::cancel_combine,
-            combine::pause_combined_audio,
             combine::export_combined_audio_as_wav,
             state::get_app_state,
             clear_audio_files,
@@ -300,12 +142,6 @@ pub fn run() {
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Webview,
                 ))
-                // .filter(|metadata| {
-                //     // Print all targets to console
-                //     println!("Log target: {}", metadata.target());
-                //     // You can still filter here if needed
-                //     true
-                // })
                 .filter(|metadata| {
                     let target = metadata.target();
                     !target.contains("symphonia") && !target.contains("lofty")
