@@ -5,27 +5,22 @@
     performanceStore,
     resetPerformance,
     type PerformanceMetric,
-  } from "$lib/state/performance";
-  import { addNewFolderOnDrop, positionStore } from "$lib/state/position";
-  import {
-    addSource,
-    appState,
-    hoveredSourceItem,
-    resetAppState,
-  } from "$lib/state/state.svelte";
-  import Prism from "prismjs";
-  import "prismjs/components/prism-json";
-  import clipboard from "tauri-plugin-clipboard-api";
+  } from '$lib/state/performance';
+  import { addNewFolderOnDrop, positionStore } from '$lib/state/position';
+  import { addSource, appState, hoveredSourceItem, resetAppState } from '$lib/state/state.svelte';
+  import Prism from 'prismjs';
+  import 'prismjs/components/prism-json';
+  import clipboard from 'tauri-plugin-clipboard-api';
 
-  import "prismjs/themes/prism-okaidia.css";
-  import { derived, get } from "svelte/store";
-  import { toSource } from "$lib/utils/format";
-  import { examples } from "$lib/utils/examples";
-  import { onDestroy, onMount } from "svelte";
-  import { Channel, invoke } from "@tauri-apps/api/core";
-  import type { CombineAudioEvent, ExportAudioEvent } from "$lib/state/events";
-  import { exportState } from "$lib/state/export";
-  let highlighted = "";
+  import 'prismjs/themes/prism-okaidia.css';
+  import { derived, get } from 'svelte/store';
+  import { toSource } from '$lib/utils/format';
+  import { examples } from '$lib/utils/examples';
+  import { onDestroy, onMount } from 'svelte';
+  import { Channel, invoke } from '@tauri-apps/api/core';
+  import type { CombineAudioEvent, ExportAudioEvent } from '$lib/state/events';
+  import { exportState } from '$lib/state/export';
+  let highlighted = '';
   let appStateContainer: HTMLElement;
   let appBackendState: HTMLElement;
   let appExportState: HTMLElement;
@@ -33,7 +28,7 @@
   // Reactive derived state for simplified display
   $: forPrint = {
     ...$appState,
-    sections: $appState.sections.map((s) => ({
+    sections: $appState.sections.map(s => ({
       folderPath: s.folderPath,
       files: s.files.length,
       // files: s.files.length,
@@ -43,11 +38,7 @@
   // FRONTEND JSON VISUALIZER
   $: {
     const frontendStateJSON = JSON.stringify(forPrint, null, 2);
-    highlighted = Prism.highlight(
-      frontendStateJSON,
-      Prism.languages.json,
-      "json"
-    );
+    highlighted = Prism.highlight(frontendStateJSON, Prism.languages.json, 'json');
     if (appStateContainer) {
       appStateContainer.innerHTML = highlighted;
     }
@@ -80,23 +71,23 @@
   };
 
   function test_async() {
-    invokeWithPerf("test_async");
+    invokeWithPerf('test_async');
   }
 
   const openAudioFolder = () => {
-    invokeWithPerf("open_in_explorer", {
-      path: "C:\\Users\\Primary User\\Desktop\\AUDIO",
+    invokeWithPerf('open_in_explorer', {
+      path: 'C:\\Users\\Primary User\\Desktop\\AUDIO',
     });
   };
   const testExport = () => {
     const s = get(exportState);
-    console.log(s)
+    console.log(s);
     exportAudio(
       s.settings,
       `C:\\Users\\Primary User\\Desktop\\AUDIO\\test_audio2.${s.settings.format.toLowerCase()}`
     );
   };
-  const sortedPerformance = derived(performanceStore, ($store) => {
+  const sortedPerformance = derived(performanceStore, $store => {
     return Object.entries($store).sort((a, b) => {
       const lastA = a[1][a[1].length - 1] ?? 0;
       const lastB = b[1][b[1].length - 1] ?? 0;
@@ -115,11 +106,7 @@
   $: {
     if (appStateDebug) {
       const backendStateJSON = JSON.stringify(appStateDebug, null, 2);
-      highlighted = Prism.highlight(
-        backendStateJSON,
-        Prism.languages.json,
-        "json"
-      );
+      highlighted = Prism.highlight(backendStateJSON, Prism.languages.json, 'json');
       if (appBackendState) {
         appBackendState.innerHTML = highlighted;
       }
@@ -128,48 +115,40 @@
 
   $: {
     const exportStateJSON = JSON.stringify(get(exportState), null, 2);
-    console.log()
-    highlighted = Prism.highlight(
-      exportStateJSON,
-      Prism.languages.json,
-      "json"
-    );
+    console.log();
+    highlighted = Prism.highlight(exportStateJSON, Prism.languages.json, 'json');
     if (appExportState) {
       appExportState.innerHTML = highlighted;
     }
   }
 
   const addTwoSections = () => {
-    addSource(
-      "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley"
-    );
+    addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley');
     setTimeout(() => {
-      addSource(
-        "C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX"
-      );
+      addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX');
     }, 100);
   };
 
   const combineTest = () => {
     const onCombineAudioEvent = new Channel<CombineAudioEvent>();
 
-    onCombineAudioEvent.onmessage = (message) => {
-      if (message.event === "started") {
-        appState.update((state) => {
+    onCombineAudioEvent.onmessage = message => {
+      if (message.event === 'started') {
+        appState.update(state => {
           state.isCombiningFile = true;
           state.combinedFileLength = message.data.duration;
           return state;
         });
       }
-      if (message.event === "progress") {
-        appState.update((s) => {
+      if (message.event === 'progress') {
+        appState.update(s => {
           s.combinedFile = { svgPath: message.data.svgPath };
           return s;
         });
       }
-      if (message.event === "finished") {
+      if (message.event === 'finished') {
         console.log(message);
-        appState.update((s) => {
+        appState.update(s => {
           s.isCombiningFile = false;
           s.combinedFile = { svgPath: message.data.svgPath };
           return s;
@@ -178,7 +157,7 @@
       }
     };
 
-    invokeWithPerf("combine_all_cached_samples", {
+    invokeWithPerf('combine_all_cached_samples', {
       onEvent: onCombineAudioEvent,
     });
   };
@@ -226,16 +205,21 @@
   >
   <button
     on:click={() => {
-      console.log($appState)
+      console.log($appState);
     }}
     class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Log AppState</button
   >
   <button
     on:click={() => {
+      console.log($appState.sections);
+    }}
+    class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Log Sections</button
+  >
+  <button
+    on:click={() => {
       copyStateToClipboard();
     }}
-    class="btn btn-sm"
-    ><i class="fa fa-clipboard"></i>Copy state to clipboard</button
+    class="btn btn-sm"><i class="fa fa-clipboard"></i>Copy state to clipboard</button
   >
   <button
     on:click={() => {
@@ -289,7 +273,7 @@
     </pre>
   <div>{$hoveredSourceItem}</div>
   <div>
-    HoveredItem: {$hoveredSourceItem === null ? "None" : $hoveredSourceItem}
+    HoveredItem: {$hoveredSourceItem === null ? 'None' : $hoveredSourceItem}
   </div>
   <div>{seconds}</div>
   <div>
@@ -314,9 +298,7 @@
           <tr>
             <td><b>{key}</b></td>
             {#if value.length > 0}
-              <td class="text-center"
-                >{value[value.length - 1].time.toFixed(2)}</td
-              >
+              <td class="text-center">{value[value.length - 1].time.toFixed(2)}</td>
             {/if}
             <td class="text-center">{value.length}</td>
           </tr>

@@ -1,20 +1,21 @@
 <script lang="ts">
-  import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
-  import { stat } from "@tauri-apps/plugin-fs";
+  import { stat } from '@tauri-apps/plugin-fs';
   import {
     addSource,
     appState,
     combine_audio_files,
     deleteSection,
-    sortedFiles,
+    getAllFiles,
     updatePath,
-  } from "./state/state.svelte";
-  import { toCssRgb } from "./utils/colors";
-  import { onMount, tick } from "svelte";
-  import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { isPointInRect } from "./utils/dragdrop";
-  import lottie from "lottie-web";
+    applySyncIndexes,
+  } from './state/state.svelte';
+  import { toCssRgb } from './utils/colors';
+  import { onMount, tick } from 'svelte';
+  import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { isPointInRect } from './utils/dragdrop';
+  import lottie from 'lottie-web';
 
   import {
     addNewFolderOnDrop,
@@ -22,24 +23,51 @@
     positionStore,
     setInputsUnderMouse,
     setIsOverTableContainer,
-  } from "./state/position";
-  import SineWaveShader from "./SineWaveShader.svelte";
-  import EditableInput from "./EditableInput.svelte";
-  import { get } from "svelte/store";
-  import { generateProgressChannel, type SortAudioEvent } from "./state/events";
-  import { Channel, invoke } from "@tauri-apps/api/core";
-  import { updateInputs } from "./state/performance";
+  } from './state/position';
+  import SineWaveShader from './SineWaveShader.svelte';
+  import EditableInput from './EditableInput.svelte';
+  import { get } from 'svelte/store';
+  import { generateProgressChannel, type SortAudioEvent } from './state/events';
+  import { Channel, invoke } from '@tauri-apps/api/core';
+  import { invokeWithPerf, updateInputs, type Result } from './state/performance';
+
+  // Local sorting function - moved from store
+  function getSortedFiles(state: typeof $appState) {
+    let files = getAllFiles(state.sections);
+
+    // If no sort key is set, return files sorted by index
+    if (!state.sortKey) {
+      return files.sort((a, b) => a.index - b.index);
+    }
+
+    // Sort by the specified key and direction
+    let sorted = [...files].sort((a, b) => {
+      let valA = a[state.sortKey!];
+      let valB = b[state.sortKey!];
+
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        return state.sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      } else {
+        return state.sortDirection === 'asc'
+          ? (valA as number) - (valB as number)
+          : (valB as number) - (valA as number);
+      }
+    });
+
+    return sorted;
+  }
+
   WebviewWindow.getCurrent()
-    .once<null>("initialized", (event) => {})
-    .then((v) => {
+    .once<null>('initialized', event => {})
+    .then(v => {
       console.log(v);
     });
 
   function getInputRects(): DOMRect[] {
     if (!container) return [];
-    const inputs = container.querySelectorAll("input");
+    const inputs = container.querySelectorAll('input');
     console.log(inputs);
-    return Array.from(inputs).map((input) => input.getBoundingClientRect());
+    return Array.from(inputs).map(input => input.getBoundingClientRect());
   }
 
   function getSourceTableRect() {
@@ -64,18 +92,18 @@
   onMount(async () => {
     positionStore.reset();
     const view = getCurrentWebview();
-    await view.onDragDropEvent((event) => {
+    await view.onDragDropEvent(event => {
       rects = getInputRects();
       inputsUnderMouse = [];
       const factor = view.window.scaleFactor();
-      factor.then((f) => {
+      factor.then(f => {
         console.log(f);
         scaleFactor = f;
       });
       switch (event.payload.type) {
-        case "enter":
+        case 'enter':
           isOver = true;
-        case "over":
+        case 'over':
           x = (event.payload.position.x / scaleFactor).toString();
           y = (event.payload.position.y / scaleFactor).toString();
           let overEventUnderMouse = [];
@@ -88,28 +116,24 @@
           isOverTableContainer = isPointInRect(x, y, getSourceTableRect());
           setIsOverTableContainer(isOverTableContainer);
           setInputsUnderMouse(overEventUnderMouse);
-        case "drop":
+        case 'drop':
           let atDrop: number[] = [];
           x = (event.payload.position.x / scaleFactor).toString();
           y = (event.payload.position.y / scaleFactor).toString();
           rects.forEach((r, i) => {
             if (isPointInRect(parseInt(x), parseInt(y), r)) {
-              console.log(
-                `%cHERE LINE :67 %c`,
-                "color: brown; font-weight: bold",
-                ""
-              );
+              console.log(`%cHERE LINE :67 %c`, 'color: brown; font-weight: bold', '');
               atDrop.push(i);
               inputsUnderMouse.push(i);
             }
           });
-          if (event.payload.type === "drop") {
+          if (event.payload.type === 'drop') {
             console.log(event.payload.paths);
             const paths = event.payload.paths;
             console.log(atDrop);
             if (atDrop.length > 0) {
-              Promise.all(event.payload.paths.map((p) => stat(p))).then((v) => {
-                v.forEach((v) => {
+              Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
+                v.forEach(v => {
                   if (v.isDirectory) {
                     updatePath(atDrop[0], paths[0]);
                   }
@@ -126,88 +150,84 @@
             clearUnderMouse();
           }
           break;
-        case "leave":
+        case 'leave':
           isOver = false;
           clearUnderMouse();
           positionStore.reset();
-          console.log("No position data");
+          console.log('No position data');
           break;
       }
     });
   });
   let animation;
-    async function initLottie() {
+  async function initLottie() {
     await tick(); // wait for DOM to update
     if (lottieContainer) {
       animation?.destroy(); // destroy previous animation if exists
       animation = lottie.loadAnimation({
         container: lottieContainer,
-        renderer: "svg",
+        renderer: 'svg',
         loop: true,
         autoplay: true,
-        path: "FOLDER_ANIM.json",
+        path: 'FOLDER_ANIM.json',
       });
     }
   }
-  
-  
-let prevSortKey: string | null = null;
-let prevSortDirection: "asc" | "desc" | null = null;
-let debounceTimeout: number | undefined;
 
-appState.subscribe(($appState) => {
-  // Clear the previous timeout if it exists
-  if (debounceTimeout) clearTimeout(debounceTimeout);
+  let prevSortKey: string | null = null;
+  let prevSortDirection: 'asc' | 'desc' | null = null;
+  let debounceTimeout: number | undefined;
 
-  debounceTimeout = window.setTimeout(() => {
-    if (!$appState.sortKey || !$appState.sortDirection) return;
+  appState.subscribe($appState => {
+    // Clear the previous timeout if it exists
+    if (debounceTimeout) clearTimeout(debounceTimeout);
 
-    // Only proceed if sortKey or sortDirection changed
-    if (
-      $appState.sortKey === prevSortKey &&
-      $appState.sortDirection === prevSortDirection
-    ) {
-      return;
-    }
+    debounceTimeout = window.setTimeout(() => {
+      if (!$appState.sortKey || !$appState.sortDirection) return;
 
-    prevSortKey = $appState.sortKey;
-    prevSortDirection = $appState.sortDirection;
- 
+      // Only proceed if sortKey or sortDirection changed
+      if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
+        return;
+      }
 
-    // Compute new sorted order
-    const files = get(sortedFiles);
-    console.log(files);
+      prevSortKey = $appState.sortKey;
+      prevSortDirection = $appState.sortDirection;
 
-    // Build array for Rust: { id, index }
-    const updates = files.map((file, index) => ({
-      id: file.id, // UUID string
-      index,
-    }));
+      // Compute new sorted order
+      const files = getSortedFiles($appState);
 
-    console.log(updates);
+      // Build array for Rust: { id, index }
+      const updates = files.map((file, index) => ({
+        id: file.id, // UUID string
+        index,
+      }));
 
-    const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-      started: (data) => {
-        console.log("STARTED SORT");
-      },
-      progress: (data) => {
-        console.log(data)
-        // console.log("PROGRESS");
-      },
-      finished: (data) => {
-        console.log("FINISHED SORT");
-      },
-    });
+      console.log(updates);
 
-    invoke("update_sorting", { updates, onEvent })
-      .then((newOrder) => {
-        updateInputs($appState.sections)
-        console.log(newOrder);
-        
-      })
-      .catch((err) => console.error("Tauri invoke failed", err));
-  }, 100); // 100ms debounce
-});
+      const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
+        started: data => {
+          console.log('STARTED SORT');
+        },
+        progress: data => {},
+        finished: data => {
+          console.log('FINISHED SORT');
+        },
+      });
+
+      invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
+        .then(newOrder => {
+          updateInputs($appState.sections);
+          console.log(newOrder);
+          console.log(newOrder);
+          // Use the reusable index syncing function if newOrder has value
+          if (newOrder.ok && newOrder.value) {
+            applySyncIndexes(newOrder.value);
+            console.log(`%cHERE LINE :227 %c`, 'color: yellow; font-weight: bold', '');
+          }
+        })
+        .catch(err => console.error('Tauri invoke failed', err));
+    }, 100); // 100ms debounce
+  });
 </script>
 
 <div class="position-relative">
@@ -220,16 +240,25 @@ appState.subscribe(($appState) => {
   >
     {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
       <!-- <SineWaveShader></SineWaveShader> -->
-      <div class="position-absolute no-inputs-warning ">
-        <div id="lottie-container"
-        class="m-auto" style={`width: ${lottieSize}px; height: ${lottieSize}px;`} bind:this={lottieContainer} ></div>
+      <div class="position-absolute no-inputs-warning">
+        <div
+          id="lottie-container"
+          class="m-auto"
+          style={`width: ${lottieSize}px; height: ${lottieSize}px;`}
+          bind:this={lottieContainer}
+        ></div>
         <div class="text-center">No inputs! Drag and Drop a folder of samples or add a section</div>
-        <button class="btn btn-sm m-auto mt-2"  onclick={()=>addSource()}><i class="me-1  fas fa-plus-circle text-success"></i>Add section</button>
+        <button class="btn btn-sm m-auto mt-2" onclick={() => addSource()}
+          ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
+        >
       </div>
-        {@html (() => { initLottie(); return '' })()}
+      {@html (() => {
+        initLottie();
+        return '';
+      })()}
     {/if}
     {#if $addNewFolderOnDrop}
-      <div class="position-absolute no-inputs-warning">
+      <div class="position-absolute no-inputs warning">
         <i class="fa fas-plus">+</i>
       </div>
     {/if}
@@ -256,11 +285,8 @@ appState.subscribe(($appState) => {
                 <input
                   style:color={toCssRgb(item.color.rgb, 1)}
                   class="folder-input input-group-sm my-auto"
-                  onchange={(e) => {
-                    updatePath(
-                      sectionIndex,
-                      (e.target as HTMLInputElement).value
-                    );
+                  onchange={e => {
+                    updatePath(sectionIndex, (e.target as HTMLInputElement).value);
                   }}
                   bind:value={item.folderPath}
                   type="text"
@@ -278,12 +304,7 @@ appState.subscribe(($appState) => {
             </td>
             <td>
               <div class="d-flex justify-content-center">
-                <button
-                  class="text-danger"
-                  onclick={() => deleteSection(sectionIndex)}
-                >
-                  X
-                </button>
+                <button class="text-danger" onclick={() => deleteSection(sectionIndex)}> X </button>
               </div>
             </td>
           </tr>
@@ -294,8 +315,8 @@ appState.subscribe(($appState) => {
 </div>
 
 <style>
-  #lottie-container{
-    opacity: .8
+  #lottie-container {
+    opacity: 0.8;
   }
   .drop-add {
     border: 2px solid green;
@@ -344,6 +365,5 @@ appState.subscribe(($appState) => {
     font-size: 12px;
     display: flex;
     flex-direction: column;
-
   }
 </style>

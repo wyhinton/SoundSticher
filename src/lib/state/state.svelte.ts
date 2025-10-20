@@ -1,6 +1,6 @@
 export const files = $state<string[]>([]);
 import { persisted } from 'svelte-persisted-store';
-import { derived, get, writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { ABLETON_COLORS, type AbletonColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
@@ -122,11 +122,33 @@ const defaults: AppState = {
 export const hoveredSourceItem = writable<null | number>(null);
 export const hoveredTimelineItem = writable<null | number>(null);
 
+// Store for tracking IDs that should be animated in FileTable
+export const animatedIds = writable<Set<string>>(new Set());
+
 export const setHoveredItem = (index: number | null) => {
   // hoveredItem.update((state) => {
   //   return index;
   // })
   hoveredSourceItem.set(index);
+};
+
+// Function to trigger animation for changed file IDs
+export const triggerFileAnimation = (changedFileIds: string[]) => {
+  // Add all changed IDs to the animated set
+  animatedIds.update(currentSet => {
+    const newSet = new Set(currentSet);
+    changedFileIds.forEach(id => newSet.add(id));
+    return newSet;
+  });
+
+  // Remove IDs after animation duration (e.g., 2 seconds)
+  setTimeout(() => {
+    animatedIds.update(currentSet => {
+      const newSet = new Set(currentSet);
+      changedFileIds.forEach(id => newSet.delete(id));
+      return newSet;
+    });
+  }, 2000); // 2 second animation duration
 };
 
 const DEFAULT_FOLDER = 'C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_time-leeuwarden';
@@ -139,7 +161,8 @@ export async function addSource(paths?: string | string[]) {
 
   const color = ABLETON_COLORS[0];
   const folderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
-
+  const curNumberFiles = getAllFiles(get(appState).sections).length;
+  console.log(`CURRENT NUMBER OF FILES: ${curNumberFiles}, starting index from`);
   try {
     // Get file paths for each folder
     const filesResult = await invokeWithPerf<Record<string, string[]>>('get_file_paths_in_folder', {
@@ -158,9 +181,9 @@ export async function addSource(paths?: string | string[]) {
         const newSections: Section[] = Object.entries(filesResult.value).map(
           ([folderPath, files]) => {
             const withMeta: AudioFileItem[] = files
-              .map(fp => {
+              .map((fp, i) => {
                 const meta = metadataList.value.find(m => m.path === fp);
-                return meta ? { path: fp, color, ...meta } : null;
+                return meta ? { path: fp, color, ...meta, index: i } : null;
               })
               .filter(Boolean) as AudioFileItem[];
 
@@ -505,36 +528,6 @@ listen<number>('combine-audio-progress', event => {
   });
 });
 
-export const sortedFiles = derived(
-  appState, // or however you hold `sections`
-  appState => {
-    let files = getAllFiles(appState.sections);
-    if (!appState.sortKey) {
-      files.forEach((f, i) => (f.index = i));
-      return files;
-    }
-
-    let sorted = [...files].sort((a, b) => {
-      let valA = a[appState.sortKey];
-      let valB = b[appState.sortKey];
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return appState.sortDirection === 'asc'
-          ? valA.localeCompare(valB)
-          : valB.localeCompare(valA);
-      } else {
-        return appState.sortDirection === 'asc'
-          ? (valA as number) - (valB as number)
-          : (valB as number) - (valA as number);
-      }
-    });
-
-    sorted.forEach((f, i) => (f.index = i));
-
-    console.log(sorted);
-    return sorted;
-  }
-);
-
 function offsetX(path: string, dx: number): string {
   // Regex matches commands followed by coordinate pairs
   // Example: "M0.0,0.0" => command=M, x=0.0, y=0.0
@@ -547,11 +540,77 @@ function offsetX(path: string, dx: number): string {
   });
 }
 
-// let prevSortKey: string | null = null;
-// let prevSortDirection: "asc" | "desc" | null = null;
-// let debounceTimeout: number | undefined;
+// Function to sync file indices with backend response and trigger animations
+export function syncIndexes(
+  newOrder: [string, number][],
+  currentState: AppState
+): {
+  updatedState: AppState;
+  changedIds: string[];
+} {
+  const allFiles = getAllFiles(currentState.sections);
+  const changedIds: string[] = [];
 
-// appState.subscribe(($appState) => {
+  // Update each file's index based on the new order from backend
+  newOrder.forEach(([fileId, newIndex]) => {
+    const toUpdate = allFiles.find(f => f.id === fileId);
+    if (toUpdate) {
+      const oldIndex = toUpdate.index;
+
+      // Check if the index actually changed
+      if (oldIndex !== newIndex) {
+        changedIds.push(toUpdate.id);
+        console.log(`Updating file ${toUpdate.id} index from ${oldIndex} to ${newIndex}`);
+        toUpdate.index = newIndex;
+        console.log('File after update:', toUpdate);
+      } else {
+        console.log(`File ${toUpdate.id} index unchanged: ${oldIndex}`);
+      }
+    } else {
+      console.warn(`File with ID ${fileId} not found in sections`);
+    }
+  });
+
+  console.log(`Changed IDs (${changedIds.length}):`, changedIds);
+
+  // Create new sections array to trigger reactivity
+  const newSections = currentState.sections.map(section => ({
+    ...section,
+    files: [...section.files], // Create new file arrays
+  }));
+
+  console.log('Updated sections:', newSections);
+
+  const updatedState = {
+    ...currentState,
+    sections: newSections,
+  };
+
+  return {
+    updatedState,
+    changedIds,
+  };
+}
+
+// Function to apply index sync and trigger animations
+export function applySyncIndexes(newOrder: [string, number][]): void {
+  appState.update(state => {
+    const { updatedState, changedIds } = syncIndexes(newOrder, state);
+
+    // Trigger animation for changed files
+    if (changedIds.length > 0) {
+      triggerFileAnimation(changedIds);
+    }
+
+    return updatedState;
+  });
+}
+
+let prevSortKey: string | null = null;
+let prevSortDirection: 'asc' | 'desc' | null = null;
+let debounceTimeout: number | undefined;
+
+// appState.subscribe($appState => {
 //   // Clear the previous timeout if it exists
 //   if (debounceTimeout) clearTimeout(debounceTimeout);
 
@@ -559,10 +618,7 @@ function offsetX(path: string, dx: number): string {
 //     if (!$appState.sortKey || !$appState.sortDirection) return;
 
 //     // Only proceed if sortKey or sortDirection changed
-//     if (
-//       $appState.sortKey === prevSortKey &&
-//       $appState.sortDirection === prevSortDirection
-//     ) {
+//     if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
 //       return;
 //     }
 
@@ -570,7 +626,7 @@ function offsetX(path: string, dx: number): string {
 //     prevSortDirection = $appState.sortDirection;
 
 //     // Compute new sorted order
-//     const files = get(sortedFiles);
+
 //     console.log(files);
 
 //     // Build array for Rust: { id, index }
@@ -582,10 +638,10 @@ function offsetX(path: string, dx: number): string {
 //     console.log(updates);
 
 //     const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-//       started: (data) => {
-//         console.log("STARTED SORT");
+//       started: data => {
+//         console.log('STARTED SORT');
 //       },
-//       progress: (data) => {
+//       progress: data => {
 //         // appState.update((state) => {
 //         //   const s = state.sections;
 //         //   const allFiles = getAllFiles(s);
@@ -595,7 +651,6 @@ function offsetX(path: string, dx: number): string {
 //         //     }
 //         //   });
 //         //   state.sections = s;
-
 //         //   const t = state.timelineItems;
 //         //   t.forEach((timelineItem) => {
 //         //     if (timelineItem.id === data.id) {
@@ -604,22 +659,21 @@ function offsetX(path: string, dx: number): string {
 //         //   });
 //         //   t.sort((a, b) => a.startOffset - b.startOffset);
 //         //   state.timelineItems = t;
-
 //         //   return state;
 //         // });
 //         // console.log(data);
 //         // console.log("PROGRESS");
 //       },
-//       finished: (data) => {
-//         console.log("FINISHED SORT");
+//       finished: data => {
+//         console.log('FINISHED SORT');
 //       },
 //     });
 
-//     invoke("update_sorting", { updates, onEvent })
-//       .then((newOrder) => {
-//         updateInputs($appState.sections)
+//     invoke('update_sorting', { updates, onEvent })
+//       .then(newOrder => {
+//         updateInputs($appState.sections);
 //         console.log(newOrder);
 //       })
-//       .catch((err) => console.error("Tauri invoke failed", err));
+//       .catch(err => console.error('Tauri invoke failed', err));
 //   }, 100); // 100ms debounce
 // });
