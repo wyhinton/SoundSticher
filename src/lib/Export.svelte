@@ -1,15 +1,11 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte";
-  import { save as testSave } from "@tauri-apps/plugin-dialog";
-  import { invokeWithPerf } from "./state/performance";
-  import { get } from "svelte/store";
-  import {
-    exportState,
-    type ExportSettings,
-    type ExportState,
-  } from "./state/export";
-  import { formatPercent } from "./utils/format";
-  import { appState, getAllFiles } from "./state/state.svelte";
+  import { createEventDispatcher } from 'svelte';
+  import { save as testSave } from '@tauri-apps/plugin-dialog';
+  import { invokeWithPerf } from './state/performance';
+  import { get } from 'svelte/store';
+  import { exportState, type ExportSettings, type ExportState } from './state/export';
+  import { formatPercent } from './utils/format';
+  import { appState, getAllFiles } from './state/state.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -20,9 +16,9 @@
   const update = (k: keyof ExportSettings, v: any) => {
     console.log(k);
     console.log(v);
-    if (k === "format") {
+    if (k === 'format') {
       let newSettings = { ...expState.settings, format: v };
-      if (v === "mp3") {
+      if (v === 'mp3') {
         newSettings.bitrate ??= 192;
       } else {
         delete newSettings.bitrate;
@@ -34,13 +30,13 @@
     // console.log(exportState)
     // persist immediately
     exportState.set(expState);
-    dispatch("exportSettingsChanged", expState);
+    dispatch('exportSettingsChanged', expState);
   };
 
   const formatFields: Record<string, (keyof ExportSettings)[]> = {
-    wav: ["sampleRate", "bitDepth", "channels"],
-    flac: ["sampleRate", "bitDepth", "channels"],
-    mp3: ["sampleRate", "channels", "bitrate"],
+    wav: ['sampleRate', 'bitDepth', 'channels'],
+    flac: ['sampleRate', 'bitDepth', 'channels'],
+    mp3: ['sampleRate', 'channels', 'bitrate'],
   };
   $: visibleFields = formatFields[expState.settings?.format] ?? [];
 
@@ -48,27 +44,27 @@
     const path = await testSave({
       filters: [
         {
-          name: "Audio Files",
+          name: 'Audio Files',
           extensions: [expState.settings.format],
         },
       ],
     });
     if (path) {
-      await invokeWithPerf("export_combined_audio_as_wav", {
+      await invokeWithPerf('export_combined_audio_as_wav', {
         outputPath: path,
       });
     }
   };
 </script>
 
-<div style="font-size: 0.9rem" class="px-2 mt-1">
+<div style="font-size: 0.9rem" class="p-2 export-panel">
   <div class="row">
     <div class="col-2">
       <label
         >Filename <input
           type="text"
           bind:value={expState.settings.filename}
-          on:input={() => update("filename", expState.settings.filename)}
+          on:input={() => update('filename', expState.settings.filename)}
         />
       </label>
     </div>
@@ -76,19 +72,19 @@
       <label
         >Format <select
           bind:value={expState.settings.format}
-          on:change={() => update("format", expState.settings.format)}
+          on:change={() => update('format', expState.settings.format)}
         >
           <option value="wav">WAV</option> <option value="mp3">MP3</option>
           <option value="flac">FLAC</option>
         </select>
       </label>
     </div>
-    {#if visibleFields.includes("sampleRate")}
+    {#if visibleFields.includes('sampleRate')}
       <div class="col-1">
         <label
           >Sample Rate <select
             bind:value={expState.settings.sampleRate}
-            on:change={() => update("sampleRate", expState.settings.sampleRate)}
+            on:change={() => update('sampleRate', expState.settings.sampleRate)}
           >
             <option value={44100}>44100</option>
             <option value={48000}>48000</option>
@@ -97,12 +93,12 @@
         </label>
       </div>
     {/if}
-    {#if visibleFields.includes("bitDepth")}
+    {#if visibleFields.includes('bitDepth')}
       <div class="col-1">
         <label
           >Bit Depth <select
             bind:value={expState.settings.bitDepth}
-            on:change={() => update("bitDepth", expState.settings.bitDepth)}
+            on:change={() => update('bitDepth', expState.settings.bitDepth)}
           >
             <option value={16}>16</option> <option value={24}>24</option>
             <option value={32}>32</option>
@@ -110,24 +106,24 @@
         </label>
       </div>
     {/if}
-    {#if visibleFields.includes("channels")}
+    {#if visibleFields.includes('channels')}
       <div class="col-1">
         <label
           >Channels <select
             bind:value={expState.settings.channels}
-            on:change={() => update("channels", expState.settings.channels)}
+            on:change={() => update('channels', expState.settings.channels)}
           >
             <option value={1}>Mono</option> <option value={2}>Stereo</option>
           </select>
         </label>
       </div>
     {/if}
-    {#if visibleFields.includes("bitrate")}
+    {#if visibleFields.includes('bitrate')}
       <div class="col-1">
         <label
           >Bitrate (kbps) <select
             bind:value={expState.settings.bitrate}
-            on:change={() => update("bitrate", expState.settings.bitrate)}
+            on:change={() => update('bitrate', expState.settings.bitrate)}
           >
             <option value={128}>128</option> <option value={192}>192</option>
             <option value={256}>256</option> <option value={320}>320</option>
@@ -140,7 +136,7 @@
         <button
           class="btn btn-sm btn-success"
           class:disabled={getAllFiles($appState.sections).length === 0}
-          on:click={(e) => {
+          on:click={e => {
             saveAudio();
           }}
           >Export <i class="fa-solid fa-right-to-bracket"></i>
@@ -156,13 +152,19 @@
         {/if}
       {/if}
       {#if $exportState && $exportState.error}
-        <div class="d-flex text-danger"><i class="fa-solid fa-triangle-exclamation mt-1 me-1"></i>{$exportState.error}</div>
+        <div class="d-flex text-danger">
+          <i class="fa-solid fa-triangle-exclamation mt-1 me-1"></i>{$exportState.error}
+        </div>
       {/if}
     </div>
   </div>
 </div>
 
 <style>
+  .export-panel {
+    background-color: #2d3747;
+    border: 1px solid #1a252f;
+  }
   select,
   input {
     font-size: 0.85rem;
@@ -172,7 +174,6 @@
     width: 100%;
     height: 28px;
     background-color: #101010;
-
   }
   label {
     display: flex;
@@ -182,7 +183,7 @@
   }
 
   .dots::after {
-    content: "";
+    content: '';
     display: inline-block;
     width: 1em;
     text-align: left;
@@ -191,19 +192,19 @@
 
   @keyframes dots {
     0% {
-      content: "";
+      content: '';
     }
     25% {
-      content: ".";
+      content: '.';
     }
     50% {
-      content: "..";
+      content: '..';
     }
     75% {
-      content: "...";
+      content: '...';
     }
     100% {
-      content: "";
+      content: '';
     }
   }
 </style>

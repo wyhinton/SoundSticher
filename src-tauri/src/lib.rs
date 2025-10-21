@@ -122,6 +122,7 @@ pub fn run() {
             timeline_playback::get_current_play_progress,
             timeline_playback::play_timeline_audio,
             timeline_playback::pause_timeline_audio,
+            timeline_playback::stop_timeline_audio,
             timeline_playback::set_volume,
             get_metadata,
             combine::test_async,

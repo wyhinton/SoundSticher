@@ -6,13 +6,15 @@
     getAllFiles,
     triggerFileAnimation,
     applySyncIndexes,
-  } from './state/state.svelte';
+    durationSeconds,
+  } from '../state/state.svelte';
   import { listen, TauriEvent } from '@tauri-apps/api/event';
-  import { formatFileName } from './utils/format';
-  import TimelineSegment from './TimelineSegment.svelte';
-  import LabelLayer from './LabelLayer.svelte';
-  import { invokeWithPerf, updateInputs } from './state/performance';
-  import { generateProgressChannel, type SortAudioEvent } from './state/events';
+  import { formatFileName } from '../utils/format';
+  import TimelineSegment from './Timeline/TimelineSegment.svelte';
+  import LabelLayer from './Timeline/LabelLayer.svelte';
+  import Playhead from './Timeline/Playhead.svelte';
+  import { invokeWithPerf, updateInputs } from '../state/performance';
+  import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel } from '@tauri-apps/api/core';
   import { get } from 'svelte/store';
 
@@ -23,10 +25,6 @@
   let labelGroup: SVGGElement;
 
   const height = 120;
-  $: durationSeconds =
-    $appState?.combinedFileLength && $appState.sections.length > 0
-      ? $appState.combinedFileLength
-      : 30;
   $: if ($appState?.combinedFileLength && width > 0) {
     updateScales();
   }
@@ -53,14 +51,14 @@
   const DEBUG_MODE = false;
 
   function updateScales() {
-    xScale = d3.scaleLinear().domain([0, durationSeconds]).range([0, width]);
+    xScale = d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]);
     scaleX = width / originalPathWidth;
     renderAxis(xScale);
   }
 
   listen<number>('timeline-progress', event => {
-    console.log(event.payload * durationSeconds);
-    playHeadPosition = event.payload * durationSeconds;
+    console.log(event.payload * $durationSeconds);
+    playHeadPosition = event.payload * $durationSeconds;
     // playHeadPosition = event.payload;
   });
 
@@ -68,11 +66,11 @@
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
     const clickedTime = currentTransform
-      .rescaleX(d3.scaleLinear().domain([0, durationSeconds]).range([0, width]))
+      .rescaleX(d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]))
       .invert(relativeX);
     console.log(clickedTime);
     // playHeadPosition =
-    const newPlayPosition = Math.max(0, Math.min(clickedTime, durationSeconds));
+    const newPlayPosition = Math.max(0, Math.min(clickedTime, $durationSeconds));
     console.log(newPlayPosition);
     console.log(clickedTime);
     invokeWithPerf('set_timeline_play_position', { position: clickedTime });
@@ -145,7 +143,7 @@
             `translate(${event.transform.x}, 0) scale(${event.transform.k}, 1)`
           );
           const newXScale = currentTransform.rescaleX(
-            d3.scaleLinear().domain([0, durationSeconds]).range([0, width])
+            d3.scaleLinear().domain([0, $durationSeconds]).range([0, width])
           );
           renderAxis(newXScale);
         })
@@ -382,45 +380,49 @@
             pointer-events="none"
             id="waveform-path"
           />
-          <rect x={playHeadX} y={0} width={1 / currentTransform.k} height="80" fill="red" />
+
+          <Playhead {playHeadX} {currentTransform} />
+
           <!-- {#if $appState?.timelneItems} -->
-          {#if $appState?.timelineItems.length > 0}
-            {#each $appState?.timelineItems as timelineItem, i}
-              <TimelineSegment
-                {scaleX}
-                index={i}
-                startOffset={timelineItem.startOffset}
-                size={timelineItem.size}
-                label={formatFileName(timelineItem.fileName)}
-                {originalPathWidth}
-                zoomTransform={currentTransform}
-                itemType={timelineItem.type}
-                id={timelineItem.id}
-                {DEBUG_MODE}
-                on:dragStart={handleDragStart}
-                on:dragMove={handleDragMove}
-                on:dragEnd={handleDragEnd}
-              />
-              <!-- <text
-                x={(timelineItem.startOffset * originalPathWidth) + 4}
-                y={40}
-                dominant-baseline="middle"
-                fill="white"
-                font-size="10"
-                font-family="monospace"
-                pointer-events="none"
-              >{formatFileName(timelineItem.fileName)}</text>
-              <rect
-                x={timelineItem.startOffset * originalPathWidth}
-                y={0}
-                width={timelineItem.size*originalPathWidth}
-                height="80"
-                fill="rgba(0, 200, 255, 0.15)"
-                stroke="rgba(0, 200, 255, 0.5)"
-                stroke-width="0.5"
-              /> -->
-            {/each}
-          {/if}
+          <g class="timeline-segments">
+            {#if $appState?.timelineItems.length > 0}
+              {#each $appState?.timelineItems as timelineItem, i}
+                <TimelineSegment
+                  {scaleX}
+                  index={i}
+                  startOffset={timelineItem.startOffset}
+                  size={timelineItem.size}
+                  label={formatFileName(timelineItem.fileName)}
+                  {originalPathWidth}
+                  zoomTransform={currentTransform}
+                  itemType={timelineItem.type}
+                  id={timelineItem.id}
+                  {DEBUG_MODE}
+                  on:dragStart={handleDragStart}
+                  on:dragMove={handleDragMove}
+                  on:dragEnd={handleDragEnd}
+                />
+                <!-- <text
+                  x={(timelineItem.startOffset * originalPathWidth) + 4}
+                  y={40}
+                  dominant-baseline="middle"
+                  fill="white"
+                  font-size="10"
+                  font-family="monospace"
+                  pointer-events="none"
+                >{formatFileName(timelineItem.fileName)}</text>
+                <rect
+                  x={timelineItem.startOffset * originalPathWidth}
+                  y={0}
+                  width={timelineItem.size*originalPathWidth}
+                  height="80"
+                  fill="rgba(0, 200, 255, 0.15)"
+                  stroke="rgba(0, 200, 255, 0.5)"
+                  stroke-width="0.5"
+                /> -->
+              {/each}
+            {/if}
+          </g>
         </g>
       </g>
       {#if $appState?.timelineItems.length > 0}
@@ -480,7 +482,7 @@
         <b>ScaleX:</b>
         {scaleX.toFixed(2)} |
         <b>Dur:</b>
-        {durationSeconds.toFixed(1)}s |
+        {$durationSeconds.toFixed(1)}s |
         <b>PlayPos:</b>
         {playHeadPosition.toFixed(1)}s |
         <b>Zoom:</b>

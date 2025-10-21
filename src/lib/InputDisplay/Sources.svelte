@@ -10,11 +10,11 @@
     getAllFiles,
     updatePath,
     applySyncIndexes,
-  } from './state/state.svelte';
-  import { toCssRgb } from './utils/colors';
+  } from '../state/state.svelte';
+  import { toCssRgb } from '../utils/colors';
   import { onMount, tick } from 'svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
-  import { isPointInRect } from './utils/dragdrop';
+  import { isPointInRect } from '../utils/dragdrop';
   import lottie from 'lottie-web';
 
   import {
@@ -23,13 +23,13 @@
     positionStore,
     setInputsUnderMouse,
     setIsOverTableContainer,
-  } from './state/position';
-  import SineWaveShader from './SineWaveShader.svelte';
+  } from '../state/position';
+  import SineWaveShader from '../Examples/SineWaveShader.svelte';
   import EditableInput from './EditableInput.svelte';
   import { get } from 'svelte/store';
-  import { generateProgressChannel, type SortAudioEvent } from './state/events';
+  import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
-  import { invokeWithPerf, updateInputs, type Result } from './state/performance';
+  import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
 
   // Local sorting function - moved from store
   function getSortedFiles(state: typeof $appState) {
@@ -304,7 +304,13 @@
             </td>
             <td>
               <div class="d-flex justify-content-center">
-                <button class="text-danger" onclick={() => deleteSection(sectionIndex)}> X </button>
+                <button
+                  class="action-button"
+                  onclick={() => deleteSection(sectionIndex)}
+                  title="Delete section"
+                >
+                  <i class="fas fa-ellipsis-v"></i>
+                </button>
               </div>
             </td>
           </tr>
@@ -365,5 +371,29 @@
     font-size: 12px;
     display: flex;
     flex-direction: column;
+  }
+
+  .action-button {
+    background: none;
+    border: none;
+    color: #9d9d9d;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .action-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #e74c3c;
+    transform: scale(1.1);
+  }
+
+  .action-button:active {
+    transform: scale(0.95);
   }
 </style>

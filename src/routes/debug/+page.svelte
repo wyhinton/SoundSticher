@@ -18,6 +18,8 @@
   import { examples } from '$lib/utils/examples';
   import { onDestroy, onMount } from 'svelte';
   import { Channel, invoke } from '@tauri-apps/api/core';
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import type { CombineAudioEvent, ExportAudioEvent } from '$lib/state/events';
   import { exportState } from '$lib/state/export';
   let highlighted = '';
@@ -194,6 +196,37 @@
   });
 
   let selectedKey = Object.keys(examples)[0]; // default selection
+
+  const resetMainWindow = async () => {
+    try {
+      // Get reference to the main window by its label
+      const mainWindow = await WebviewWindow.getByLabel('main');
+      if (!mainWindow) {
+        console.error('Main window not found');
+        return;
+      }
+      // Close the main window
+      await mainWindow.close();
+
+      // Create a new main window with the same properties
+      const newWindow = new WebviewWindow('main', {
+        url: '/',
+        title: 'Sound Stitch',
+        width: 1200,
+        height: 800,
+        center: true,
+        resizable: true,
+        decorations: true,
+      });
+
+      // Wait for the new window to be ready
+      await newWindow.once('tauri://created', () => {
+        console.log('New main window created');
+      });
+    } catch (error) {
+      console.error('Failed to reset main window:', error);
+    }
+  };
 </script>
 
 <div>
@@ -202,6 +235,12 @@
       resetAppState();
     }}
     class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Reset AppState</button
+  >
+  <button
+    on:click={() => {
+      resetMainWindow();
+    }}
+    class="btn btn-sm"><i class="fa fa-window-restore"></i>Reset Main Window</button
   >
   <button
     on:click={() => {
