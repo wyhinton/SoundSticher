@@ -1,6 +1,6 @@
 export const files = $state<string[]>([]);
 import { persisted } from 'svelte-persisted-store';
-import { get, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
 import { ABLETON_COLORS, type AbletonColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
@@ -539,6 +539,13 @@ function offsetX(path: string, dx: number): string {
     return `${cmd}${x ?? ''}${y ?? ''}`;
   });
 }
+
+// Derived store for duration in seconds - used by Timeline and other components
+export const durationSeconds = derived(appState, $appState => {
+  return $appState?.combinedFileLength && $appState.sections.length > 0
+    ? $appState.combinedFileLength
+    : 30;
+});
 
 // Function to sync file indices with backend response and trigger animations
 export function syncIndexes(

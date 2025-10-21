@@ -2,15 +2,16 @@
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
   import { appState } from './state/state.svelte';
-  import Section from './FileTable.svelte';
-  import Plotted from './Timeline.svelte';
-  import Sources from './Sources.svelte';
-  import PlottedInfo from './PlottedInfo.svelte';
+  import Section from './InputDisplay/FileTable.svelte';
+  import Plotted from './PlaybackDisplay/Timeline.svelte';
+  import Sources from './InputDisplay/Sources.svelte';
+  import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import type { Event, UnlistenFn } from '@tauri-apps/api/event';
   import Toolbar from './Toolbar.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { invokeWithPerf, updateInputs } from './state/performance';
   import Export from './Export.svelte';
+  import Footer from './Footer.svelte';
   import { exportState } from './state/export';
   import { get } from 'svelte/store';
 
@@ -43,7 +44,6 @@
         }
         return s;
       });
-      // Add your logic here
     }
   };
 
@@ -63,23 +63,36 @@
   });
 </script>
 
-<Toolbar></Toolbar>
+<!-- <Toolbar></Toolbar> -->
 
-<div class="">
-  <div class="px-0 d-flex">
-    <Sources></Sources>
-    <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
-    <Section sections={$appState.sections}></Section>
+<div class="main-content d-flex flex-column">
+  <div class="content-area flex-grow-1">
+    <div class="px-0 d-flex">
+      <Sources></Sources>
+      <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
+      <Section sections={$appState.sections}></Section>
+    </div>
+    <!-- <Waveform></Waveform> -->
+    <PlottedInfo></PlottedInfo>
+    <Plotted></Plotted>
+    <Export></Export>
   </div>
-  <!-- <Waveform></Waveform> -->
-  <PlottedInfo></PlottedInfo>
-  <Plotted></Plotted>
-  <Export></Export>
+  <Footer></Footer>
 </div>
 
 <style>
   .blender-icon > svg {
     height: 12px;
     width: 12px;
+  }
+
+  .main-content {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .content-area {
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 </style>

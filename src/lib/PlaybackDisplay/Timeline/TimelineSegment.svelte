@@ -4,7 +4,7 @@
     hoveredSourceItem,
     hoveredTimelineItem,
     type TimelineItemType,
-  } from './state/state.svelte';
+  } from '../../state/state.svelte';
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
   export let index: number;
@@ -37,14 +37,15 @@
   // Drag state
   let isDragging = false;
   let gElement: SVGGElement;
+  let timelineDiv: HTMLDivElement;
 
   // Set up d3 drag behavior
   onMount(() => {
     fillAlpha.set(0.0);
 
-    // Configure d3 drag behavior
+    // Configure d3 drag behavior - on the entire timeline div
     const drag = d3
-      .drag<SVGGElement, unknown>()
+      .drag<HTMLDivElement, unknown>()
       .on('start', function (event) {
         isDragging = true;
         console.log(`Started dragging segment ${index} with d3.drag`);
@@ -82,24 +83,22 @@
         });
       });
 
-    // Apply drag behavior to the SVG group element
-    d3.select(gElement).call(drag);
+    // Apply drag behavior to the entire timeline div
+    d3.select(timelineDiv).call(drag);
   });
 </script>
 
-<!-- Timeline segment using SVG group with d3 drag behavior -->
+<!-- Timeline segment using SVG group with drag handle -->
 <g
   bind:this={gElement}
   transform={`scale(${scaleX}, 1)`}
   class="segment-rect"
   class:dragging={isDragging}
-  style="cursor: {isDragging ? 'grabbing' : 'grab'}"
 >
   <foreignObject x={rectX} y={-20} width={rectWidth} height="150">
     <div
+      bind:this={timelineDiv}
       xmlns="http://www.w3.org/1999/xhtml"
-      on:mouseenter={() => hoveredTimelineItem.set(index)}
-      on:mouseleave={() => hoveredTimelineItem.set(null)}
       class="timeline-segment-div"
       class:hovered={$hoveredSourceItem == index}
       class:dragging={isDragging}
@@ -107,11 +106,17 @@
         width: 100%;
         height: 150px;
         background-color: rgba(0, 200, 255, {$hoveredSourceItem == index ? 0.4 : $fillAlpha});
-        border: 0.5px solid rgba(0, 200, 255, 0.5);
         box-sizing: border-box;
         pointer-events: all;
+        cursor: {isDragging ? 'grabbing' : 'grab'};
       "
     >
+      <!-- <div
+        on:mouseenter={() => hoveredTimelineItem.set(index)}
+        on:mouseleave={() => hoveredTimelineItem.set(null)}
+        class="segment-head"
+      ></div> -->
+
       {#if DEBUG_MODE}
         dragging: {isDragging}
         id: {id}
@@ -121,6 +126,15 @@
 </g>
 
 <style>
+  .segment-head {
+    border: 1px solid red;
+    width: 100%;
+    height: 10px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: rgb(48, 145, 241);
+  }
   .timeline-segment-div {
     transition:
       background-color 0.2s ease,

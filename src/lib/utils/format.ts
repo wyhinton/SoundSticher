@@ -1,19 +1,23 @@
 export function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return "0 Bytes";
+  if (bytes === 0) return '0 Bytes';
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
 export function formatMilliseconds(ms: number): string {
-  const seconds = ms / 1000;
-  return `${seconds.toFixed(2)}s`;
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const milliseconds = Math.floor(ms % 1000);
+
+  return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 }
 
 export function formatFileName(filePath: string): string {
-  return filePath.split(/[/\\]/).pop() || "";
+  return filePath.split(/[/\\]/).pop() || '';
 }
 
 export function formatPercent(value: number): string {
@@ -25,9 +29,9 @@ export function toSource(obj) {
     JSON.stringify(
       obj,
       (key, value) => {
-        if (typeof value === "string") {
+        if (typeof value === 'string') {
           // Escape backslashes
-          return value.replace(/\\/g, "\\\\");
+          return value.replace(/\\/g, '\\\\');
         }
         return value;
       },

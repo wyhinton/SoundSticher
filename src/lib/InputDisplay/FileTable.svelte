@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { formatBytes, formatMilliseconds } from './utils/format';
+  import { formatBytes, formatMilliseconds } from '../utils/format';
   import {
     animatedIds,
     appState,
@@ -12,10 +12,10 @@
     setUnderMouse,
     applySyncIndexes,
     type Section,
-  } from './state/state.svelte';
-  import { generateProgressChannel, type SortAudioEvent } from './state/events';
+  } from '../state/state.svelte';
+  import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel } from '@tauri-apps/api/core';
-  import { invokeWithPerf, updateInputs } from './state/performance';
+  import { invokeWithPerf, updateInputs } from '../state/performance';
 
   export let sections: Section[];
 

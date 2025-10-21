@@ -153,13 +153,13 @@ pub fn play_timeline_audio(
                 std::thread::sleep(Duration::from_millis(16)); // 20 FPS for smooth animation
             }
 
-            // Update progress to complete
-            {
-                let mut current_progress = state_clone.current_play_progress.lock().unwrap();
-                *current_progress = 1.0;
-            }
+            // // Update progress to complete
+            // {
+            //     let mut current_progress = state_clone.current_play_progress.lock().unwrap();
+            //     *current_progress = 1.0;
+            // }
 
-            let _ = app_clone.emit("timeline-progress", 1.0);
+            // let _ = app_clone.emit("timeline-progress", 1.0);
         });
 
         // This blocks, but now it's in its own thread and doesn't hold any locks
@@ -168,7 +168,7 @@ pub fn play_timeline_audio(
 }
 
 #[tauri::command]
-pub fn pause_timeline_audio(state: State<'_, Arc<AppState>>) {
+pub fn pause_timeline_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
     println!("PAUSING");
     let current_song = state.current_song.lock().unwrap();
     if let Some(sink) = &*current_song {
@@ -190,6 +190,12 @@ pub fn pause_timeline_audio(state: State<'_, Arc<AppState>>) {
                 0.0
             }
         };
+
+        // Calculate normalized progress (same as current_progress, but ensure consistency)
+        let normalized_progress = current_progress;
+
+        // Emit progress update to frontend
+        let _ = app.emit("timeline-progress", normalized_progress);
 
         // Update seek_start_time to the current position so resume continues from here
         {
@@ -375,4 +381,33 @@ fn set_timeline_play_position_fallback(
 
         sink.sleep_until_end();
     });
+}
+
+#[tauri::command]
+pub fn stop_timeline_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
+    println!("STOPPING");
+    let current_song = state.current_song.lock().unwrap();
+    if let Some(sink) = &*current_song {
+        sink.stop(); // Stop playback immediately
+        sink.clear(); // Clear any buffered audio
+
+        // Reset progress to 0
+        {
+            let mut current_progress = state.current_play_progress.lock().unwrap();
+            *current_progress = 0.0;
+        }
+
+        // Reset seek start time to 0
+        {
+            let mut seek_start = state.seek_start_time.lock().unwrap();
+            *seek_start = 0.0;
+        }
+
+        // Emit progress update to frontend
+        let _ = app.emit("timeline-progress", 0.0);
+
+        println!("Stopped and reset to beginning");
+    } else {
+        println!("STOP FAILED - No audio playing");
+    }
 }
