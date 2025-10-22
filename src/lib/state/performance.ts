@@ -40,6 +40,7 @@ export interface PerformanceState {
   update_sorting: PerformanceMetric[];
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
   set_timeline_play_position: PerformanceMetric[];
+  stop_timeline_audio: PerformanceMetric[];
 }
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
@@ -62,6 +63,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   update_sorting: [],
   combine_all_cached_samples_with_custom_order: [],
   set_timeline_play_position: [],
+  stop_timeline_audio: [],
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {

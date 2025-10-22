@@ -1,9 +1,11 @@
 <script lang="ts">
   import type * as d3 from 'd3';
+  import { appState } from '../../state/state.svelte';
 
   export let playHeadX: number;
   export let currentTransform: d3.ZoomTransform;
-  const playheadCol = 'white';
+
+  $: playheadCol = $appState.playingCombined ? '#68d391' : 'white';
 </script>
 
 <!-- CURRENT PLAYHEAD -->

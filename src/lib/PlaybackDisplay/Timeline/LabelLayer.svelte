@@ -12,7 +12,7 @@
 
   // Estimate monospace char width at 10px font size
   const charWidth = 6.2;
-  const fontSize = 10;
+  const fontSize = 11;
   const paddingX = 0;
   const paddingY = 2;
 
@@ -79,6 +79,7 @@
       fill={textColor}
       font-size={fontSize}
       font-family="monospace"
+      font-weight="bold"
       pointer-events="none"
       clip-path={`url(#clip-${i})`}
     >

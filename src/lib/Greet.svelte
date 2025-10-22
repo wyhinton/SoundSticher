@@ -38,7 +38,7 @@
       appState.update(s => {
         s.playingCombined = !s.playingCombined;
         if (s.playingCombined) {
-          invokeWithPerf('play_timeline_audio', { startSeconds: 0 });
+          invokeWithPerf('play_timeline_audio');
         } else {
           invokeWithPerf('pause_timeline_audio');
         }

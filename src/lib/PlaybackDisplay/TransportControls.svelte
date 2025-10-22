@@ -1,10 +1,17 @@
 <script lang="ts">
+  import { appState, durationSeconds } from '$lib/state/state.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import { appState, durationSeconds } from '../state/state.svelte';
-  import TimelineInfo from './TimelineInfo.svelte';
+  import TimeDisplay from './TimeDisplay.svelte';
+  import { formatMilliseconds } from '$lib/utils/format';
+  import { invokeWithPerf } from '$lib/state/performance';
 
+  let bufferingProgress = 0;
   let playHeadPosition = 0;
+
+  listen<number>('buffering-progress', e => {
+    bufferingProgress = e.payload;
+  });
 
   listen<number>('timeline-progress', event => {
     console.log(event.payload * $durationSeconds);
@@ -14,6 +21,8 @@
   // Transport control functions
   async function handlePlay() {
     try {
+      let startPosition = playHeadPosition;
+      console.log(startPosition);
       await invoke('play_timeline_audio', { start_seconds: playHeadPosition });
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -21,6 +30,8 @@
   }
 
   async function handlePause() {
+    console.log(`%cHERE LINE :31 %c`, 'color: yellow; font-weight: bold', '');
+
     try {
       await invoke('pause_timeline_audio');
     } catch (error) {
@@ -55,66 +66,61 @@
   // Loop and record are UI-only for now
   let isLoopEnabled = false;
   function toggleLoop() {
-    isLoopEnabled = !isLoopEnabled;
+    appState.update(s => {
+      s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
+      return s;
+    });
   }
 
-  function handleRecord() {
-    // Record functionality not implemented yet
-    console.log('Record functionality not implemented yet');
-  }
+  listen('audio-playback-ended', e => {
+    console.log(`%cHERE LINE :75 %c`, 'color: brown; font-weight: bold', '');
+    if ($appState.isLoopingTimelineAudio) {
+      invokeWithPerf('stop_timeline_audio', { start_seconds: 0 }).then(() => {
+        invokeWithPerf('play_timeline_audio');
+      });
+    }
+  });
 </script>
+
+{#snippet transportButton(
+  icon: string,
+  title: string,
+  onclick: () => void,
+  buttonClass: string = '',
+  active: boolean = false,
+  disabled: boolean = false
+)}
+  <button
+    class="btn btn-transport {buttonClass}"
+    class:active
+    {title}
+    on:click={onclick}
+    {disabled}
+  >
+    <i class="fa-solid {icon}"></i>
+  </button>
+{/snippet}
 
 <!-- Audacity-style Transport Controls -->
 <div class="transport-controls d-flex align-items-center gap-2 py-2 px-2">
-  <!-- Skip to Start -->
-  <button class="btn btn-transport" title="Skip to Start" on:click={handleSkipToStart}>
-    <i class="fa-solid fa-backward-step"></i>
-  </button>
-
-  <!-- Play -->
-  <button
-    class="btn btn-transport btn-play"
-    class:active={$appState.playingCombined}
-    title="Play"
-    on:click={handlePlay}
-  >
-    <i class="fa-solid fa-play"></i>
-  </button>
-
-  <!-- Pause -->
-  <button
-    class="btn btn-transport btn-pause"
-    class:active={!$appState.playingCombined && playHeadPosition > 0}
-    title="Pause"
-    on:click={handlePause}
-  >
-    <i class="fa-solid fa-pause"></i>
-  </button>
-
-  <!-- Stop -->
-  <button class="btn btn-transport btn-stop" title="Stop" on:click={handleStop}>
-    <i class="fa-solid fa-stop"></i>
-  </button>
-
-  <!-- Record -->
-  <button class="btn btn-transport btn-record" title="Record" on:click={handleRecord} disabled>
-    <i class="fa-solid fa-circle record-icon"></i>
-  </button>
-
-  <!-- Skip to End -->
-  <button class="btn btn-transport" title="Skip to End" on:click={handleSkipToEnd}>
-    <i class="fa-solid fa-forward-step"></i>
-  </button>
-
-  <!-- Loop Toggle -->
-  <button
-    class="btn btn-transport btn-loop"
-    class:active={isLoopEnabled}
-    title="Loop"
-    on:click={toggleLoop}
-  >
-    <i class="fa-solid fa-repeat"></i>
-  </button>
+  {@render transportButton('fa-backward-step', 'Skip to Start', handleSkipToStart)}
+  {@render transportButton('fa-play', 'Play', handlePlay, 'btn-play', $appState.playingCombined)}
+  {@render transportButton(
+    'fa-pause',
+    'Pause',
+    handlePause,
+    'btn-pause',
+    !$appState.playingCombined && playHeadPosition > 0
+  )}
+  {@render transportButton('fa-stop', 'Stop', handleStop, 'btn-stop')}
+  {@render transportButton('fa-forward-step', 'Skip to End', handleSkipToEnd)}
+  {@render transportButton(
+    'fa-repeat',
+    'Loop',
+    toggleLoop,
+    'btn-loop',
+    $appState.isLoopingTimelineAudio
+  )}
 </div>
 
 <style>
@@ -190,5 +196,53 @@
     background: linear-gradient(to bottom, #319795, #2c7a7b);
     border-color: #234e52;
     color: white;
+  }
+
+  .info-panel {
+    background: #2d3748;
+    border: 1px solid #1a252f;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    font-size: 11px;
+  }
+
+  .info-divider {
+    width: 1px;
+    height: 20px;
+    background: #4a5568;
+    margin: 0 4px;
+  }
+
+  .info-item {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .info-label {
+    color: #a0aec0;
+    font-weight: 500;
+  }
+
+  .info-value {
+    color: #e2e8f0;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #e9ecef 25%, #f8f9fa 50%, #e9ecef 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 2px;
+  }
+
+  @keyframes loading {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
   }
 </style>

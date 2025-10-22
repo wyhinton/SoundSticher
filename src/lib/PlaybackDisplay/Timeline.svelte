@@ -13,6 +13,7 @@
   import TimelineSegment from './Timeline/TimelineSegment.svelte';
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
+  import DropIndicator from './Timeline/DropIndicator.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel } from '@tauri-apps/api/core';
@@ -49,6 +50,7 @@
   const debugShowDropLine = false;
 
   const DEBUG_MODE = false;
+  const timelineXAxisBg = '#1d1c23';
 
   function updateScales() {
     xScale = d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]);
@@ -353,6 +355,8 @@
     dropIndicatorIndex = -1;
     dropIndicatorX = 0;
   }
+
+  const tempYCenter = 35;
 </script>
 
 <div class="svg-container position-relative">
@@ -371,6 +375,18 @@
     <svg class="waveform-svg-parent" bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
       <g transform={`translate(0, ${20})`}>
         <g bind:this={pathGroup} transform={``}>
+          <!-- Zero level baseline -->
+          <line
+            x1="0"
+            y1={tempYCenter}
+            x2={width}
+            y2={tempYCenter}
+            stroke="white"
+            stroke-width="1"
+            opacity="0.3"
+            pointer-events="none"
+          />
+
           <path
             d={$appState?.combinedFile?.svgPath}
             stroke="#3091f1"
@@ -434,31 +450,19 @@
           {currentTransform}
         ></LabelLayer>
       {/if}
-      <!-- Drop indicator line -->
-      {#if (isDragging && dropIndicatorIndex >= 0) || debugShowDropLine}
-        <line
-          x1={debugShowDropLine ? 100 : dropIndicatorX}
-          y1={-20}
-          x2={debugShowDropLine ? 100 : dropIndicatorX}
-          y2={130}
-          stroke="#00BFFF"
-          stroke-width={2}
-          stroke-dasharray={`4 2`}
-          opacity="0.8"
-          pointer-events="none"
-          class="drop-indicator-line"
-        />
-        <!-- Drop indicator arrow at top -->
-        <polygon
-          points={`${(debugShowDropLine ? 100 : dropIndicatorX) - arrowHeadSize},${arrowHeadY} ${(debugShowDropLine ? 100 : dropIndicatorX) + arrowHeadSize},${arrowHeadY} ${debugShowDropLine ? 100 : dropIndicatorX},${arrowHeadY + arrowHeadSize + 1}`}
-          fill="#00BFFF"
-          opacity="0.8"
-          pointer-events="none"
-        />
-      {/if}
+
+      <DropIndicator
+        {isDragging}
+        {dropIndicatorIndex}
+        {dropIndicatorX}
+        {arrowHeadY}
+        {arrowHeadSize}
+        {debugShowDropLine}
+      />
+
       <g> </g>
       <!-- TIMELINE BACKGROUND -->
-      <rect x="0" y={100} {width} height="20" fill="var(--bs-dark-bg-subtle);" />
+      <rect x="0" y={100} {width} height="20" fill={timelineXAxisBg} />
       <g bind:this={axisGroup} transform={`translate(0, ${height - 20})`} />
     </svg>
   </div>
@@ -515,7 +519,6 @@
 
 <style>
   .waveform-svg-parent {
-    margin-bottom: 6px;
   }
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);

@@ -39,6 +39,7 @@ export interface AppState {
   timelineItems: TimelineItem[];
   sortKey?: keyof AudioFileItem;
   sortDirection?: 'asc' | 'desc';
+  isLoopingTimelineAudio: boolean;
 }
 
 interface AudioFileItem {
@@ -100,6 +101,7 @@ export const appState = persisted<AppState>('appState', {
   playingCombined: false,
   combinedFile: undefined,
   timelineItems: [],
+  isLoopingTimelineAudio: false,
 });
 
 const defaults: AppState = {
@@ -109,6 +111,7 @@ const defaults: AppState = {
   playingCombined: false,
   combinedFile: undefined,
   timelineItems: [],
+  isLoopingTimelineAudio: false,
 };
 
 // appState.update(($appState) => ({
@@ -387,6 +390,7 @@ export function resetAppState() {
     state.playingSection = undefined;
     state.playProgress = undefined;
     state.isCombiningFile = false;
+    state.isLoopingTimelineAudio = false;
     return state;
   });
 }
