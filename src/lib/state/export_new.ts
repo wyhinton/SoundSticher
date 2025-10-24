@@ -38,6 +38,74 @@ export type EstimatedFileSize = {
   };
 };
 
+// Format-specific high-quality defaults
+export function getFormatDefaults(format: string): Partial<ExportSettings> {
+  switch (format.toLowerCase()) {
+    case 'wav':
+      return {
+        sampleRate: 48000, // Professional quality
+        bitDepth: 24, // High bit depth for dynamic range
+        channels: 2, // Stereo
+        bitrate: undefined, // Not applicable for WAV
+      };
+    case 'flac':
+      return {
+        sampleRate: 96000, // Very high quality for lossless
+        bitDepth: 24, // Maximum supported by most systems
+        channels: 2, // Stereo
+        bitrate: undefined, // Not applicable for FLAC (lossless)
+      };
+    case 'mp3':
+      return {
+        sampleRate: 48000, // High quality sample rate
+        bitDepth: 16, // Standard for lossy formats
+        channels: 2, // Stereo
+        bitrate: 320, // Near-transparent quality
+      };
+    case 'ogg':
+      return {
+        sampleRate: 48000, // High quality sample rate
+        bitDepth: 16, // Standard for lossy formats
+        channels: 2, // Stereo
+        bitrate: 256, // High quality for Vorbis
+      };
+    default:
+      return {
+        sampleRate: 44100,
+        bitDepth: 16,
+        channels: 2,
+        bitrate: undefined,
+      };
+  }
+}
+
+// Apply format defaults while preserving user choices for compatible settings
+export function applyFormatDefaults(
+  currentSettings: ExportSettings,
+  newFormat: string
+): ExportSettings {
+  const defaults = getFormatDefaults(newFormat);
+  const newSettings = {
+    ...currentSettings,
+    format: newFormat,
+    ...defaults,
+  };
+
+  // Preserve filename but update extension if it has one
+  if (currentSettings.filename) {
+    const nameParts = currentSettings.filename.split('.');
+    if (nameParts.length > 1) {
+      // Replace extension
+      newSettings.filename = nameParts.slice(0, -1).join('.') + '.' + newFormat;
+    } else {
+      // Add extension
+      newSettings.filename = currentSettings.filename + '.' + newFormat;
+    }
+  }
+
+  return newSettings;
+}
+
 export const exportState: Writable<ExportState> = persisted<ExportState>('exportSettings', {
   settings: {
     sampleRate: 44100,
@@ -143,72 +211,4 @@ export function calculateEstimatedFileSize(
       formatOverhead: estimatedBytes - rawAudioBytes,
     },
   };
-}
-
-// Format-specific high-quality defaults
-export function getFormatDefaults(format: string): Partial<ExportSettings> {
-  switch (format.toLowerCase()) {
-    case 'wav':
-      return {
-        sampleRate: 48000, // Professional quality
-        bitDepth: 24, // High bit depth for dynamic range
-        channels: 2, // Stereo
-        bitrate: undefined, // Not applicable for WAV
-      };
-    case 'flac':
-      return {
-        sampleRate: 96000, // Very high quality for lossless
-        bitDepth: 24, // Maximum supported by most systems
-        channels: 2, // Stereo
-        bitrate: undefined, // Not applicable for FLAC (lossless)
-      };
-    case 'mp3':
-      return {
-        sampleRate: 48000, // High quality sample rate
-        bitDepth: 16, // Standard for lossy formats
-        channels: 2, // Stereo
-        bitrate: 320, // Near-transparent quality
-      };
-    case 'ogg':
-      return {
-        sampleRate: 48000, // High quality sample rate
-        bitDepth: 16, // Standard for lossy formats
-        channels: 2, // Stereo
-        bitrate: 256, // High quality for Vorbis
-      };
-    default:
-      return {
-        sampleRate: 44100,
-        bitDepth: 16,
-        channels: 2,
-        bitrate: undefined,
-      };
-  }
-}
-
-// Apply format defaults while preserving user choices for compatible settings
-export function applyFormatDefaults(
-  currentSettings: ExportSettings,
-  newFormat: string
-): ExportSettings {
-  const defaults = getFormatDefaults(newFormat);
-  const newSettings = {
-    ...currentSettings,
-    format: newFormat,
-    ...defaults,
-  };
-
-  // Preserve filename but update extension if it has one
-  if (currentSettings.filename) {
-    const nameParts = currentSettings.filename.split('.');
-    if (nameParts.length > 1) {
-      // Replace extension
-      newSettings.filename = nameParts.slice(0, -1).join('.') + '.' + newFormat;
-    } else {
-      // Add extension
-      newSettings.filename = currentSettings.filename + '.' + newFormat;
-    }
-  }
-
-  return newSettings;
 }
