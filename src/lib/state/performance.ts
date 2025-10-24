@@ -40,6 +40,7 @@ export interface PerformanceState {
   update_sorting: PerformanceMetric[];
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
   set_timeline_play_position: PerformanceMetric[];
+  stop_timeline_audio: PerformanceMetric[];
 }
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
@@ -62,6 +63,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   update_sorting: [],
   combine_all_cached_samples_with_custom_order: [],
   set_timeline_play_position: [],
+  stop_timeline_audio: [],
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {
@@ -123,8 +125,10 @@ export async function updateInputs(sections: Section[]) {
   const onCombineAudioEvent = new Channel<CombineAudioEvent>();
 
   onCombineAudioEvent.onmessage = message => {
+    console.log(message);
     if (message.event === 'started') {
       appState.update(state => {
+        console.log(message);
         state.isCombiningFile = true;
         state.combinedFileLength = message.data.duration;
         state.timelineItems = [];

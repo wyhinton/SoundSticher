@@ -12,7 +12,7 @@
 
 <!-- Current Time Display -->
 <div class="time-display my-1">
-  <div class="current-time">
+  <div class="current-time" class:playing={$appState.playingCombined}>
     {formatMilliseconds(playHeadPosition * 1000)}
   </div>
   <div class="time-separator">/</div>
@@ -39,9 +39,14 @@
   }
 
   .current-time {
-    color: #68d391;
+    color: #cbd5e0;
     min-width: 60px;
     text-align: right;
+    transition: color 0.2s ease;
+  }
+
+  .current-time.playing {
+    color: #68d391;
   }
 
   .time-separator {
