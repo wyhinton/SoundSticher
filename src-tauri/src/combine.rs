@@ -287,7 +287,6 @@ pub async fn combine_all_cached_samples(
 
         // Process files in the specified order
         for audio_file in ordered_files {
-            println!("test: {}", *process_count.lock().unwrap());
             println!("audio file: {} ", audio_file.path.clone());
             if *process_count.lock().unwrap() != orig {
                 println!("🛑 Stopped while adding samples");

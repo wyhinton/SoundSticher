@@ -125,8 +125,10 @@ export async function updateInputs(sections: Section[]) {
   const onCombineAudioEvent = new Channel<CombineAudioEvent>();
 
   onCombineAudioEvent.onmessage = message => {
+    console.log(message);
     if (message.event === 'started') {
       appState.update(state => {
+        console.log(message);
         state.isCombiningFile = true;
         state.combinedFileLength = message.data.duration;
         state.timelineItems = [];

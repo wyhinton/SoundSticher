@@ -5,7 +5,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::epr;
+use crate::looping_samples_buffer::LoopingSamplesBuffer;
 use crate::state::AppState;
+
+// Custom macro for bold red error messages
 
 #[tauri::command]
 pub fn play_timeline_audio(
@@ -48,21 +52,17 @@ pub fn play_timeline_audio(
         let sample_rate = 44100;
         let channels = 2;
         let total_samples = samples.len();
-        // Derive start_sample_index from current play progress in app state
-        let play_progress = if let Some(start) = start_seconds {
-            start / (total_samples as f32 / (sample_rate as f32 * channels as f32))
+
+        // Calculate start position in seconds (we'll seek to this after creating the buffer)
+        let start_position_seconds = if let Some(start) = start_seconds {
+            start
         } else {
             let progress = state.current_play_progress.lock().unwrap();
-            *progress
+            let total_duration = total_samples as f32 / (sample_rate as f32 * channels as f32);
+            *progress * total_duration
         };
-        let start_sample_index = (play_progress * total_samples as f32).round() as usize;
 
-        if start_sample_index >= total_samples {
-            eprintln!("Start time exceeds audio length.");
-            return;
-        }
-
-        let trimmed_samples = &samples[start_sample_index..];
+        // Always use full samples - no trimming!
         let (_stream, stream_handle) = match OutputStream::try_default() {
             Ok(output) => output,
             Err(e) => {
@@ -79,10 +79,22 @@ pub fn play_timeline_audio(
             }
         };
 
-        let duration = trimmed_samples.len() as f32 / (channels as f32 * sample_rate as f32);
+        let duration = samples.len() as f32 / (channels as f32 * sample_rate as f32);
         let start = Instant::now();
+        println!(
+            "🎵 Total samples: {}, Using FULL audio (no trimming)",
+            samples.len()
+        );
 
-        let source = SamplesBuffer::new(channels as u16, sample_rate, trimmed_samples.to_vec());
+        // Create buffer with FULL samples
+        let mut source =
+            LoopingSamplesBuffer::new(channels as u16, sample_rate, samples.to_vec(), true);
+
+        // Seek to the desired start position
+        if start_position_seconds > 0.0 {
+            source.seek_to_time(start_position_seconds);
+            println!("🎯 Seeking to position: {:.2}s", start_position_seconds);
+        }
         sink.append(source);
         sink.set_volume(1.0);
         sink.play();
@@ -94,14 +106,7 @@ pub fn play_timeline_audio(
         } // Lock is released here
 
         // Set the seek start time based on where playback begins
-        let seek_start_position = if let Some(start) = start_seconds {
-            start
-        } else {
-            // Calculate start position from progress
-            let progress = state.current_play_progress.lock().unwrap();
-            let total_duration = total_samples as f32 / (sample_rate as f32 * channels as f32);
-            *progress * total_duration
-        };
+        let seek_start_position = start_position_seconds;
 
         {
             let mut seek_start = state.seek_start_time.lock().unwrap();
@@ -116,7 +121,13 @@ pub fn play_timeline_audio(
             let mut last_seek_position = seek_start_position;
             let mut tracking_start = start;
 
-            while !sink_clone.empty() {
+            // For looping audio, we need to continue tracking even after the sink empties and refills
+            loop {
+                // Check if sink is completely stopped (not just empty due to looping)
+                if sink_clone.is_paused() && sink_clone.empty() {
+                    break;
+                }
+
                 // Check if seeking has occurred by comparing current seek position
                 let current_seek_position = {
                     let seek_start = state_clone.seek_start_time.lock().unwrap();
@@ -141,25 +152,30 @@ pub fn play_timeline_audio(
 
                 // Current position = seek position + elapsed time since last seek/start
                 let current_position = current_seek_position + elapsed;
-                let progress = (current_position / total_duration).min(1.0);
+
+                // For looping audio, calculate progress that wraps around
+                let progress = if total_duration > 0.0 {
+                    let wrapped_position = current_position % total_duration;
+                    wrapped_position / total_duration
+                } else {
+                    0.0
+                };
 
                 // Update progress in app state
                 {
                     let mut current_progress = state_clone.current_play_progress.lock().unwrap();
                     *current_progress = progress;
                 }
-                println!("EMITTED PROGRESS : {}", progress);
+
+                println!(
+                    "EMITTED PROGRESS (LOOPING): {} (position: {:.2}s)",
+                    progress, current_position
+                );
                 let _ = app_clone.emit("timeline-progress", progress);
-                std::thread::sleep(Duration::from_millis(16)); // 20 FPS for smooth animation
+                std::thread::sleep(Duration::from_millis(16)); // 60 FPS for smooth animation
             }
 
-            // // Update progress to complete
-            // {
-            //     let mut current_progress = state_clone.current_play_progress.lock().unwrap();
-            //     *current_progress = 1.0;
-            // }
-
-            // let _ = app_clone.emit("timeline-progress", 1.0);
+            println!("Progress tracking stopped");
         });
 
         // This blocks, but now it's in its own thread and doesn't hold any locks
@@ -271,7 +287,7 @@ pub fn set_timeline_play_position(position: f32, state: State<'_, Arc<AppState>>
                 let _ = app.emit("timeline-progress", normalized_progress);
             }
             Err(e) => {
-                eprintln!("Failed to seek to position {:.2}s: {:?}", position, e);
+                epr!("Failed to seek to position {:.2}s: {:?}", position, e);
                 // Fallback to the original method if seeking fails
                 drop(current_song); // Release the lock before calling the fallback
                 set_timeline_play_position_fallback(position, state, app);
@@ -320,15 +336,8 @@ fn set_timeline_play_position_fallback(
         let sample_rate = 44100;
         let channels = 2;
         let total_samples = samples.len();
-        let start_sample_index =
-            (position_seconds * sample_rate as f32 * channels as f32).round() as usize;
 
-        if start_sample_index >= total_samples {
-            eprintln!("Seek position exceeds audio length.");
-            return;
-        }
-
-        let trimmed_samples = &samples[start_sample_index..];
+        // Always use full samples - no trimming!
         let (_stream, stream_handle) = match OutputStream::try_default() {
             Ok(output) => output,
             Err(e) => {
@@ -345,10 +354,18 @@ fn set_timeline_play_position_fallback(
             }
         };
 
-        let duration = trimmed_samples.len() as f32 / (channels as f32 * sample_rate as f32);
+        let duration = samples.len() as f32 / (channels as f32 * sample_rate as f32);
         let start = Instant::now();
 
-        let source = SamplesBuffer::new(channels as u16, sample_rate, trimmed_samples.to_vec());
+        println!("🎵 Fallback: Using FULL audio samples: {}", samples.len());
+
+        // Create buffer with FULL samples
+        let mut source =
+            LoopingSamplesBuffer::new(channels as u16, sample_rate, samples.to_vec(), true);
+
+        // Seek to the desired position
+        source.seek_to_time(position_seconds);
+        println!("🎯 Fallback: Seeking to position: {:.2}s", position_seconds);
         sink.append(source);
         sink.set_volume(1.0);
         sink.play();
@@ -368,15 +385,55 @@ fn set_timeline_play_position_fallback(
         // Progress tracking
         let sink_clone = Arc::clone(&sink);
         let app_clone = app.clone();
+        let state_clone_for_progress = state_clone.clone();
         thread::spawn(move || {
-            while !sink_clone.empty() {
-                let elapsed = start.elapsed().as_secs_f32();
-                let current_position = position_seconds + elapsed;
-                let _ = app_clone.emit("combine-progress", current_position);
-                std::thread::sleep(Duration::from_millis(50));
-            }
+            let mut last_seek_position = position_seconds;
+            let mut tracking_start = start;
 
-            let _ = app_clone.emit("combine-progress", 1.0);
+            // For looping audio, continue tracking beyond initial playthrough
+            loop {
+                // Check if sink is completely stopped
+                if sink_clone.is_paused() && sink_clone.empty() {
+                    break;
+                }
+
+                // Check for seeking
+                let current_seek_position = {
+                    let seek_start = state_clone_for_progress.seek_start_time.lock().unwrap();
+                    *seek_start
+                };
+
+                // Reset tracking if seek occurred
+                if (current_seek_position - last_seek_position).abs() > 0.001 {
+                    tracking_start = Instant::now();
+                    last_seek_position = current_seek_position;
+                }
+
+                // Calculate progress
+                let elapsed = tracking_start.elapsed().as_secs_f32();
+                let total_duration = total_samples as f32 / (sample_rate as f32 * channels as f32);
+                let current_position = current_seek_position + elapsed;
+
+                // Wrap progress for looping
+                let progress = if total_duration > 0.0 {
+                    let wrapped_position = current_position % total_duration;
+                    wrapped_position / total_duration
+                } else {
+                    0.0
+                };
+
+                // Update state
+                {
+                    let mut current_progress = state_clone_for_progress
+                        .current_play_progress
+                        .lock()
+                        .unwrap();
+                    *current_progress = progress;
+                }
+
+                let _ = app_clone.emit("timeline-progress", progress);
+                std::thread::sleep(Duration::from_millis(16));
+            }
         });
 
         sink.sleep_until_end();
@@ -409,5 +466,119 @@ pub fn stop_timeline_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
         println!("Stopped and reset to beginning");
     } else {
         println!("STOP FAILED - No audio playing");
+    }
+}
+
+#[tauri::command]
+pub fn set_timeline_loop_enabled(
+    loop_enabled: bool,
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+) {
+    println!("Setting timeline loop to: {}", loop_enabled);
+
+    // Get current playback position if playing
+    let current_position = {
+        let progress = state.current_play_progress.lock().unwrap();
+        let guard = state.combined_audio.lock().unwrap();
+        if let Some(ref samples) = *guard {
+            let sample_rate = 44100.0;
+            let channels = 2.0;
+            let total_duration = samples.len() as f32 / (sample_rate * channels);
+            *progress * total_duration
+        } else {
+            0.0
+        }
+    };
+
+    // Check if currently playing
+    let is_playing = {
+        let current_song = state.current_song.lock().unwrap();
+        current_song.is_some()
+    };
+
+    if is_playing {
+        println!(
+            "Restarting playback with new loop setting at position: {:.2}s",
+            current_position
+        );
+
+        // Stop current playback
+        let current_song = state.current_song.lock().unwrap();
+        if let Some(sink) = &*current_song {
+            sink.stop();
+            sink.clear();
+        }
+        drop(current_song);
+
+        // Restart with new loop setting
+        let state_clone = state.inner().clone();
+        let app_clone = app.clone();
+
+        thread::spawn(move || {
+            // Small delay to ensure cleanup
+            std::thread::sleep(std::time::Duration::from_millis(100));
+
+            // Get audio samples
+            let combined_samples = {
+                let guard = state_clone.combined_audio.lock().unwrap();
+                guard.clone()
+            };
+
+            let Some(samples) = combined_samples else {
+                return;
+            };
+
+            if samples.is_empty() {
+                return;
+            }
+
+            let sample_rate = 44100;
+            let channels = 2;
+
+            // Create new audio stream and sink
+            let (_stream, stream_handle) = match OutputStream::try_default() {
+                Ok(output) => output,
+                Err(_) => return,
+            };
+
+            let sink = match Sink::try_new(&stream_handle) {
+                Ok(sink) => Arc::new(sink),
+                Err(_) => return,
+            };
+
+            // Create buffer with new loop setting
+            let mut source = LoopingSamplesBuffer::new(
+                channels as u16,
+                sample_rate,
+                samples.to_vec(),
+                loop_enabled,
+            );
+
+            // Seek to previous position
+            if current_position > 0.0 {
+                source.seek_to_time(current_position);
+            }
+
+            sink.append(source);
+            sink.set_volume(1.0);
+            sink.play();
+
+            // Store the new sink
+            {
+                let mut current_song = state_clone.current_song.lock().unwrap();
+                *current_song = Some(sink);
+            }
+
+            // Update seek start time
+            {
+                let mut seek_start = state_clone.seek_start_time.lock().unwrap();
+                *seek_start = current_position;
+            }
+
+            println!("Playback restarted with loop_enabled: {}", loop_enabled);
+        });
+    } else {
+        println!("Not currently playing - loop setting will apply to next playback");
     }
 }

@@ -65,11 +65,28 @@
 
   // Loop and record are UI-only for now
   let isLoopEnabled = false;
-  function toggleLoop() {
-    appState.update(s => {
-      s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
-      return s;
-    });
+  async function toggleLoop() {
+    try {
+      // Toggle the frontend state
+      appState.update(s => {
+        s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
+        return s;
+      });
+      
+      // Communicate with backend to toggle the actual LoopingSamplesBuffer
+      await invoke('set_timeline_loop_enabled', { 
+        loop_enabled: $appState.isLoopingTimelineAudio 
+      });
+      
+      console.log(`Loop ${$appState.isLoopingTimelineAudio ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Error toggling loop:', error);
+      // Revert the state change if backend call fails
+      appState.update(s => {
+        s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
+        return s;
+      });
+    }
   }
 
   listen('audio-playback-ended', e => {
