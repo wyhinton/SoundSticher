@@ -3,7 +3,12 @@
   import { save as testSave } from '@tauri-apps/plugin-dialog';
   import { invokeWithPerf } from './state/performance';
   import { get } from 'svelte/store';
-  import { exportState, type ExportSettings, type ExportState } from './state/export';
+  import {
+    exportState,
+    applyFormatDefaults,
+    type ExportSettings,
+    type ExportState,
+  } from './state/export';
   import { formatPercent } from './utils/format';
   import { appState, getAllFiles } from './state/state.svelte';
 
@@ -17,17 +22,14 @@
     console.log(k);
     console.log(v);
     if (k === 'format') {
-      let newSettings = { ...expState.settings, format: v };
-      if (v === 'mp3') {
-        newSettings.bitrate ??= 192;
-      } else {
-        delete newSettings.bitrate;
-      }
-      expState.settings = newSettings;
+      // Apply format-specific defaults when format changes
+      expState.settings = applyFormatDefaults(expState.settings!, v);
     } else {
-      expState = { ...expState, [k]: v };
+      // For other settings, just update the specific field
+      if (expState.settings) {
+        expState.settings = { ...expState.settings, [k]: v };
+      }
     }
-    // console.log(exportState)
     // persist immediately
     exportState.set(expState);
     dispatch('exportSettingsChanged', expState);
@@ -36,7 +38,7 @@
   const formatFields: Record<string, (keyof ExportSettings)[]> = {
     wav: ['sampleRate', 'bitDepth', 'channels'],
     flac: ['sampleRate', 'bitDepth', 'channels'],
-    mp3: ['sampleRate', 'channels', 'bitrate'],
+    mp3: ['channels', 'bitrate'],
   };
   $: visibleFields = formatFields[expState.settings?.format] ?? [];
 
@@ -86,9 +88,11 @@
             bind:value={expState.settings.sampleRate}
             on:change={() => update('sampleRate', expState.settings.sampleRate)}
           >
-            <option value={44100}>44100</option>
-            <option value={48000}>48000</option>
-            <option value={96000}>96000</option>
+            <option value={44100}>44.1 kHz</option>
+            <option value={48000}>48 kHz</option>
+            <option value={88200}>88.2 kHz</option>
+            <option value={96000}>96 kHz</option>
+            <option value={192000}>192 kHz</option>
           </select>
         </label>
       </div>
@@ -127,6 +131,7 @@
           >
             <option value={128}>128</option> <option value={192}>192</option>
             <option value={256}>256</option> <option value={320}>320</option>
+            <option value={500}>500 (VBR)</option>
           </select>
         </label>
       </div>

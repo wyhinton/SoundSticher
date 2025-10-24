@@ -59,9 +59,7 @@
   }
 
   listen<number>('timeline-progress', event => {
-    console.log(event.payload * $durationSeconds);
     playHeadPosition = event.payload * $durationSeconds;
-    // playHeadPosition = event.payload;
   });
 
   function handleClick(event: MouseEvent) {

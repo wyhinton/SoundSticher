@@ -3,6 +3,11 @@
   import { appState, getAllFiles } from '../state/state.svelte';
   import { formatMilliseconds } from '../utils/format';
   import TimeDisplay from './TimeDisplay.svelte';
+  import {
+    exportState,
+    calculateEstimatedFileSize,
+    type EstimatedFileSize,
+  } from '$lib/state/export';
 
   let bufferingProgress = 0;
 
@@ -11,6 +16,10 @@
   });
 
   $: activeSampleCount = getAllFiles($appState.sections).length;
+
+  // Calculate estimated file size reactively
+  $: durationSeconds = $appState.combinedFileLength ? $appState.combinedFileLength : 0;
+  $: estimatedFileSize = calculateEstimatedFileSize($exportState.settings, durationSeconds);
 </script>
 
 {#snippet infoItem(label: string, value: string, skeleton: boolean = false)}
@@ -32,6 +41,7 @@
     )}
     {@render infoItem('Buffer', `${bufferingProgress.toFixed(1)}%`)}
     {@render infoItem('Active Samples', `${activeSampleCount}`)}
+    {@render infoItem('Est. File Size', estimatedFileSize.formatted)}
   </div>
 </div>
 
@@ -42,13 +52,6 @@
     border-top: none;
     border-radius: 0 0 4px 4px;
     font-size: 11px;
-  }
-
-  .info-divider {
-    width: 1px;
-    height: 20px;
-    background: #4a5568;
-    margin: 0 4px;
   }
 
   .info-item {

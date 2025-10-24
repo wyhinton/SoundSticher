@@ -72,12 +72,12 @@
         s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
         return s;
       });
-      
+
       // Communicate with backend to toggle the actual LoopingSamplesBuffer
-      await invoke('set_timeline_loop_enabled', { 
-        loop_enabled: $appState.isLoopingTimelineAudio 
+      await invoke('set_timeline_loop_enabled', {
+        loop_enabled: $appState.isLoopingTimelineAudio,
       });
-      
+
       console.log(`Loop ${$appState.isLoopingTimelineAudio ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Error toggling loop:', error);
