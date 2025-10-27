@@ -188,7 +188,7 @@
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
       }
-      
+
       event.preventDefault();
       handleDeleteSelected();
     }
@@ -335,8 +335,8 @@
   });
 </script>
 
-<div 
-  class="position-relative" 
+<div
+  class="position-relative"
   onclick={handleSourcePanelClick}
   onkeydown={handleKeyDown}
   tabindex="0"
