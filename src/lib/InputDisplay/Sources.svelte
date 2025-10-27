@@ -11,7 +11,6 @@
     updatePath,
     applySyncIndexes,
   } from '../state/state.svelte';
-  import { toCssRgb } from '../utils/colors';
   import { onMount, tick } from 'svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { isPointInRect } from '../utils/dragdrop';
@@ -26,6 +25,8 @@
   } from '../state/position';
   import SineWaveShader from '../Examples/SineWaveShader.svelte';
   import EditableInput from './EditableInput.svelte';
+  import SourceRow from './SourceRow.svelte';
+  import SourceToolbar from './SourceToolbar.svelte';
   import { get } from 'svelte/store';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
@@ -88,6 +89,110 @@
 
   let lottieContainer: HTMLDivElement;
   let lottieSize = 150;
+
+  // Local selection state
+  let selectedRows: Set<number> = new Set();
+  let lastSelectedIndex: number | null = null;
+
+  function handleRowSelection(
+    sectionIndex: number,
+    isMultiSelect: boolean = false,
+    isShiftSelect: boolean = false
+  ) {
+    if (isShiftSelect && lastSelectedIndex !== null) {
+      // Shift-select: select range from lastSelectedIndex to sectionIndex
+      const start = Math.min(lastSelectedIndex, sectionIndex);
+      const end = Math.max(lastSelectedIndex, sectionIndex);
+
+      // Add all indices in the range to selection
+      for (let i = start; i <= end; i++) {
+        selectedRows.add(i);
+      }
+    } else if (isMultiSelect) {
+      // Toggle selection for multi-select
+      if (selectedRows.has(sectionIndex)) {
+        selectedRows.delete(sectionIndex);
+      } else {
+        selectedRows.add(sectionIndex);
+      }
+    } else {
+      // Single selection - clear others and select this one
+      selectedRows.clear();
+      selectedRows.add(sectionIndex);
+    }
+
+    // Update last selected index for future shift-selects
+    lastSelectedIndex = sectionIndex;
+
+    // Trigger reactivity
+    selectedRows = new Set(selectedRows);
+  }
+
+  function toggleRowSelection(sectionIndex: number) {
+    handleRowSelection(sectionIndex, true);
+  }
+
+  function selectRow(sectionIndex: number, isShiftSelect: boolean = false) {
+    handleRowSelection(sectionIndex, false, isShiftSelect);
+  }
+
+  // Toolbar functions
+  function handleSelectAll() {
+    selectedRows.clear();
+    for (let i = 0; i < $appState.sections.length; i++) {
+      selectedRows.add(i);
+    }
+    selectedRows = new Set(selectedRows);
+  }
+
+  function handleClearSelection() {
+    selectedRows.clear();
+    selectedRows = new Set(selectedRows);
+    lastSelectedIndex = null;
+  }
+
+  function handleDeleteSelected() {
+    if (selectedRows.size === 0) return;
+
+    // Convert to array and sort in descending order to delete from end to start
+    const indicesToDelete = Array.from(selectedRows).sort((a, b) => b - a);
+
+    // Delete sections
+    indicesToDelete.forEach(index => {
+      deleteSection(index);
+    });
+
+    // Clear selection
+    handleClearSelection();
+  }
+
+  function handleSourcePanelClick(event: MouseEvent) {
+    console.log(`%cHERE LINE :155 %c`, 'color: yellow; font-weight: bold', '');
+
+    // Only deselect if clicking directly on the table element or tbody (empty space)
+    if (
+      event.target === event.currentTarget ||
+      (event.target as HTMLElement).id === 'sources-panel' ||
+      (event.target as HTMLElement).tagName === 'TABLE'
+    ) {
+      console.log(`%cHERE LINE :163 %c`, 'color: yellow; font-weight: bold', '');
+
+      handleClearSelection();
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    // Check if Delete key was pressed and we have selected rows
+    if (event.key === 'Delete' && selectedRows.size > 0) {
+      // Don't trigger if user is typing in an input field
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      
+      event.preventDefault();
+      handleDeleteSelected();
+    }
+  }
 
   onMount(async () => {
     positionStore.reset();
@@ -230,13 +335,21 @@
   });
 </script>
 
-<div class="position-relative">
+<div 
+  class="position-relative" 
+  onclick={handleSourcePanelClick}
+  onkeydown={handleKeyDown}
+  tabindex="0"
+  role="region"
+  aria-label="Source sections"
+>
   <div
     bind:this={tableContainer}
     class:drop-add={$addNewFolderOnDrop}
     class="table-responsive h-100"
     style:background-color="rgb(15 21 27)"
     style:width="400px"
+    id="sources-panel"
   >
     {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
       <!-- <SineWaveShader></SineWaveShader> -->
@@ -262,6 +375,16 @@
         <i class="fa fas-plus">+</i>
       </div>
     {/if}
+
+    {#if $appState.sections.length > 0}
+      <SourceToolbar
+        selectedRowCount={selectedRows.size}
+        onSelectAll={handleSelectAll}
+        onClearSelection={handleClearSelection}
+        onDeleteSelected={handleDeleteSelected}
+      />
+    {/if}
+
     <table class="w-100 table m-0">
       <thead>
         <tr>
@@ -272,48 +395,14 @@
       </thead>
       <tbody bind:this={container}>
         {#each $appState.sections as item, sectionIndex}
-          <tr class="source-row" style:height="28px">
-            <!-- <tr style:background-color={toCssRgb(item.color.rgb, 0.5)}> -->
-            <td>
-              <div
-                style:margin-top="3px"
-                class:under-drag={inputsUnderMouse.includes(sectionIndex)}
-                class="d-flex justify-content-start align-items-center"
-              >
-                <i class="fas fa-folder my-0 mx-2"></i>
-                <!-- <EditableInput fullPath={item.folderPath}></EditableInput> -->
-                <input
-                  style:color={toCssRgb(item.color.rgb, 1)}
-                  class="folder-input input-group-sm my-auto"
-                  onchange={e => {
-                    updatePath(sectionIndex, (e.target as HTMLInputElement).value);
-                  }}
-                  bind:value={item.folderPath}
-                  type="text"
-                  id="name"
-                  placeholder="Enter your name"
-                />
-              </div>
-              <div class="d-flex"></div>
-            </td>
-            <td>
-              <!-- <div style:color={"red"} class="stat">Samples: {item.files.length}</div> -->
-              <div class="stat text-center mt-1">
-                <div>{item.files.length}</div>
-              </div>
-            </td>
-            <td>
-              <div class="d-flex justify-content-center">
-                <button
-                  class="action-button"
-                  onclick={() => deleteSection(sectionIndex)}
-                  title="Delete section"
-                >
-                  <i class="fas fa-ellipsis-v"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
+          <SourceRow
+            {item}
+            {sectionIndex}
+            {inputsUnderMouse}
+            isSelected={selectedRows.has(sectionIndex)}
+            onRowSelect={selectRow}
+            onRowToggle={toggleRowSelection}
+          />
         {/each}
       </tbody>
     </table>
@@ -327,24 +416,6 @@
   .drop-add {
     border: 2px solid green;
   }
-  .source-row {
-    border-bottom: 1px solid #535353;
-  }
-  .under-drag {
-    border: 2px solid green;
-  }
-  .folder-input {
-    width: 200px;
-    border-radius: 2px;
-    border: 0px;
-    /* background: var(--bs-primary-bg-subtle) !important; */
-    /* background-color: var(--bs-primary-bg-subtle) !important; */
-  }
-
-  .folder-input,
-  td {
-    font-size: 13px;
-  }
 
   th {
     text-align: left;
@@ -356,13 +427,6 @@
     color: #9d9d9d !important;
   }
 
-  td {
-    background-color: var(--bs-primary-bg-subtle) !important;
-    /* background-color: #181c20 !important; */
-    padding: 0px !important;
-    font-size: 12px;
-  }
-
   .no-inputs-warning {
     position: absolute;
     top: 100%;
@@ -371,29 +435,5 @@
     font-size: 12px;
     display: flex;
     flex-direction: column;
-  }
-
-  .action-button {
-    background: none;
-    border: none;
-    color: #9d9d9d;
-    padding: 4px 8px;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .action-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #e74c3c;
-    transform: scale(1.1);
-  }
-
-  .action-button:active {
-    transform: scale(0.95);
   }
 </style>
