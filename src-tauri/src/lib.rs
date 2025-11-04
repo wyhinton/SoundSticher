@@ -1,6 +1,6 @@
 use log;
 use std::collections::HashMap;
-use std::fs::{metadata, File};
+use std::fs::{File, metadata};
 use std::io::BufReader;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -96,10 +96,14 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard::init())
         .setup(|app| {
+            #[cfg(debug_assertions)] // Only include this code on debug builds
             {
                 let window = app.get_webview_window("main").unwrap();
-                // window.open_devtools();
-                // window.close_devtools();
+                window.open_devtools();
+                app.listen("download-started", |event| {});
+            }
+            #[cfg(not(debug_assertions))] // Only for release builds
+            {
                 app.listen("download-started", |event| {});
             }
             Ok(())
@@ -135,6 +139,10 @@ pub fn run() {
             combine::get_custom_order,
             combine::cancel_combine,
             combine::export_combined_audio_as_wav,
+            combine::toggle_audio_file_active,
+            combine::set_audio_file_active,
+            combine::set_audio_files_active_batch,
+            combine::get_audio_file_active_status,
             state::get_app_state,
             clear_audio_files,
             encoder::export_audio,

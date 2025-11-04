@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as d3 from 'd3';
+  import { createEventDispatcher } from 'svelte';
   import {
     appState,
     getAllFiles,
@@ -18,6 +19,9 @@
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel } from '@tauri-apps/api/core';
   import { get } from 'svelte/store';
+  import { audioFileStateManager } from '../state/stateSynchronization';
+
+  const dispatch = createEventDispatcher();
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -52,6 +56,64 @@
   const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
 
+  // Selection state (similar to Sources.svelte)
+  let selectedSegments: Set<number> = new Set();
+  let lastSelectedIndex: number | null = null;
+
+  function handleSegmentSelection(
+    segmentIndex: number,
+    isMultiSelect: boolean = false,
+    isShiftSelect: boolean = false
+  ) {
+    if (isShiftSelect && lastSelectedIndex !== null) {
+      // Shift-select: select range from lastSelectedIndex to segmentIndex
+      const start = Math.min(lastSelectedIndex, segmentIndex);
+      const end = Math.max(lastSelectedIndex, segmentIndex);
+
+      // Add all indices in the range to selection
+      for (let i = start; i <= end; i++) {
+        selectedSegments.add(i);
+      }
+    } else if (isMultiSelect) {
+      // Toggle selection for multi-select
+      if (selectedSegments.has(segmentIndex)) {
+        selectedSegments.delete(segmentIndex);
+      } else {
+        selectedSegments.add(segmentIndex);
+      }
+    } else {
+      // Single selection - clear others and select this one
+      selectedSegments.clear();
+      selectedSegments.add(segmentIndex);
+    }
+
+    // Update last selected index for future shift-selects
+    lastSelectedIndex = segmentIndex;
+
+    // Trigger reactivity
+    selectedSegments = new Set(selectedSegments);
+
+    // Dispatch selection change for context menu
+    dispatch('selectionChange', selectedSegments);
+  }
+
+  function toggleSegmentSelection(segmentIndex: number) {
+    handleSegmentSelection(segmentIndex, true);
+  }
+
+  function selectSegment(segmentIndex: number, isShiftSelect: boolean = false) {
+    handleSegmentSelection(segmentIndex, false, isShiftSelect);
+  }
+
+  function handleClearSelection() {
+    selectedSegments.clear();
+    selectedSegments = new Set(selectedSegments);
+    lastSelectedIndex = null;
+
+    // Dispatch selection change for context menu
+    dispatch('selectionChange', selectedSegments);
+  }
+
   function updateScales() {
     xScale = d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]);
     scaleX = width / originalPathWidth;
@@ -65,16 +127,74 @@
   function handleClick(event: MouseEvent) {
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
-    const clickedTime = currentTransform
-      .rescaleX(d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]))
-      .invert(relativeX);
-    console.log(clickedTime);
-    // playHeadPosition =
-    const newPlayPosition = Math.max(0, Math.min(clickedTime, $durationSeconds));
-    console.log(newPlayPosition);
-    console.log(clickedTime);
-    invokeWithPerf('set_timeline_play_position', { position: clickedTime });
-    // playHeadX = relativeX;
+
+    // Check if click is on a timeline segment
+    let clickedOnSegment = false;
+    if ($appState?.timelineItems) {
+      for (let i = 0; i < $appState.timelineItems.length; i++) {
+        const item = $appState.timelineItems[i];
+        const itemStartX =
+          item.startOffset * originalPathWidth * scaleX * currentTransform.k + currentTransform.x;
+        const itemEndX = itemStartX + item.size * originalPathWidth * scaleX * currentTransform.k;
+
+        if (relativeX >= itemStartX && relativeX <= itemEndX) {
+          clickedOnSegment = true;
+          break;
+        }
+      }
+    }
+
+    // If clicked on empty space, clear selection and set playhead
+    if (!clickedOnSegment) {
+      handleClearSelection();
+
+      const clickedTime = currentTransform
+        .rescaleX(d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]))
+        .invert(relativeX);
+      console.log(clickedTime);
+      const newPlayPosition = Math.max(0, Math.min(clickedTime, $durationSeconds));
+      console.log(newPlayPosition);
+      console.log(clickedTime);
+      invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    // Check if Delete key was pressed and we have selected segments
+    if (event.key === 'Delete' && selectedSegments.size > 0) {
+      // Don't trigger if user is typing in an input field
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      event.preventDefault();
+
+      // Get the IDs of the selected segments
+      const selectedIds: string[] = [];
+      if ($appState?.timelineItems) {
+        Array.from(selectedSegments).forEach(index => {
+          if (index < $appState.timelineItems.length) {
+            selectedIds.push($appState.timelineItems[index].id);
+          }
+        });
+      }
+
+      if (selectedIds.length > 0) {
+        console.log('Deactivating selected segments:', selectedIds);
+
+        // Use the state manager for optimistic updates and automatic sync
+        audioFileStateManager
+          .setFilesActive(selectedIds, false)
+          .then(() => {
+            console.log('Successfully deactivated selected segments');
+            // Clear selection after successful deactivation
+            handleClearSelection();
+          })
+          .catch(error => {
+            console.error('Failed to deactivate segments:', error);
+          });
+      }
+    }
   }
 
   function renderAxis(scale: d3.ScaleLinear<number, number>) {
@@ -361,14 +481,28 @@
   <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     {currentTransform.k.toFixed(2)}x
   </div>
+  <!-- No Active Samples Message -->
+  {#if $appState?.hasNoActiveSamples}
+    <div class="no-active-samples-message">
+      <div class="message-content">No active samples to display</div>
+      <div class="message-subtitle">
+        Activate audio files from the Sources panel to see them here
+      </div>
+    </div>
+  {/if}
+
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     on:click={e => {
       handleClick(e);
     }}
+    on:keydown={handleKeyDown}
     bind:this={container}
     style="width: 100%;"
+    tabindex="0"
+    role="region"
+    aria-label="Timeline"
   >
     <svg class="waveform-svg-parent" bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
       <g transform={`translate(0, ${20})`}>
@@ -411,6 +545,10 @@
                   zoomTransform={currentTransform}
                   itemType={timelineItem.type}
                   id={timelineItem.id}
+                  active={timelineItem.active ?? true}
+                  isSelected={selectedSegments.has(i)}
+                  onSegmentSelect={selectSegment}
+                  onSegmentToggle={toggleSegmentSelection}
                   {DEBUG_MODE}
                   on:dragStart={handleDragStart}
                   on:dragMove={handleDragMove}
@@ -529,6 +667,31 @@
   g.axis text {
     font-family: monospace;
     font-size: 10px; /* optional: adjust as needed */
+  }
+
+  /* No Active Samples Message */
+  .no-active-samples-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--bs-secondary);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .message-content {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--bs-secondary);
+  }
+
+  .message-subtitle {
+    font-size: 14px;
+    color: var(--bs-secondary);
+    opacity: 0.8;
   }
 
   /* Debug Panel Styles */

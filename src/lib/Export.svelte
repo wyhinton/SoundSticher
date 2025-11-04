@@ -59,7 +59,7 @@
   };
 </script>
 
-<div style="font-size: 0.9rem" class="p-2 export-panel">
+<div style="font-size: 0.9rem" class="p-2 export-panel" data-export-panel>
   <div class="row">
     <div class="col-2">
       <label

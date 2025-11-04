@@ -40,6 +40,7 @@ export interface AppState {
   sortKey?: keyof AudioFileItem;
   sortDirection?: 'asc' | 'desc';
   isLoopingTimelineAudio: boolean;
+  hasNoActiveSamples: boolean;
 }
 
 interface AudioFileItem {
@@ -52,6 +53,7 @@ interface AudioFileItem {
   bitDepth?: number;
   duration?: number;
   id: string;
+  active: boolean;
 }
 
 export interface Section {
@@ -85,6 +87,7 @@ export interface AudioFileTimelineItem extends BaseTimelineItem {
   svgPath: string;
   fileName: string;
   size: number;
+  active: boolean;
 }
 
 export interface SpacerTimelineItem extends BaseTimelineItem {
@@ -102,6 +105,7 @@ export const appState = persisted<AppState>('appState', {
   combinedFile: undefined,
   timelineItems: [],
   isLoopingTimelineAudio: false,
+  hasNoActiveSamples: false,
 });
 
 const defaults: AppState = {
@@ -112,15 +116,8 @@ const defaults: AppState = {
   combinedFile: undefined,
   timelineItems: [],
   isLoopingTimelineAudio: false,
+  hasNoActiveSamples: false,
 };
-
-// appState.update(($appState) => ({
-//   ...$appState,
-//   isCombiningFile: defaults.isCombiningFile,
-//   combinedFileLength: defaults.combinedFileLength,
-//   playingCombined: defaults.playingCombined,
-//   combinedFile: defaults.combinedFile,
-// }));
 
 export const hoveredSourceItem = writable<null | number>(null);
 export const hoveredTimelineItem = writable<null | number>(null);
@@ -160,61 +157,73 @@ let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
 export async function addSource(paths?: string | string[]) {
-  console.log(`%cHERE LINE :89 %c`, 'color: brown; font-weight: bold', '');
+  const defaultSectionColor = ABLETON_COLORS[0];
+  const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
 
-  const color = ABLETON_COLORS[0];
-  const folderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
-  const curNumberFiles = getAllFiles(get(appState).sections).length;
-  console.log(`CURRENT NUMBER OF FILES: ${curNumberFiles}, starting index from`);
   try {
     // Get file paths for each folder
-    const filesResult = await invokeWithPerf<Record<string, string[]>>('get_file_paths_in_folder', {
-      folderPaths: folderPaths,
-    });
+    const folderFilesResult = await invokeWithPerf<Record<string, string[]>>(
+      'get_file_paths_in_folder',
+      {
+        folderPaths: selectedFolderPaths,
+      }
+    );
 
-    if (filesResult.ok === true) {
+    if (folderFilesResult.ok === true) {
       // Flatten all file paths to request metadata at once
-      const allFilePaths: string[] = Object.values(filesResult.value).flat();
-      console.log(allFilePaths);
-      // Get metadata
-      const metadataList = await invokeWithPerf<FileMetadata[]>('get_metadata', {
-        titles: allFilePaths,
+      const allDiscoveredFilePaths: string[] = Object.values(folderFilesResult.value).flat();
+      console.log(allDiscoveredFilePaths);
+
+      // Get metadata for all discovered files
+      const fileMetadataResult = await invokeWithPerf<FileMetadata[]>('get_metadata', {
+        titles: allDiscoveredFilePaths,
       });
-      if (metadataList.ok === true) {
-        const newSections: Section[] = Object.entries(filesResult.value).map(
-          ([folderPath, files]) => {
-            const withMeta: AudioFileItem[] = files
-              .map((fp, i) => {
-                const meta = metadataList.value.find(m => m.path === fp);
-                return meta ? { path: fp, color, ...meta, index: i } : null;
+
+      if (fileMetadataResult.ok === true) {
+        const newSourceSections: Section[] = Object.entries(folderFilesResult.value).map(
+          ([folderPath, discoveredFiles]) => {
+            const filesWithMetadata: AudioFileItem[] = discoveredFiles
+              .map((filePath, fileIndex) => {
+                const fileMetadata = fileMetadataResult.value.find(
+                  metadata => metadata.path === filePath
+                );
+                return fileMetadata
+                  ? {
+                      path: filePath,
+                      color: defaultSectionColor,
+                      ...fileMetadata,
+                      index: fileIndex,
+                      active: true,
+                    }
+                  : null;
               })
               .filter(Boolean) as AudioFileItem[];
 
             return {
               folderPath,
-              files: withMeta,
+              files: filesWithMetadata,
               errors: [],
               metaData: [],
-              color,
+              color: defaultSectionColor,
             };
           }
         );
 
         // Update app state with new sections
-        appState.update(state => {
+        appState.update(currentState => {
           return {
-            ...state,
+            ...currentState,
             combinedFile: undefined,
             combinedFileLength: undefined,
-            sections: [...newSections, ...state.sections],
+            sections: [...newSourceSections, ...currentState.sections],
           };
         });
       }
     }
 
     // Send updated sections to backend/input processor
-    const s = get(appState);
-    updateInputs(s.sections);
+    const updatedAppState = get(appState);
+    updateInputs(updatedAppState.sections);
   } catch (error) {
     console.error('Error in addSection:', error);
   }
@@ -292,19 +301,6 @@ export async function combine_audio_files(input_files: string[], output_path: st
       });
     }
   }
-  // then((f) => {
-  //   const metadata = invokeWithPerf<FileMetadata>("get_metadata", {
-  //     title:
-  //       "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav",
-  //   }).then((m) => {
-  //     console.log(m);
-  //     appState.update((state) => {
-  //       state.combinedFile = { path: f.output, svgPath: f.svgPath };
-  //       return state;
-  //     });
-  //     console.log(f);
-  //   });
-  // });
 }
 
 export async function get_file_paths_in_folder(sectionIndex: number) {
@@ -409,73 +405,6 @@ export interface SectionSend {
 interface AudioSend {
   path: string;
 }
-
-export function setUnderMouse(fileIndex: number) {}
-// appState.subscribe((newValue) => {
-//   const newSends: SectionSend[] = newValue.sections.map((s) => ({
-//     folderPath: s.folderPath,
-//     paths: s.files.map((f) => ({ path: f.path })),
-//   }));
-//   const oldSends: SectionSend[] = prevValue.sections.map((s) => ({
-//     folderPath: s.folderPath,
-//     paths: s.files.map((f) => ({ path: f.path })),
-//   }));
-//   if (prevValue !== undefined) {
-//     if (JSON.stringify(oldSends) !== JSON.stringify(newSends)) {
-//       console.log(oldSends);
-//       console.log(newSends);
-//       const allNewPaths = newSends.map((s) => s.paths).flat();
-//       const allOldPaths = oldSends.map((s) => s.paths).flat();
-//       console.log(allNewPaths.length)
-//       console.log(allOldPaths.length)
-//       if (allNewPaths.length === 0 && allOldPaths.length > 0 ) {
-//         if (allOldPaths.length > 0) {
-//           console.log(
-//             `%cHERE LINE :292 %c`,
-//             "color: brown; font-weight: bold",
-//             ""
-//           );
-
-//            invokeWithPerf("cancel_combine").then((v)=>{
-
-//               });
-//           invokeWithPerf("clear_audio_files");
-//           appState.update((s) => {
-//             s.combinedFileLength = 0;
-//             s.combinedFile.svgPath = "";
-//             return s;
-//           });
-//         }
-//       } else {
-//         setTimeout(() => {
-//           console.log(newSends);
-//           invokeWithPerf("update_inputs", { sections: newSends }).then((r) => {
-//             console.log(r);
-//             appState.update((s) => {
-//               s.combinedFile.svgPath = "";
-//               return s;
-//             });
-//             invokeWithPerf<CombineAudioResult>(
-//               "combine_all_cached_samples"
-//             ).then((r) => {
-//               invoke("get_app_state").then((c) => {
-//                 console.log(c);
-//               });
-//             });
-//           });
-//         }, 0);
-
-//         console.log("appState changed:", { old: prevValue, new: newValue });
-//       }
-//     }
-//   }
-
-//   prevValue = newValue;
-// });
-// appState.subscribe((s)=>{
-//   const sum = s.timelineItems.reduce((acc, obj) => acc + obj.size, 0);
-//   console.log(sum);
-// })
 
 listen<number>('song-progress', event => {
   appState.update(state => {

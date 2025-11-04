@@ -1,4 +1,4 @@
-import type { Channel } from "@tauri-apps/api/core";
+import type { Channel } from '@tauri-apps/api/core';
 
 export type BufferAudioEvent =
   | {
@@ -19,7 +19,7 @@ export type BufferAudioEvent =
         downloadId: number;
       };
     };
-  
+
 export type CombineAudioEvent =
   | {
       event: 'started';
@@ -31,20 +31,21 @@ export type CombineAudioEvent =
   | {
       event: 'progress';
       data: {
-        id: string,
+        id: string;
         svgPath: string;
         startOffset: number;
         fileName: string;
         size: number;
+        active: boolean;
       };
     }
   | {
       event: 'finished';
       data: {
         svgPath: string;
+        empty: boolean;
       };
     };
-
 
 export type ExportAudioEvent =
   | {
@@ -63,10 +64,9 @@ export type ExportAudioEvent =
   | {
       event: 'finished';
       data: {
-          outputPath: string;
+        outputPath: string;
       };
     };
-
 
 export type SortAudioEvent =
   | {
@@ -86,24 +86,21 @@ export type SortAudioEvent =
   | {
       event: 'finished';
       data: {
-          outputPath: string;
+        outputPath: string;
       };
     };
 
-
-
-    type ChannelEventType = "started" | "progress" | "finished";
+type ChannelEventType = 'started' | 'progress' | 'finished';
 
 interface BaseEvent<T = any> {
   event: ChannelEventType;
   data: T;
 }
 
-
 export function generateProgressChannel<E extends { event: string; data: any }>(
   ChannelCtor: new () => Channel<E>,
   handlers: {
-    [K in E as K["event"]]?: (data: Extract<E, { event: K["event"] }>["data"]) => void;
+    [K in E as K['event']]?: (data: Extract<E, { event: K['event'] }>['data']) => void;
   }
 ): Channel<E> {
   const channel = new ChannelCtor();
