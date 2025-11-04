@@ -9,7 +9,6 @@
     pause_sample_preview,
     play_sample_preview,
     setHoveredItem,
-    setUnderMouse,
     applySyncIndexes,
     type Section,
   } from '../state/state.svelte';
@@ -107,11 +106,7 @@
 
 <div style:width="-webkit-fill-available" class="card d-flex flex-column position-relative">
   <div class="d-flex flex-column" style:background-color="#080808">
-    <div class="d-flex flex-column">
-      <!-- {#each section.errors as sectionError, errorIndex}
-          {sectionError.message}
-        {/each} -->
-    </div>
+    <div class="d-flex flex-column"></div>
     {#if sections.length === 0}
       <div class="position-absolute no-inputs-warning">No inputs</div>
     {/if}
@@ -158,6 +153,10 @@
               class:timeline-hovered={$hoveredTimelineItem === fileIndex}
               class:playing={file.path === $appState.playingSong && $appState.playProgress < 1}
               class:animated={$animatedIds.has(file.id)}
+              class:inactive={file.active === false}
+              data-file-id={file.id}
+              data-file-active={file.active}
+              data-file-path={file.path}
               onclick={() => {
                 if (file.path === $appState.playingSong && $appState.playProgress < 1) {
                   pause_sample_preview();
@@ -351,5 +350,36 @@
   .sort-arrow-active {
     color: rgb(48, 145, 241) !important; /* Bootstrap blue color */
     font-weight: bold;
+  }
+
+  /* Inactive file styles */
+  .inactive {
+    opacity: 0.9;
+    background-color: #2a2a2a !important;
+  }
+
+  .inactive > td {
+    background-color: #2a2a2a !important;
+    color: #666 !important;
+    text-decoration: line-through;
+  }
+
+  .inactive:hover {
+    opacity: 0.6;
+    background: #4a4a4a !important;
+  }
+
+  .inactive:hover > td {
+    background-color: #4a4a4a !important;
+    color: #888 !important;
+  }
+
+  /* Ensure inactive state overrides other states when needed */
+  .inactive.timeline-hovered {
+    border: 1px dotted #666 !important;
+  }
+
+  .inactive.animated {
+    animation: none; /* Disable animation for inactive files */
   }
 </style>

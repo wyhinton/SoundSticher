@@ -3,6 +3,37 @@
 version = 4
 
 [[package]]
+name = "Sound-Stitch"
+version = "0.0.0"
+dependencies = [
+ "env_logger",
+ "flacenc",
+ "hound",
+ "lame",
+ "lofty",
+ "log",
+ "mp3lame-encoder",
+ "rodio",
+ "serde",
+ "serde_json",
+ "showfile",
+ "symphonia",
+ "sysinfo",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-log",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "thiserror 2.0.12",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "addr2line"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5790,37 +5821,6 @@ dependencies = [
  "urlpattern",
  "uuid",
  "walkdir",
-]
-
-[[package]]
-name = "tauri-v2-sveltekit-template"
-version = "0.0.0"
-dependencies = [
- "env_logger",
- "flacenc",
- "hound",
- "lame",
- "lofty",
- "log",
- "mp3lame-encoder",
- "rodio",
- "serde",
- "serde_json",
- "showfile",
- "symphonia",
- "sysinfo",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-log",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "thiserror 2.0.12",
- "tokio",
- "uuid",
 ]
 
 [[package]]

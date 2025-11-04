@@ -18,6 +18,11 @@
   import { createEventDispatcher, onMount } from 'svelte';
   export let DEBUG_MODE: boolean;
   export let id: string | undefined;
+  export let isSelected: boolean = false;
+  export let active: boolean = true;
+  export let onSegmentSelect: ((index: number, isShiftSelect?: boolean) => void) | undefined =
+    undefined;
+  export let onSegmentToggle: ((index: number) => void) | undefined = undefined;
 
   const dispatch = createEventDispatcher();
 
@@ -86,6 +91,35 @@
     // Apply drag behavior to the entire timeline div
     d3.select(timelineDiv).call(drag);
   });
+
+  function handleSegmentClick(event: MouseEvent) {
+    // Prevent event from bubbling to timeline container
+    event.stopPropagation();
+
+    if (event.ctrlKey || event.metaKey) {
+      // Multi-select with Ctrl/Cmd
+      onSegmentToggle?.(index);
+    } else if (event.shiftKey) {
+      // Range select with Shift
+      onSegmentSelect?.(index, true);
+    } else {
+      // Single select
+      onSegmentSelect?.(index, false);
+    }
+  }
+
+  function handleSegmentKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        onSegmentToggle?.(index);
+      } else if (event.shiftKey) {
+        onSegmentSelect?.(index, true);
+      } else {
+        onSegmentSelect?.(index, false);
+      }
+    }
+  }
 </script>
 
 <!-- Timeline segment using SVG group with drag handle -->
@@ -101,14 +135,34 @@
       xmlns="http://www.w3.org/1999/xhtml"
       class="timeline-segment-div"
       class:hovered={$hoveredSourceItem == index}
+      class:selected={isSelected}
+      class:inactive={!active}
       class:dragging={isDragging}
+      data-timeline-segment
+      data-segment-index={index}
+      data-segment-id={id}
+      data-segment-active={active}
+      on:click={handleSegmentClick}
+      on:keydown={handleSegmentKeyDown}
+      role="button"
+      tabindex="0"
+      aria-label="Timeline segment {index + 1}"
       style="
         width: 100%;
         height: 150px;
-        background-color: rgba(0, 200, 255, {$hoveredSourceItem == index ? 0.4 : $fillAlpha});
+        background-color: rgba(0, 200, 255, {isSelected
+        ? 0.3
+        : $hoveredSourceItem == index
+          ? 0.4
+          : $fillAlpha});
+        opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
         cursor: {isDragging ? 'grabbing' : 'grab'};
+        {isSelected ? 'border: 2px solid rgba(59, 130, 246, 0.8);' : ''}
+        {!active
+        ? 'border: 2px solid rgba(255, 69, 0, 0.6); background-color: rgba(255, 69, 0, 0.2) !important;'
+        : ''}
       "
     >
       <!-- <div
@@ -162,6 +216,27 @@
 
   .timeline-segment-div.hovered {
     background-color: rgba(0, 200, 255, 0.4) !important;
+  }
+
+  .timeline-segment-div.selected {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+    border: 2px solid rgba(59, 130, 246, 0.8) !important;
+  }
+
+  .timeline-segment-div.selected:hover {
+    background-color: rgba(59, 130, 246, 0.4) !important;
+  }
+
+  /* Inactive state styling */
+  .timeline-segment-div.inactive {
+    background-color: rgba(255, 69, 0, 0.2) !important;
+    border: 2px solid rgba(255, 69, 0, 0.6) !important;
+    opacity: 0.6;
+  }
+
+  .timeline-segment-div.inactive:hover {
+    background-color: rgba(255, 69, 0, 0.3) !important;
+    opacity: 0.7;
   }
 
   /* Drag state styling - segment being dragged gets highlighted */

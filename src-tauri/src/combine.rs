@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread::{self, sleep};
 use std::time::{Duration, Instant};
 use symphonia::core::audio::SampleBuffer;
@@ -38,6 +38,14 @@ pub struct CachedCombineResult {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CombineEvent {
     progress: f32,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StateChangeEvent {
+    pub file_id: String,
+    pub field: String,
+    pub value: serde_json::Value,
 }
 
 pub fn generate_waveform_path(samples: &[i16], width: usize, height: usize, offset: f64) -> String {
@@ -166,6 +174,7 @@ pub async fn update_inputs(
                         waveform_path: String::from(""),
                         id: Uuid::new_v4(),
                         path: path.clone(),
+                        active: true, // Default to active
                     },
                 );
                 let progress = (i as f32) / ((valid_paths.len() - 1) as f32);
@@ -205,9 +214,11 @@ pub enum CombineAudioEvent {
         file_name: String,
         size: f64,
         id: String,
+        active: bool,
     },
     Finished {
         svg_path: String,
+        empty: bool,
     },
 }
 
@@ -241,16 +252,16 @@ pub async fn combine_all_cached_samples(
         // Collect files in the specified order (custom or default BTreeMap order)
         let ordered_files: Vec<AudioFile> = if let Some(order) = custom_order {
             println!("USING CUSTOM ORDER");
-            // Use custom order
+            // Use custom order, but filter by active status
             order
                 .iter()
-                .filter_map(|id| audio_files.values().find(|f| &f.id == id))
+                .filter_map(|id| audio_files.values().find(|f| &f.id == id && f.active))
                 .cloned()
                 .collect()
         } else {
             println!("USING DEFAULT BTREE ORDER");
-            // Use default BTreeMap order
-            audio_files.values().cloned().collect()
+            // Use default BTreeMap order, but filter by active status
+            audio_files.values().filter(|f| f.active).cloned().collect()
         };
 
         for audio_file in &ordered_files {
@@ -269,17 +280,17 @@ pub async fn combine_all_cached_samples(
                 duration,
             })
             .unwrap();
-
         if total_samples == 0 {
-            let _ = app.emit(
-                "combined-cached",
-                CachedCombineResult {
+            // Emit specific event for no active samples
+            on_event
+                .send(CombineAudioEvent::Finished {
                     svg_path: String::new(),
-                    duration: 0.0,
-                },
-            );
-            println!("⚠️ No samples to combine");
-            return Ok("No samples".to_string());
+                    empty: true,
+                })
+                .unwrap();
+
+            println!("⚠️ No active samples to combine");
+            return Ok("No active samples".to_string());
         }
 
         let mut current_sample_offset = 0;
@@ -321,6 +332,7 @@ pub async fn combine_all_cached_samples(
                         start_offset: original_file.start_offset,
                         size: relative_length,
                         id: audio_file.id.to_string(),
+                        active: audio_file.active,
                     })
                     .unwrap();
                 if *process_count.lock().unwrap() != orig {
@@ -345,6 +357,7 @@ pub async fn combine_all_cached_samples(
         on_event
             .send(CombineAudioEvent::Finished {
                 svg_path: combined_svg_string.clone(),
+                empty: false,
             })
             .unwrap();
         *state_svg_path = Some(combined_svg_string);
@@ -381,7 +394,7 @@ pub fn cancel_combine(state: State<'_, Arc<AppState>>) -> Result<(), Error> {
 #[tauri::command]
 pub fn export_combined_audio_as_wav(
     state: State<'_, Arc<AppState>>,
-    outputPath: String,
+    output_path: String,
 ) -> Result<String, String> {
     // Get a lock on the combined audio
     let combined_audio = state.combined_audio.lock().unwrap();
@@ -402,7 +415,7 @@ pub fn export_combined_audio_as_wav(
     };
 
     // Create file
-    let path = Path::new(&outputPath);
+    let path = Path::new(&output_path);
     let writer = WavWriter::create(&path, spec).map_err(|e| e.to_string())?;
 
     // Write samples
@@ -413,7 +426,7 @@ pub fn export_combined_audio_as_wav(
 
     writer.finalize().map_err(|e| e.to_string())?;
 
-    Ok(format!("WAV file successfully saved to {}", outputPath))
+    Ok(format!("WAV file successfully saved to {}", output_path))
 }
 
 fn get_samples(file_path: &str) -> Result<Vec<i16>, Error> {
@@ -472,4 +485,127 @@ pub async fn combine_all_cached_samples_with_custom_order(
 
     // Call the main combine function with the custom order
     combine_all_cached_samples(state, app, on_event, custom_order).await
+}
+
+#[tauri::command]
+pub fn toggle_audio_file_active(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    file_id: String,
+) -> Result<bool, Error> {
+    let uuid = Uuid::parse_str(&file_id).map_err(|_| Error::InvalidPath)?;
+    let mut audio_files = state.audio_files.lock().map_err(|_| Error::LockPoisoned)?;
+
+    if let Some(file) = audio_files.values_mut().find(|f| f.id == uuid) {
+        file.active = !file.active;
+        println!(
+            "Toggled file {} active status to: {}",
+            file.path, file.active
+        );
+
+        // Emit state change event
+        let _ = app.emit(
+            "audio_file_state_changed",
+            StateChangeEvent {
+                file_id: uuid.to_string(),
+                field: "active".to_string(),
+                value: serde_json::Value::Bool(file.active),
+            },
+        );
+
+        Ok(file.active)
+    } else {
+        Err(Error::InvalidPath)
+    }
+}
+
+#[tauri::command]
+pub fn set_audio_file_active(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    file_id: String,
+    active: bool,
+) -> Result<(), Error> {
+    let uuid = Uuid::parse_str(&file_id).map_err(|_| Error::InvalidPath)?;
+    let mut audio_files = state.audio_files.lock().map_err(|_| Error::LockPoisoned)?;
+
+    if let Some(file) = audio_files.values_mut().find(|f| f.id == uuid) {
+        file.active = active;
+        println!("Set file {} active status to: {}", file.path, active);
+
+        // Emit state change event
+        let _ = app.emit(
+            "audio_file_state_changed",
+            StateChangeEvent {
+                file_id: uuid.to_string(),
+                field: "active".to_string(),
+                value: serde_json::Value::Bool(active),
+            },
+        );
+
+        Ok(())
+    } else {
+        Err(Error::InvalidPath)
+    }
+}
+
+#[tauri::command]
+pub fn set_audio_files_active_batch(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    file_ids: Vec<String>,
+    active: bool,
+) -> Result<usize, Error> {
+    let mut audio_files = state.audio_files.lock().map_err(|_| Error::LockPoisoned)?;
+    let mut updated_count = 0;
+
+    // Parse all UUIDs first to validate them
+    let uuids: Result<Vec<Uuid>, Error> = file_ids
+        .iter()
+        .map(|id| Uuid::parse_str(id).map_err(|_| Error::InvalidPath))
+        .collect();
+
+    let uuids = uuids?;
+
+    // Update all files that match the provided IDs
+    for uuid in uuids {
+        if let Some(file) = audio_files.values_mut().find(|f| f.id == uuid) {
+            file.active = active;
+            updated_count += 1;
+            println!("Set file {} active status to: {}", file.path, active);
+
+            // Emit state change event
+            let _ = app.emit(
+                "audio_file_state_changed",
+                StateChangeEvent {
+                    file_id: uuid.to_string(),
+                    field: "active".to_string(),
+                    value: serde_json::Value::Bool(active),
+                },
+            );
+        }
+    }
+
+    if updated_count == 0 {
+        println!("Warning: No files were updated. Check if file IDs are valid.");
+    } else {
+        println!("Updated {} files to active: {}", updated_count, active);
+    }
+
+    Ok(updated_count)
+}
+
+#[tauri::command]
+pub fn get_audio_file_active_status(
+    state: State<'_, Arc<AppState>>,
+    file_id: String,
+) -> Result<bool, Error> {
+    let uuid = Uuid::parse_str(&file_id).map_err(|_| Error::InvalidPath)?;
+    let audio_files = state.audio_files.lock().map_err(|_| Error::LockPoisoned)?;
+
+    if let Some(file) = audio_files.values().find(|f| f.id == uuid) {
+        Ok(file.active)
+    } else {
+        Err(Error::InvalidPath)
+    }
 }

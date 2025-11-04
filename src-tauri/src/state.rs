@@ -1,6 +1,6 @@
 use rodio::Sink;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use serde::Serialize;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -13,6 +13,7 @@ pub struct AudioFile {
     pub waveform_path: String,
     pub id: Uuid,
     pub path: String,
+    pub active: bool,
 }
 
 pub struct AppState {
@@ -35,6 +36,7 @@ pub struct AudioFileDebug {
     start_offset: f64,
     waveform_path: String,
     id: String,
+    active: bool,
 }
 
 #[derive(Serialize)]
@@ -60,6 +62,7 @@ pub fn get_app_state(state: State<'_, Arc<AppState>>) -> SerializableAppState {
                     start_offset: audio_file.start_offset,
                     waveform_path: audio_file.waveform_path.clone(),
                     id: audio_file.id.to_string(),
+                    active: audio_file.active,
                 },
             )
         })

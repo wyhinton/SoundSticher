@@ -1,0 +1,175 @@
+    Blocking waiting for file lock on package cache
+   1.209503100s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="tauri_v2_sveltekit_template_lib"}: cargo::core::compiler::fingerprint: fingerprint error for Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)/Check { test: false }/TargetInner { ..: lib_target("tauri_v2_sveltekit_template_lib", ["lib", "cdylib", "staticlib"], "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\lib.rs", Edition2024) }
+   1.209591000s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="tauri_v2_sveltekit_template_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri\target\debug\.fingerprint\Sound-Stitch-65ba770d3c1debe6\lib-tauri_v2_sveltekit_template_lib`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_midx_writer_dump
+   1: git_midx_writer_dump
+   2: git_midx_writer_dump
+   3: git_midx_writer_dump
+   4: git_filter_source_repo
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_repo
+  10: git_filter_source_repo
+  11: git_filter_source_repo
+  12: git_filter_source_repo
+  13: git_filter_source_repo
+  14: <unknown>
+  15: <unknown>
+  16: git_midx_writer_dump
+  17: git_filter_source_repo
+  18: git_midx_writer_dump
+  19: BaseThreadInitThunk
+  20: RtlUserThreadStart
+   1.223474900s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\build.rs", Edition2024) }
+   1.223509300s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri\target\debug\.fingerprint\Sound-Stitch-99da15ee40bdc9b5\run-build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_midx_writer_dump
+   1: git_midx_writer_dump
+   2: git_midx_writer_dump
+   3: git_midx_writer_dump
+   4: git_filter_source_repo
+   5: git_filter_source_path
+   6: git_filter_source_repo
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_repo
+  12: git_filter_source_repo
+  13: git_filter_source_repo
+  14: git_filter_source_repo
+  15: git_filter_source_repo
+  16: <unknown>
+  17: <unknown>
+  18: git_midx_writer_dump
+  19: git_filter_source_repo
+  20: git_midx_writer_dump
+  21: BaseThreadInitThunk
+  22: RtlUserThreadStart
+   1.223788800s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)/Build/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\build.rs", Edition2024) }
+   1.223812000s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri\target\debug\.fingerprint\Sound-Stitch-b71c2742b91647fc\build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_midx_writer_dump
+   1: git_midx_writer_dump
+   2: git_midx_writer_dump
+   3: git_midx_writer_dump
+   4: git_filter_source_repo
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_repo
+  12: git_filter_source_repo
+  13: git_filter_source_repo
+  14: git_filter_source_repo
+  15: git_filter_source_repo
+  16: <unknown>
+  17: <unknown>
+  18: git_midx_writer_dump
+  19: git_filter_source_repo
+  20: git_midx_writer_dump
+  21: BaseThreadInitThunk
+  22: RtlUserThreadStart
+   1.347887500s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="tauri_v2_sveltekit_template_lib"}: cargo::core::compiler::fingerprint: fingerprint error for Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)/Check { test: true }/TargetInner { ..: lib_target("tauri_v2_sveltekit_template_lib", ["lib", "cdylib", "staticlib"], "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\lib.rs", Edition2024) }
+   1.347926600s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="tauri_v2_sveltekit_template_lib"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri\target\debug\.fingerprint\Sound-Stitch-0122269e8f3e7c86\test-lib-tauri_v2_sveltekit_template_lib`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_midx_writer_dump
+   1: git_midx_writer_dump
+   2: git_midx_writer_dump
+   3: git_midx_writer_dump
+   4: git_filter_source_repo
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_repo
+  10: git_filter_source_repo
+  11: git_filter_source_repo
+  12: git_filter_source_repo
+  13: git_filter_source_repo
+  14: <unknown>
+  15: <unknown>
+  16: git_midx_writer_dump
+  17: git_filter_source_repo
+  18: git_midx_writer_dump
+  19: BaseThreadInitThunk
+  20: RtlUserThreadStart
+   1.350976200s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="Sound-Stitch"}: cargo::core::compiler::fingerprint: fingerprint error for Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)/Check { test: false }/TargetInner { name: "Sound-Stitch", doc: true, ..: with_path("C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\main.rs", Edition2024) }
+   1.351012700s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="Sound-Stitch"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri\target\debug\.fingerprint\Sound-Stitch-f7d2ec536847a8a3\bin-Sound-Stitch`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_midx_writer_dump
+   1: git_midx_writer_dump
+   2: git_midx_writer_dump
+   3: git_midx_writer_dump
+   4: git_filter_source_repo
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_repo
+  10: git_filter_source_repo
+  11: git_filter_source_repo
+  12: git_filter_source_repo
+  13: git_filter_source_repo
+  14: <unknown>
+  15: <unknown>
+  16: git_midx_writer_dump
+  17: git_filter_source_repo
+  18: git_midx_writer_dump
+  19: BaseThreadInitThunk
+  20: RtlUserThreadStart
+   1.353867900s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="Sound-Stitch"}: cargo::core::compiler::fingerprint: fingerprint error for Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)/Check { test: true }/TargetInner { name: "Sound-Stitch", doc: true, ..: with_path("C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\main.rs", Edition2024) }
+   1.353914300s  INFO prepare_target{force=false package_id=Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri) target="Sound-Stitch"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri\target\debug\.fingerprint\Sound-Stitch-09d78690f267f342\test-bin-Sound-Stitch`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_midx_writer_dump
+   1: git_midx_writer_dump
+   2: git_midx_writer_dump
+   3: git_midx_writer_dump
+   4: git_filter_source_repo
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_repo
+  10: git_filter_source_repo
+  11: git_filter_source_repo
+  12: git_filter_source_repo
+  13: git_filter_source_repo
+  14: <unknown>
+  15: <unknown>
+  16: git_midx_writer_dump
+  17: git_filter_source_repo
+  18: git_midx_writer_dump
+  19: BaseThreadInitThunk
+  20: RtlUserThreadStart
+   Compiling Sound-Stitch v0.0.0 (C:\Users\Primary User\Desktop\TAURI_APPS\SKV2\tauri-v2-sveltekit-template\src-tauri)
+error: could not compile `Sound-Stitch` (build script) due to 1 previous error

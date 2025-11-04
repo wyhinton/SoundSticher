@@ -41,6 +41,8 @@ export interface PerformanceState {
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
   set_timeline_play_position: PerformanceMetric[];
   stop_timeline_audio: PerformanceMetric[];
+  set_audio_files_active_batch: PerformanceMetric[];
+  toggle_audio_file_active: PerformanceMetric[];
 }
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
@@ -64,6 +66,8 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   combine_all_cached_samples_with_custom_order: [],
   set_timeline_play_position: [],
   stop_timeline_audio: [],
+  set_audio_files_active_batch: [],
+  toggle_audio_file_active: [],
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {
@@ -159,6 +163,9 @@ export async function updateInputs(sections: Section[]) {
       appState.update(s => {
         s.isCombiningFile = false;
         s.combinedFile = { svgPath: message.data.svgPath };
+        // Set hasNoActiveSamples based on the empty property
+        s.hasNoActiveSamples = message.data.empty;
+        console.log(message.data.empty);
         return s;
       });
     }

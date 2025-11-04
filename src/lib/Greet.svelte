@@ -14,6 +14,9 @@
   import Footer from './Footer.svelte';
   import { exportState } from './state/export';
   import { get } from 'svelte/store';
+  import { initializeStateSynchronization } from './state/stateSynchronization';
+  import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
+  import MainDebugToolbar from './components/MainDebugToolbar.svelte';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -23,6 +26,8 @@
 
   let filedropEvent: Event<any>;
   let unlisten: UnlistenFn;
+  let contextMenuWrapper: ContextMenuWrapper;
+  let timelineComponent: any;
   async function onDrop(event) {
     filedropEvent = event;
     if (!filedropEvent) return;
@@ -48,6 +53,9 @@
   };
 
   onMount(() => {
+    // Initialize state synchronization
+    initializeStateSynchronization();
+
     window.addEventListener('keyup', handleSpaceBar);
     exportState.update(s => {
       s.message = undefined;
@@ -58,6 +66,11 @@
     updateInputs(get(appState).sections);
   });
 
+  // Sync timeline selection with context menu
+  function handleTimelineSelectionChange(event: CustomEvent<Set<number>>) {
+    contextMenuWrapper?.updateTimelineSelection(event.detail);
+  }
+
   onDestroy(() => {
     window.removeEventListener('keyup', handleSpaceBar);
   });
@@ -66,6 +79,10 @@
 <!-- <Toolbar></Toolbar> -->
 
 <div class="main-content d-flex flex-column">
+  {#if import.meta.env.DEV}
+    <MainDebugToolbar />
+  {/if}
+
   <div class="content-area flex-grow-1">
     <div class="px-0 d-flex">
       <Sources></Sources>
@@ -74,18 +91,20 @@
     </div>
     <!-- <Waveform></Waveform> -->
     <PlottedInfo></PlottedInfo>
-    <Plotted></Plotted>
+    <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
+    ></Plotted>
     <Export></Export>
   </div>
+
+  <!-- Debug Toolbar - Development Only -->
+
   <Footer></Footer>
 </div>
 
-<style>
-  .blender-icon > svg {
-    height: 12px;
-    width: 12px;
-  }
+<!-- Context Menu System -->
+<ContextMenuWrapper bind:this={contextMenuWrapper} />
 
+<style>
   .main-content {
     height: 100vh;
     overflow: hidden;
