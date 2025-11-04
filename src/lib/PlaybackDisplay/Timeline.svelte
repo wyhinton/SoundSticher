@@ -20,6 +20,7 @@
   import { Channel } from '@tauri-apps/api/core';
   import { get } from 'svelte/store';
   import { audioFileStateManager } from '../state/stateSynchronization';
+  import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
 
   const dispatch = createEventDispatcher();
 
@@ -27,22 +28,27 @@
   let svgEl: SVGSVGElement;
   let axisGroup: SVGGElement;
   let pathGroup: SVGGElement;
-  let labelGroup: SVGGElement;
 
   const height = 120;
-  $: if ($appState?.combinedFileLength && width > 0) {
-    updateScales();
-  }
-
-  const originalPathWidth = 1000;
-  let currentTransform = d3.zoomIdentity;
   let width = 0;
+
+  // D3 Manager instance
+  let d3Manager: D3TimelineManager | null = null;
+  const originalPathWidth = 1000;
+
+  // Reactive properties from D3 manager
+  let currentTransform = d3.zoomIdentity;
   let scaleX = 1;
 
   let xScale: d3.ScaleLinear<number, number>;
+
   let playHeadPosition = 0;
   let playHeadX = 0;
-  $: playHeadX = xScale?.(playHeadPosition) ?? 0;
+
+  // Initialize D3 manager when dependencies change
+  $: if (width > 0 && $durationSeconds > 0) {
+    initializeD3Manager();
+  }
 
   // Drag and drop state
   let isDragging = false;
@@ -114,10 +120,50 @@
     dispatch('selectionChange', selectedSegments);
   }
 
-  function updateScales() {
-    xScale = d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]);
-    scaleX = width / originalPathWidth;
-    renderAxis(xScale);
+  function initializeD3Manager() {
+    if (!svgEl || !axisGroup || !pathGroup) return;
+
+    // Clean up existing manager
+    if (d3Manager) {
+      d3Manager.destroy();
+    }
+
+    // Create new manager
+    d3Manager = new D3TimelineManager({
+      width,
+      height,
+      durationSeconds: $durationSeconds,
+      originalPathWidth,
+      onTransformChange: transform => {
+        currentTransform = transform;
+      },
+      onAxisUpdate: scale => {
+        xScale = scale;
+        playHeadX = d3Manager?.getPlayheadX(playHeadPosition) ?? 0;
+      },
+    });
+
+    // Initialize with DOM elements
+    d3Manager.initialize(svgEl, axisGroup, pathGroup);
+
+    // Update reactive values
+    scaleX = d3Manager.getScaleX();
+    xScale = d3Manager.getXScale();
+    playHeadX = d3Manager.getPlayheadX(playHeadPosition);
+  }
+
+  // Update playhead position when it changes
+  $: if (d3Manager) {
+    playHeadX = d3Manager.getPlayheadX(playHeadPosition);
+  }
+
+  // Update manager options when width or duration changes
+  $: if (d3Manager && (width > 0 || $durationSeconds > 0)) {
+    d3Manager.updateOptions({
+      width,
+      durationSeconds: $durationSeconds,
+    });
+    scaleX = d3Manager.getScaleX();
   }
 
   listen<number>('timeline-progress', event => {
@@ -125,35 +171,21 @@
   });
 
   function handleClick(event: MouseEvent) {
+    if (!d3Manager) return;
+
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
 
-    // Check if click is on a timeline segment
-    let clickedOnSegment = false;
-    if ($appState?.timelineItems) {
-      for (let i = 0; i < $appState.timelineItems.length; i++) {
-        const item = $appState.timelineItems[i];
-        const itemStartX =
-          item.startOffset * originalPathWidth * scaleX * currentTransform.k + currentTransform.x;
-        const itemEndX = itemStartX + item.size * originalPathWidth * scaleX * currentTransform.k;
-
-        if (relativeX >= itemStartX && relativeX <= itemEndX) {
-          clickedOnSegment = true;
-          break;
-        }
-      }
-    }
+    // Check if click is on a timeline segment using the manager
+    const clickedSegmentIndex = $appState?.timelineItems
+      ? d3Manager.findClickedSegment(relativeX, $appState.timelineItems as TimelineItem[])
+      : null;
 
     // If clicked on empty space, clear selection and set playhead
-    if (!clickedOnSegment) {
+    if (clickedSegmentIndex === null) {
       handleClearSelection();
 
-      const clickedTime = currentTransform
-        .rescaleX(d3.scaleLinear().domain([0, $durationSeconds]).range([0, width]))
-        .invert(relativeX);
-      console.log(clickedTime);
-      const newPlayPosition = Math.max(0, Math.min(clickedTime, $durationSeconds));
-      console.log(newPlayPosition);
+      const clickedTime = d3Manager.clickToTime(relativeX);
       console.log(clickedTime);
       invokeWithPerf('set_timeline_play_position', { position: clickedTime });
     }
@@ -197,111 +229,21 @@
     }
   }
 
-  function renderAxis(scale: d3.ScaleLinear<number, number>) {
-    const axis = d3
-      .axisBottom(scale)
-      .ticks(Math.floor(width / 60))
-      .tickFormat((d: number) => {
-        const m = Math.floor(d / 60);
-        const s = Math.floor(d % 60);
-        return `${m}:${s.toString().padStart(2, '0')}`;
-      });
-
-    d3.select(axisGroup).call(axis);
-
-    d3.select(axisGroup)
-      .call(axis)
-      .selectAll('text')
-      .style('font-family', 'monospace')
-      .style('font-size', '10px'); // optional
-
-    d3.select(axisGroup)
-      .call(axis)
-      .selectAll('text')
-      .style('font-family', 'monospace')
-      .style('font-size', '10px'); // optional
-
-    const ticks = d3.selectAll('g.tick');
-
-    ticks
-      .filter((_, i, nodes) => i === 0)
-      .attr('text-anchor', 'start')
-      .attr('dx', '0.5em');
-    //   .attr('color', 'red')
-
-    ticks
-      .filter((_, i, nodes) => i === nodes.length - 1)
-      .attr('text-anchor', 'end')
-      .attr('dx', '-0.5em');
-    //   .attr('color', 'red')
-
-    ticks.filter((_, i, nodes) => i !== 0).attr('color', 'white');
-  }
-
-  function setupZoom() {
-    const pathGroupD3 = d3.select(pathGroup);
-
-    const labelGroupD3 = d3.select(labelGroup);
-
-    d3.select(svgEl).call(
-      d3
-        .zoom<SVGSVGElement, unknown>()
-        .scaleExtent([1, 10])
-        .translateExtent([
-          [0, 0],
-          [width, 0],
-        ])
-        .extent([
-          [0, 0],
-          [width, 0],
-        ])
-        // .extent([[0, 0], [width, height]])
-        .on('zoom', event => {
-          currentTransform = event.transform;
-          pathGroupD3.attr(
-            'transform',
-            `translate(${event.transform.x}, 0) scale(${event.transform.k}, 1)`
-          );
-          const newXScale = currentTransform.rescaleX(
-            d3.scaleLinear().domain([0, $durationSeconds]).range([0, width])
-          );
-          renderAxis(newXScale);
-        })
-    );
-  }
-
   onMount(() => {
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
-      updateScales();
-      setupZoom();
+      // The D3 manager will be updated through reactive statements
     });
 
-    const ticks = d3.selectAll('.x-axis .tick text');
-    const t = d3.selectAll('g.tick');
-    ticks
-      .filter((_, i, nodes) => i === 0)
-      .attr('text-anchor', 'start')
-      .attr('dx', '0.5em')
-      .attr('color', 'red');
-
-    ticks
-      .filter((_, i, nodes) => i === nodes.length - 1)
-      .attr('text-anchor', 'end')
-      .attr('dx', '-0.5em');
-
-    d3.selectAll('g.tick')
-      .filter(function (d) {
-        return d == 50;
-      })
-      //only ticks that returned true for the filter will be included
-      //in the rest of the method calls:
-      .select('line') //grab the tick line
-      .attr('class', 'quadrantBorder') //style with a custom class and CSS
-      .style('stroke-width', 5);
-
     resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
+
+    return () => {
+      resizeObserver.disconnect();
+      // Clean up D3 manager
+      if (d3Manager) {
+        d3Manager.destroy();
+      }
+    };
   });
 
   function handleDragStart(
@@ -328,59 +270,21 @@
   ) {
     console.log(`%cHERE LINE :196 %c`, 'color: yellow; font-weight: bold', '');
 
-    if (!isDragging) return;
+    if (!isDragging || !d3Manager || !$appState?.timelineItems) return;
 
     const { index, mousePos, dragDistance } = event.detail;
 
-    // Calculate which segment position the mouse is over
+    // Calculate drop position using the D3 manager
     const containerRect = container.getBoundingClientRect();
     const relativeX = mousePos.x - containerRect.left;
 
-    // Apply zoom transform to get the correct timeline position
-    const timelineX = currentTransform.invert
-      ? currentTransform.invertX(relativeX)
-      : relativeX / currentTransform.k - currentTransform.x / currentTransform.k;
+    const dropPosition = d3Manager.calculateDropPosition(
+      relativeX,
+      $appState.timelineItems as TimelineItem[]
+    );
 
-    // Find which segment this position corresponds to
-    let targetIndex = -1;
-    let targetX = 0;
-
-    if ($appState?.timelineItems) {
-      const items = $appState.timelineItems;
-
-      for (let i = 0; i < items.length; i++) {
-        const itemStartX = items[i].startOffset * originalPathWidth * scaleX;
-        const itemEndX = itemStartX + items[i].size * originalPathWidth * scaleX;
-
-        if (timelineX >= itemStartX && timelineX <= itemEndX) {
-          // Mouse is over this segment
-          const midPoint = itemStartX + (itemEndX - itemStartX) / 2;
-
-          if (timelineX < midPoint) {
-            // Drop before this segment
-            targetIndex = i;
-            targetX = itemStartX;
-          } else {
-            // Drop after this segment
-            targetIndex = i + 1;
-            targetX = itemEndX;
-          }
-          break;
-        }
-      }
-
-      // If no segment found, place at the end
-      if (targetIndex === -1 && items.length > 0) {
-        targetIndex = items.length;
-        const lastItem = items[items.length - 1];
-        targetX = (lastItem.startOffset + lastItem.size) * originalPathWidth * scaleX;
-      }
-    }
-
-    dropIndicatorIndex = targetIndex;
-    // Convert back to screen coordinates for rendering
-    // targetX is in timeline coordinates, convert to screen coordinates
-    dropIndicatorX = targetX * currentTransform.k + currentTransform.x;
+    dropIndicatorIndex = dropPosition.index;
+    dropIndicatorX = dropPosition.x;
   }
 
   function handleDragEnd(
@@ -492,7 +396,6 @@
   {/if}
 
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     on:click={e => {
       handleClick(e);
@@ -500,9 +403,9 @@
     on:keydown={handleKeyDown}
     bind:this={container}
     style="width: 100%;"
-    tabindex="0"
-    role="region"
+    role="application"
     aria-label="Timeline"
+    tabindex="0"
   >
     <svg class="waveform-svg-parent" bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
       <g transform={`translate(0, ${20})`}>
