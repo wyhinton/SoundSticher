@@ -83,14 +83,34 @@ jobs:
           VERSION="${{ steps.get-version.outputs.version }}"
           VERSION_NO_V="${VERSION#v}"
           
-          # Update package.json
-          npm version $VERSION_NO_V --no-git-tag-version
+          echo "Updating to version: $VERSION_NO_V"
+          
+          # Update package.json (force update)
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            pkg.version = '$VERSION_NO_V';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Updated package.json to version $VERSION_NO_V');
+          "
           
           # Update Cargo.toml
-          sed -i.bak "s/version = \".*\"/version = \"$VERSION_NO_V\"/" src-tauri/Cargo.toml
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            powershell -Command "(Get-Content src-tauri/Cargo.toml) -replace 'version = \".*\"', 'version = \"$VERSION_NO_V\"' | Set-Content src-tauri/Cargo.toml"
+          else
+            sed -i.bak "s/version = \".*\"/version = \"$VERSION_NO_V\"/" src-tauri/Cargo.toml
+            rm -f src-tauri/Cargo.toml.bak
+          fi
+          echo "Updated Cargo.toml to version $VERSION_NO_V"
           
           # Update tauri.conf.json  
-          node -e "const fs=require('fs'); const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); tauri.version='$VERSION_NO_V'; fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri,null,2));"
+          node -e "
+            const fs = require('fs');
+            const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
+            tauri.version = '$VERSION_NO_V';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 2));
+            console.log('Updated tauri.conf.json to version $VERSION_NO_V');
+          "
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
