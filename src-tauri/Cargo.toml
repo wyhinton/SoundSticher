@@ -1,6 +1,6 @@
 [package]
 name = "Sound-Stitch"
-version = "0.2.1"
+version = "0.2.2"
 description = "Sound Stitch"
 authors = ["Webb Hinton"]
 edition = "2021"

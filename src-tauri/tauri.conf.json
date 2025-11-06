@@ -1,7 +1,7 @@
 {
   "productName": "Sound Stitch",
-  "version": "0.2.1",
-  "identifier": "audio.app",
+  "version": "0.2.2",
+  "identifier": "com.soundstitch.app",
   "build": {
     "beforeDevCommand": "npm run dev:web",
     "devUrl": "http://localhost:1420",
