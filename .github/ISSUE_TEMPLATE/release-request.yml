@@ -1,0 +1,99 @@
+name: 🚀 Release Request
+description: Request a new release of Sound Stitch
+title: "Release v[VERSION] - [BRIEF_DESCRIPTION]"
+labels: ["release", "enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🎵 Sound Stitch Release Request
+        
+        Thank you for requesting a new release! This template helps ensure we have all the information needed.
+
+  - type: dropdown
+    id: release-type
+    attributes:
+      label: Release Type
+      description: What type of release is this?
+      options:
+        - Patch (bug fixes, small improvements)
+        - Minor (new features, backwards compatible)
+        - Major (breaking changes, major overhaul)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Proposed Version
+      description: What version number should this be? (e.g., 1.2.3)
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: changes
+    attributes:
+      label: Changes & Features
+      description: What's new in this release? List the main changes, features, or fixes.
+      placeholder: |
+        - Fixed audio playback issue on Windows
+        - Added new mixing controls
+        - Improved performance for large files
+        - Updated UI design
+    validations:
+      required: true
+
+  - type: textarea
+    id: breaking-changes
+    attributes:
+      label: Breaking Changes
+      description: Any breaking changes that users should know about? (Leave empty if none)
+      placeholder: "List any breaking changes or migration notes..."
+
+  - type: checkboxes
+    id: platforms
+    attributes:
+      label: Target Platforms
+      description: Which platforms should be included in this release?
+      options:
+        - label: Windows (x64)
+          checked: true
+        - label: macOS (Universal)
+          checked: true
+        - label: Linux (x64)
+          checked: true
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing Notes
+      description: Any specific testing that should be done before release?
+      placeholder: "Describe any manual testing steps, edge cases, or specific scenarios to verify..."
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-Release Checklist
+      options:
+        - label: Code is ready and tested
+        - label: Documentation is updated
+        - label: Version numbers are consistent
+        - label: GitHub Actions workflow is working
+        - label: All target platforms build successfully
+
+  - type: markdown
+    attributes:
+      value: |
+        ## 🚀 What Happens Next
+        
+        Once approved, the release process will:
+        1. Update version in all configuration files
+        2. Create a git tag and push to GitHub
+        3. Trigger automated builds for all platforms
+        4. Create a GitHub release with download links
+        5. Publish release notes with changelog
+        
+        **Estimated time:** 15-30 minutes for full build completion.
