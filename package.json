@@ -1,7 +1,7 @@
 {
   "name": "tauri-v2-sveltekit-template",
   "private": true,
-  "version": "0.2.2",
+  "version": "sync..1",
   "type": "module",
   "scripts": {
     "tauri": "tauri",

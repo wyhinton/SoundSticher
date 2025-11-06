@@ -1,6 +1,6 @@
 {
   "productName": "Sound Stitch",
-  "version": "0.2.2",
+  "version": "sync..1",
   "identifier": "com.soundstitch.app",
   "build": {
     "beforeDevCommand": "npm run dev:web",
