@@ -1,6 +1,6 @@
 {
   "productName": "Sound Stitch",
-  "version": "sync..1",
+  "version": "0.2.2",
   "identifier": "com.soundstitch.app",
   "build": {
     "beforeDevCommand": "npm run dev:web",
@@ -31,15 +31,11 @@
         {
           "identifier": "use-external-drives",
           "description": "Capability to be able to use library on external drives",
-          "windows": [
-            "*"
-          ],
+          "windows": ["*"],
           "permissions": [
             {
               "identifier": "fs:scope",
-              "allow": [
-                "**"
-              ]
+              "allow": ["**"]
             },
             "fs:default",
             "core:window:allow-close",
@@ -62,9 +58,7 @@
         }
       ],
       "assetProtocol": {
-        "scope": [
-          "**"
-        ],
+        "scope": ["**"],
         "enable": true
       },
       "csp": null
