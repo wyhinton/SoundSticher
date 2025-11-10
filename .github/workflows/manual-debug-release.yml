@@ -48,15 +48,15 @@ jobs:
         # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
 
       - name: install frontend dependencies
-        run: yarn install # change this to npm, pnpm or bun depending on which one you use.
+        run: npm install # change this to npm, pnpm or bun depending on which one you use.
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: __VERSION__ # the action automatically replaces __VERSION__ with the app version.
-          releaseName: "Ascapes Mixer DEBUG __VERSION__"
-          releaseBody: "MANUAL DEBUG BUILD. See the CHANGES.md for changes. See the assets to download this version and install."
+          releaseName: "Sound Stitch DEBUG __VERSION__"
+          releaseBody: "## Sound Stitch DEBUG __VERSION__\n\n🎵 Audio mixing and processing application\n\n**⚠️ DEBUG BUILD** - For testing and development purposes\n\n### Downloads\n- **Windows**: Setup executable and MSI installer\n- **macOS**: Universal DMG for Intel and Apple Silicon\n- **Linux**: DEB package and AppImage\n\nSee the assets below to download and install."
           releaseDraft: true
           prerelease: false
           includeDebug: true
