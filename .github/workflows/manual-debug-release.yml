@@ -61,3 +61,4 @@ jobs:
           prerelease: false
           includeDebug: true
           args: ${{ matrix.args }}
+          packageManager: "npm"
