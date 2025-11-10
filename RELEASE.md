@@ -142,3 +142,63 @@ Once complete, users can download Sound Stitch for their platform directly from 
 ---
 
 **Need help?** Check the GitHub Actions logs or create an issue in the repository.
+
+## 🎯 **Creating Your First Release**
+
+### **Step 1: Check Repository Setup**
+First, make sure your GitHub repository is properly configured:
+
+```bash
+# Check if you have a remote repository
+git remote -v
+
+# If no remote, add one:
+# git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+```
+
+### **Step 2: Ensure Clean State** 
+Make sure all your changes are committed:
+
+```bash
+# Check status
+git status
+
+# If you have uncommitted changes:
+git add .
+git commit -m "Prepare for first release"
+git push origin main
+```
+
+### **Step 3: Create Your First Release**
+Since you're at version `0.1.0`, create your first release:
+
+**Option A - Quick Command:**
+```bash
+npm run release:minor
+```
+
+**Option B - Interactive Script:**
+```cmd
+# Windows
+scripts\release.bat
+
+# Mac/Linux  
+./scripts/release.sh
+```
+
+### **Step 4: Monitor the Build**
+1. After running the release command, go to your GitHub repository
+2. Click on **"Actions"** tab
+3. You'll see the **"Release Build"** workflow running
+4. Wait 15-30 minutes for all platforms to build
+
+### **Step 5: Check Your Release**
+Once complete:
+1. Go to your GitHub repository
+2. Click **"Releases"** on the right side
+3. You'll see your new release with downloads for:
+   - Windows (.exe and .msi)
+   - macOS (.dmg)
+   - Linux (.deb and .AppImage)
+
+---
