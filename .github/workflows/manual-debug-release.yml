@@ -42,13 +42,27 @@ jobs:
         run: |
           # Install LAME for MP3 encoding support
           brew install lame
-          echo "LAME_STATIC=1" >> $GITHUB_ENV
+          # Force the use of system LAME library and disable problematic optimizations
+          echo "LAME_STATIC=0" >> $GITHUB_ENV
           echo "LAME_NO_NASM=1" >> $GITHUB_ENV
+          echo "LAME_NO_SSE=1" >> $GITHUB_ENV
           echo "LAME_INCLUDE_DIR=$(brew --prefix lame)/include" >> $GITHUB_ENV  
           echo "LAME_LIB_DIR=$(brew --prefix lame)/lib" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$(brew --prefix lame)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
           # Additional build flags for macOS
           echo "CFLAGS=-I$(brew --prefix lame)/include" >> $GITHUB_ENV
           echo "LDFLAGS=-L$(brew --prefix lame)/lib" >> $GITHUB_ENV
+          # Ensure pkg-config can find LAME
+          echo "$(brew --prefix lame)/lib/pkgconfig" >> $GITHUB_PATH
+
+      - name: Verify LAME installation (macOS only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Verify LAME is properly installed and accessible
+          brew list lame
+          ls -la $(brew --prefix lame)/lib/libmp3lame*
+          pkg-config --exists mp3lame && echo "LAME pkg-config found" || echo "LAME pkg-config NOT found"
+          pkg-config --libs --cflags mp3lame || echo "pkg-config failed for LAME"
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
@@ -66,6 +80,12 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ensure LAME environment variables are available during build
+          LAME_STATIC: ${{ matrix.platform == 'macos-latest' && '0' || '' }}
+          LAME_NO_NASM: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
+          LAME_NO_SSE: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
+          LAME_INCLUDE_DIR: ${{ matrix.platform == 'macos-latest' && env.LAME_INCLUDE_DIR || '' }}
+          LAME_LIB_DIR: ${{ matrix.platform == 'macos-latest' && env.LAME_LIB_DIR || '' }}
         with:
           tagName: __VERSION__ # the action automatically replaces __VERSION__ with the app version.
           releaseName: "Sound Stitch DEBUG __VERSION__"
@@ -74,4 +94,3 @@ jobs:
           prerelease: false
           includeDebug: true
           args: ${{ matrix.args }}
-          packageManager: "npm"
