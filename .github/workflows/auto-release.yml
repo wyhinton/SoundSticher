@@ -50,6 +50,9 @@ jobs:
       - name: install frontend dependencies
         run: npm install # change this to npm, pnpm or bun depending on which one you use.
 
+      - name: Sync package version
+        run: npm run version:sync
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -59,6 +62,6 @@ jobs:
           releaseBody: "## Sound Stitch __VERSION__\n\n🎵 Audio mixing and processing application\n\n### Downloads\n- **Windows**: Setup executable and MSI installer\n- **macOS**: Universal DMG for Intel and Apple Silicon\n- **Linux**: DEB package and AppImage\n\nSee the assets below to download and install."
           releaseDraft: true
           prerelease: false
+          tauriScript: "npm run tauri"
           args: ${{ matrix.args }}
-          packageManager: "npm"
 
