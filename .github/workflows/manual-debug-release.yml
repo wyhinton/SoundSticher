@@ -42,10 +42,9 @@ jobs:
         run: |
           # Install LAME for MP3 encoding support
           brew install lame
-          # Force the use of system LAME library and disable problematic optimizations
+          # Force the use of system LAME library and set correct host architecture
           echo "LAME_STATIC=0" >> $GITHUB_ENV
-          echo "LAME_NO_NASM=1" >> $GITHUB_ENV
-          echo "LAME_NO_SSE=1" >> $GITHUB_ENV
+          echo "LAME_HOST=x86_64-apple-darwin" >> $GITHUB_ENV
           echo "LAME_INCLUDE_DIR=$(brew --prefix lame)/include" >> $GITHUB_ENV  
           echo "LAME_LIB_DIR=$(brew --prefix lame)/lib" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=$(brew --prefix lame)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
@@ -82,8 +81,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Ensure LAME environment variables are available during build
           LAME_STATIC: ${{ matrix.platform == 'macos-latest' && '0' || '' }}
-          LAME_NO_NASM: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
-          LAME_NO_SSE: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
+          LAME_HOST: ${{ matrix.platform == 'macos-latest' && 'x86_64-apple-darwin' || '' }}
           LAME_INCLUDE_DIR: ${{ matrix.platform == 'macos-latest' && env.LAME_INCLUDE_DIR || '' }}
           LAME_LIB_DIR: ${{ matrix.platform == 'macos-latest' && env.LAME_LIB_DIR || '' }}
         with:
