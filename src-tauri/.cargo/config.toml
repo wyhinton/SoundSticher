@@ -1,0 +1,5 @@
+[env]
+# Environment variables for mp3lame-sys build
+LAME_STATIC = "1"
+# Disable problematic SSE optimizations that cause linking issues
+LAME_NO_NASM = "1"

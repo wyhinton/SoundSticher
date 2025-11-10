@@ -37,6 +37,19 @@ jobs:
           # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Setup macOS build environment
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Install LAME for MP3 encoding support
+          brew install lame
+          echo "LAME_STATIC=1" >> $GITHUB_ENV
+          echo "LAME_NO_NASM=1" >> $GITHUB_ENV
+          echo "LAME_INCLUDE_DIR=$(brew --prefix lame)/include" >> $GITHUB_ENV  
+          echo "LAME_LIB_DIR=$(brew --prefix lame)/lib" >> $GITHUB_ENV
+          # Additional build flags for macOS
+          echo "CFLAGS=-I$(brew --prefix lame)/include" >> $GITHUB_ENV
+          echo "LDFLAGS=-L$(brew --prefix lame)/lib" >> $GITHUB_ENV
+
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
         run: |
