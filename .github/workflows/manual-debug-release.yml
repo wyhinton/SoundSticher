@@ -2,8 +2,6 @@ name: "manual-publish-debug"
 
 on:
   workflow_dispatch:
-    branches:
-      - release
 
 # This workflow should be triggered manually for the `release` branch to create or update a GitHub release, build app, and upload the artifacts to the release.
 
@@ -43,9 +41,11 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev pkg-config
         # webkitgtk 4.0 is for Tauri v1 - webkitgtk 4.1 is for Tauri v2.
         # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
+        # libasound2-dev: ALSA development libraries for audio functionality
+        # pkg-config: Required for finding system libraries during build
 
       - name: install frontend dependencies
         run: npm install # change this to npm, pnpm or bun depending on which one you use.
