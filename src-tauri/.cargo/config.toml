@@ -3,3 +3,6 @@
 LAME_STATIC = "0"
 # Set correct host architecture to enable internal vector library (from Stack Exchange solution)
 LAME_HOST = "x86_64-apple-darwin"
+# Force dynamic linking and prevent static compilation
+LAME_NO_BUILD = "1"
+LIBMP3LAME_SYS_NO_PKG_CONFIG = "1"
