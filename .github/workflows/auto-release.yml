@@ -1,12 +1,9 @@
-name: "auto-publish"
+name: auto-publish
 
 on:
   push:
     branches:
       - release
-
-# This workflow triggers on each push to the `release` branch to create or update
-# a GitHub release, build the app, and upload the artifacts to the release.
 
 jobs:
   publish-tauri:
@@ -16,13 +13,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for Arm-based Macs (M1 and above)
+          - platform: macos-latest
+            arch: arm64
             args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest" # for Intel-based Macs
+          - platform: macos-latest
+            arch: x86_64
             args: "--target x86_64-apple-darwin"
-          - platform: "ubuntu-22.04"
+          - platform: ubuntu-22.04
+            arch: x86_64
             args: ""
-          - platform: "windows-latest"
+          - platform: windows-latest
+            arch: x86_64
             args: ""
 
     runs-on: ${{ matrix.platform }}
@@ -30,93 +31,87 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
-      - name: Install Rust stable
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.args == '--target aarch64-apple-darwin' && 'aarch64-apple-darwin' || (matrix.args == '--target x86_64-apple-darwin' && 'x86_64-apple-darwin' || '') }}
 
-      # -----------------------------
-      # macOS setup (LAME build)
-      # -----------------------------
-      - name: Setup macOS build environment
+      - name: Install macOS dependencies
         if: matrix.platform == 'macos-latest'
         run: |
-          brew install lame
-          mkdir -p $HOME/lame-x86_64
-          cd /tmp
+          brew install nasm autoconf automake libtool pkg-config
+
+      - name: Build LAME (macOS only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p /tmp/lame-build && cd /tmp/lame-build
           curl -LO https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
           tar xf lame-3.100.tar.gz
           cd lame-3.100
-          ./configure --prefix=$HOME/lame-x86_64 --disable-shared
+
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            ./configure --build=x86_64-apple-darwin --host=x86_64-apple-darwin --enable-nasm --disable-shared --prefix=/usr/local/lame-x86_64
+          else
+            ./configure --build=arm-apple-darwin --host=arm-apple-darwin --disable-shared --prefix=/usr/local/lame-arm64
+          fi
+
           make -j$(sysctl -n hw.ncpu)
           make install
 
-          echo "LAME_INCLUDE_DIR=$HOME/lame-x86_64/include" >> $GITHUB_ENV
-          echo "LAME_LIB_DIR=$HOME/lame-x86_64/lib" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$HOME/lame-x86_64/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-          echo "$HOME/lame-x86_64/lib/pkgconfig" >> $GITHUB_PATH
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            echo "LAME_INCLUDE_DIR=/usr/local/lame-x86_64/include" >> $GITHUB_ENV
+            echo "LAME_LIB_DIR=/usr/local/lame-x86_64/lib" >> $GITHUB_ENV
+          else
+            echo "LAME_INCLUDE_DIR=/usr/local/lame-arm64/include" >> $GITHUB_ENV
+            echo "LAME_LIB_DIR=/usr/local/lame-arm64/lib" >> $GITHUB_ENV
+          fi
 
-      - name: Verify LAME installation (macOS only)
+      - name: Verify LAME installation
         if: matrix.platform == 'macos-latest'
         run: |
-          echo "LAME include dir: $LAME_INCLUDE_DIR"
-          echo "LAME lib dir: $LAME_LIB_DIR"
-          ls -la $LAME_LIB_DIR/libmp3lame*
-          pkg-config --exists mp3lame && echo "LAME pkg-config found" || echo "LAME pkg-config NOT found"
-          pkg-config --libs --cflags mp3lame || echo "pkg-config failed for LAME"
+          echo "Verifying LAME installation..."
+          ls -la $LAME_LIB_DIR
+          file $LAME_LIB_DIR/libmp3lame.a || true
 
-      # -----------------------------
-      # Ubuntu setup
-      # -----------------------------
-      - name: Install dependencies (Ubuntu only)
+      - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libasound2-dev \
-            pkg-config
+            libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev \
+            libappindicator3-dev librsvg2-dev \
+            patchelf libasound2-dev pkg-config
 
-      # -----------------------------
-      # Frontend & version sync
-      # -----------------------------
       - name: Install frontend dependencies
         run: npm install
 
       - name: Sync package version
         run: npm run version:sync
 
-      # -----------------------------
-      # Build & publish Tauri app
-      # -----------------------------
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build & Publish with Tauri
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LAME_STATIC: ${{ matrix.platform == 'macos-latest' && '0' || '' }}
-          LAME_HOST: ${{ matrix.platform == 'macos-latest' && 'x86_64-apple-darwin' || '' }}
           LAME_INCLUDE_DIR: ${{ env.LAME_INCLUDE_DIR }}
           LAME_LIB_DIR: ${{ env.LAME_LIB_DIR }}
+          LAME_STATIC: "1"
         with:
           tagName: __VERSION__
           releaseName: "Sound Stitch __VERSION__"
           releaseBody: |
             ## Sound Stitch __VERSION__
 
-            Advanced offline sample manager and processing application
+            Advanced offline sample manager and processing application.
 
             ### Downloads
-            - **Windows**: Setup executable and MSI installer  
-            - **macOS**: Universal DMG for Intel and Apple Silicon  
-            - **Linux**: DEB package and AppImage  
+            - **Windows**: Setup EXE and MSI installer
+            - **macOS**: Universal DMG (Intel + Apple Silicon)
+            - **Linux**: DEB package and AppImage
 
             See the assets below to download and install.
           releaseDraft: true
