@@ -61,15 +61,15 @@ jobs:
             ./configure \
               --build=x86_64-apple-darwin \
               --host=x86_64-apple-darwin \
+              --enable-nasm \   # enable assembly for SSE
               --disable-shared \
-              --disable-asm \
               --prefix="$LAME_PREFIX"
           else
             ./configure \
               --build=arm-apple-darwin \
               --host=arm-apple-darwin \
               --disable-shared \
-              --disable-asm \
+              --disable-asm \   # ARM64: disable assembly
               --prefix="$LAME_PREFIX"
           fi
 
