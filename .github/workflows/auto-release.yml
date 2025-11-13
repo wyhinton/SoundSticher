@@ -46,39 +46,38 @@ jobs:
         run: |
           brew install nasm autoconf automake libtool pkg-config
 
-      - name: Build LAME (macOS only)
-        if: matrix.platform == 'macos-latest'
+      - name: Build LAME from source
         run: |
-          mkdir -p /tmp/lame-build && cd /tmp/lame-build
-          curl -LO https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
-          tar xf lame-3.100.tar.gz
-          cd lame-3.100
-
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            ./configure --build=x86_64-apple-darwin --host=x86_64-apple-darwin --enable-nasm --disable-shared --prefix=/usr/local/lame-x86_64
-          else
-            ./configure --build=arm-apple-darwin --host=arm-apple-darwin --disable-shared --prefix=/usr/local/lame-arm64
-          fi
-
+          git clone https://github.com/rbrito/lame.git
+          cd lame
+          ./configure
           make -j$(sysctl -n hw.ncpu)
-          make install
 
+          # choose prefix based on architecture
           LAME_PREFIX="$HOME/lame-${{ matrix.arch }}"
           mkdir -p "$LAME_PREFIX"
 
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            ./configure --build=x86_64-apple-darwin --host=x86_64-apple-darwin \
-              --enable-nasm --disable-shared --prefix="$LAME_PREFIX"
+            ./configure \
+              --build=x86_64-apple-darwin \
+              --host=x86_64-apple-darwin \
+              --enable-nasm --disable-shared \
+              --prefix="$LAME_PREFIX"
           else
-            ./configure --build=arm-apple-darwin --host=arm-apple-darwin \
-              --disable-shared --prefix="$LAME_PREFIX"
+            ./configure \
+              --build=arm-apple-darwin \
+              --host=arm-apple-darwin \
+              --disable-shared \
+              --prefix="$LAME_PREFIX"
           fi
 
           make -j$(sysctl -n hw.ncpu)
           make install
 
+          # export for later Rust build steps
           echo "LAME_INCLUDE_DIR=$LAME_PREFIX/include" >> $GITHUB_ENV
           echo "LAME_LIB_DIR=$LAME_PREFIX/lib" >> $GITHUB_ENV
+
 
       - name: Verify LAME installation
         if: matrix.platform == 'macos-latest'
