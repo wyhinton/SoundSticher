@@ -47,27 +47,29 @@ jobs:
           brew install nasm autoconf automake libtool pkg-config
 
       - name: Build LAME from source
+        if: matrix.platform == 'macos-latest'
         run: |
           git clone https://github.com/rbrito/lame.git
           cd lame
-          ./configure
-          make -j$(sysctl -n hw.ncpu)
 
-          # choose prefix based on architecture
+          # Set prefix inside workspace to avoid /usr/local
           LAME_PREFIX="$HOME/lame-${{ matrix.arch }}"
           mkdir -p "$LAME_PREFIX"
 
+          # Configure based on architecture
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
             ./configure \
               --build=x86_64-apple-darwin \
               --host=x86_64-apple-darwin \
-              --enable-nasm --disable-shared \
+              --disable-shared \
+              --disable-asm \
               --prefix="$LAME_PREFIX"
           else
             ./configure \
               --build=arm-apple-darwin \
               --host=arm-apple-darwin \
               --disable-shared \
+              --disable-asm \
               --prefix="$LAME_PREFIX"
           fi
 
@@ -77,7 +79,6 @@ jobs:
           # export for later Rust build steps
           echo "LAME_INCLUDE_DIR=$LAME_PREFIX/include" >> $GITHUB_ENV
           echo "LAME_LIB_DIR=$LAME_PREFIX/lib" >> $GITHUB_ENV
-
 
       - name: Verify LAME installation
         if: matrix.platform == 'macos-latest'
