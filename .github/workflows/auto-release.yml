@@ -1,9 +1,11 @@
-name: auto-publish
+name: "auto-publish"
 
 on:
   push:
     branches:
       - release
+
+# This workflow will trigger on each push to the `release` branch to create or update a GitHub release, build app, and upload the artifacts to the release.
 
 jobs:
   publish-tauri:
@@ -13,119 +15,95 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            arch: arm64
+          - platform: "macos-latest" # for Arm based macs (M1 and above).
             args: "--target aarch64-apple-darwin"
-          - platform: macos-latest
-            arch: x86_64
+          - platform: "macos-latest" # for Intel based macs.
             args: "--target x86_64-apple-darwin"
-          - platform: ubuntu-22.04
-            arch: x86_64
+          - platform: "ubuntu-22.04" # for Tauri v1 you could replace this with ubuntu-20.04.
             args: ""
-          - platform: windows-latest
-            arch: x86_64
+          - platform: "windows-latest"
             args: ""
 
     runs-on: ${{ matrix.platform }}
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: setup node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
-      - name: Install Rust
+      - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.args == '--target aarch64-apple-darwin' && 'aarch64-apple-darwin' || (matrix.args == '--target x86_64-apple-darwin' && 'x86_64-apple-darwin' || '') }}
+          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Install macOS dependencies
+      - name: Setup macOS build environment
         if: matrix.platform == 'macos-latest'
         run: |
-          brew install nasm autoconf automake libtool pkg-config
+          # Install LAME for MP3 encoding support
+          brew install lame
+          # Force the use of system LAME library and set correct host architecture
+          echo "LAME_STATIC=0" >> $GITHUB_ENV
+          echo "LAME_HOST=x86_64-apple-darwin" >> $GITHUB_ENV
+          echo "LAME_INCLUDE_DIR=$(brew --prefix lame)/include" >> $GITHUB_ENV  
+          echo "LAME_LIB_DIR=$(brew --prefix lame)/lib" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$(brew --prefix lame)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          # Force dynamic linking and prevent static compilation
+          echo "LAME_NO_BUILD=1" >> $GITHUB_ENV
+          echo "LIBMP3LAME_SYS_NO_PKG_CONFIG=1" >> $GITHUB_ENV
+          # Additional build flags for macOS
+          echo "CFLAGS=-I$(brew --prefix lame)/include" >> $GITHUB_ENV
+          echo "LDFLAGS=-L$(brew --prefix lame)/lib" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$(brew --prefix lame)/lib" >> $GITHUB_ENV
+          echo "CPATH=$(brew --prefix lame)/include" >> $GITHUB_ENV
+          # Ensure pkg-config can find LAME
+          echo "$(brew --prefix lame)/lib/pkgconfig" >> $GITHUB_PATH
 
-      - name: Build LAME from source
-        shell: bash
-        run: |
-          git clone https://github.com/rbrito/lame.git
-          cd lame
-
-          LAME_PREFIX="$HOME/lame-${{ matrix.arch }}"
-          mkdir -p "$LAME_PREFIX"
-
-          echo "Building for ${{ matrix.arch }}..."
-
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            ./configure \
-              --build=x86_64-apple-darwin \
-              --host=x86_64-apple-darwin \
-              --disable-nasm \
-              --disable-asm \
-              --disable-shared \
-              --disable-mp3x \
-              --prefix="$LAME_PREFIX"
-          else
-            ./configure \
-              --build=arm-apple-darwin \
-              --host=arm-apple-darwin \
-              --disable-asm \
-              --disable-shared \
-              --disable-mp3x \
-              --prefix="$LAME_PREFIX"
-          fi
-
-          make -j$(sysctl -n hw.ncpu)
-          make install
-
-          echo "LAME_INCLUDE_DIR=$LAME_PREFIX/include" >> $GITHUB_ENV
-          echo "LAME_LIB_DIR=$LAME_PREFIX/lib" >> $GITHUB_ENV
-
-      - name: Verify LAME installation
+      - name: Verify LAME installation (macOS only)
         if: matrix.platform == 'macos-latest'
         run: |
-          echo "Verifying LAME installation..."
-          ls -la $LAME_LIB_DIR
-          file $LAME_LIB_DIR/libmp3lame.a || true
+          # Verify LAME is properly installed and accessible
+          brew list lame
+          ls -la $(brew --prefix lame)/lib/libmp3lame*
+          pkg-config --exists mp3lame && echo "LAME pkg-config found" || echo "LAME pkg-config NOT found"
+          pkg-config --libs --cflags mp3lame || echo "pkg-config failed for LAME"
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev \
-            libappindicator3-dev librsvg2-dev \
-            patchelf libasound2-dev pkg-config
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev pkg-config
+        # webkitgtk 4.0 is for Tauri v1 - webkitgtk 4.1 is for Tauri v2.
+        # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
+        # libasound2-dev: ALSA development libraries for audio functionality
+        # pkg-config: Required for finding system libraries
 
-      - name: Install frontend dependencies
-        run: npm install
+      - name: install frontend dependencies
+        run: npm install # change this to npm, pnpm or bun depending on which one you use.
 
       - name: Sync package version
         run: npm run version:sync
 
-      - name: Build & Publish with Tauri
-        uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LAME_INCLUDE_DIR: ${{ env.LAME_INCLUDE_DIR }}
-          LAME_LIB_DIR: ${{ env.LAME_LIB_DIR }}
-          LAME_STATIC: "1"
+          # Ensure LAME environment variables are available during build
+          LAME_STATIC: ${{ matrix.platform == 'macos-latest' && '0' || '' }}
+          LAME_HOST: ${{ matrix.platform == 'macos-latest' && 'x86_64-apple-darwin' || '' }}
+          LAME_NO_BUILD: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
+          LIBMP3LAME_SYS_NO_PKG_CONFIG: ${{ matrix.platform == 'macos-latest' && '1' || '' }}
+          LAME_INCLUDE_DIR: ${{ matrix.platform == 'macos-latest' && env.LAME_INCLUDE_DIR || '' }}
+          LAME_LIB_DIR: ${{ matrix.platform == 'macos-latest' && env.LAME_LIB_DIR || '' }}
+          LIBRARY_PATH: ${{ matrix.platform == 'macos-latest' && env.LIBRARY_PATH || '' }}
+          CPATH: ${{ matrix.platform == 'macos-latest' && env.CPATH || '' }}
         with:
-          tagName: __VERSION__
+          tagName: __VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: "Sound Stitch __VERSION__"
-          releaseBody: |
-            ## Sound Stitch __VERSION__
-
-            Advanced offline sample manager and processing application.
-
-            ### Downloads
-            - **Windows**: Setup EXE and MSI installer
-            - **macOS**: Universal DMG (Intel + Apple Silicon)
-            - **Linux**: DEB package and AppImage
-
-            See the assets below to download and install.
+          releaseBody: "## Sound Stitch __VERSION__\n\n Advanced offline sample manager and processing application\n\n### Downloads\n- **Windows**: Setup executable and MSI installer\n- **macOS**: Universal DMG for Intel and Apple Silicon\n- **Linux**: DEB package and AppImage\n\nSee the assets below to download and install."
           releaseDraft: true
           prerelease: false
           tauriScript: "npm run tauri"
           args: ${{ matrix.args }}
+
