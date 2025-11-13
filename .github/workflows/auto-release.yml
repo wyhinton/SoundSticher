@@ -62,8 +62,9 @@ jobs:
             ./configure \
               --build=x86_64-apple-darwin \
               --host=x86_64-apple-darwin \
-              --enable-nasm \
+              --disable-nasm \
               --disable-shared \
+              --disable-mp3x \
               --prefix="$LAME_PREFIX"
           else
             echo "Building LAME for arm64..."
@@ -72,6 +73,7 @@ jobs:
               --host=arm-apple-darwin \
               --disable-shared \
               --disable-asm \
+              --disable-mp3x \
               --prefix="$LAME_PREFIX"
           fi
 
