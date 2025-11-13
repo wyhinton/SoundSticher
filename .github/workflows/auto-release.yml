@@ -58,18 +58,20 @@ jobs:
 
           # Configure based on architecture
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            echo "Building LAME for x86_64..."
             ./configure \
               --build=x86_64-apple-darwin \
               --host=x86_64-apple-darwin \
-              --enable-nasm \   
+              --enable-nasm \
               --disable-shared \
               --prefix="$LAME_PREFIX"
           else
+            echo "Building LAME for arm64..."
             ./configure \
               --build=arm-apple-darwin \
               --host=arm-apple-darwin \
               --disable-shared \
-              --disable-asm \   
+              --disable-asm \
               --prefix="$LAME_PREFIX"
           fi
 
