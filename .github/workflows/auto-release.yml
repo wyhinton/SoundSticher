@@ -63,13 +63,22 @@ jobs:
           make -j$(sysctl -n hw.ncpu)
           make install
 
+          LAME_PREFIX="$HOME/lame-${{ matrix.arch }}"
+          mkdir -p "$LAME_PREFIX"
+
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            echo "LAME_INCLUDE_DIR=/usr/local/lame-x86_64/include" >> $GITHUB_ENV
-            echo "LAME_LIB_DIR=/usr/local/lame-x86_64/lib" >> $GITHUB_ENV
+            ./configure --build=x86_64-apple-darwin --host=x86_64-apple-darwin \
+              --enable-nasm --disable-shared --prefix="$LAME_PREFIX"
           else
-            echo "LAME_INCLUDE_DIR=/usr/local/lame-arm64/include" >> $GITHUB_ENV
-            echo "LAME_LIB_DIR=/usr/local/lame-arm64/lib" >> $GITHUB_ENV
+            ./configure --build=arm-apple-darwin --host=arm-apple-darwin \
+              --disable-shared --prefix="$LAME_PREFIX"
           fi
+
+          make -j$(sysctl -n hw.ncpu)
+          make install
+
+          echo "LAME_INCLUDE_DIR=$LAME_PREFIX/include" >> $GITHUB_ENV
+          echo "LAME_LIB_DIR=$LAME_PREFIX/lib" >> $GITHUB_ENV
 
       - name: Verify LAME installation
         if: matrix.platform == 'macos-latest'
