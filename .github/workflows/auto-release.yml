@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # -------------------
+      # Node setup
+      # -------------------
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -36,17 +39,6 @@ jobs:
           npm install -g pnpm
           echo "PATH=$(npm bin -g):$PATH" >> $GITHUB_ENV
 
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        run: npm install -g pnpm
-
-      # Cache pnpm store
       - name: Cache pnpm store
         uses: actions/cache@v3
         with:
@@ -55,12 +47,27 @@ jobs:
           restore-keys: |
             pnpm-store-
 
+      # -------------------
+      # Rust setup & caching
+      # -------------------
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
-      # macOS-specific environment setup
+      - name: Cache Cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-
+
+      # -------------------
+      # macOS specific setup
+      # -------------------
       - name: Setup macOS build environment
         if: matrix.platform == 'macos-latest'
         run: |
@@ -83,7 +90,9 @@ jobs:
           pkg-config --exists mp3lame && echo "LAME pkg-config found" || echo "LAME pkg-config NOT found"
           pkg-config --libs --cflags mp3lame || echo "pkg-config failed for LAME"
 
-      # Linux dependencies for Tauri + audio
+      # -------------------
+      # Linux dependencies
+      # -------------------
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -96,12 +105,18 @@ jobs:
             libasound2-dev \
             pkg-config
 
+      # -------------------
+      # Frontend dependencies
+      # -------------------
       - name: Install frontend dependencies (pnpm)
         run: pnpm install
 
       - name: Sync package version
         run: pnpm run version:sync
 
+      # -------------------
+      # Build & publish
+      # -------------------
       - name: Build and publish Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
