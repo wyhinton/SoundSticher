@@ -8,9 +8,9 @@ const config = {
     // Don't do this in your own apps unless you know what you're doing!
     // See https://kit.svelte.dev/docs/configuration#csrf for more info.
     adapter: adapter(),
-    // csrf: {
-    //   trustedOrigins: [],
-    // },
+    csrf: {
+      trustedOrigins: [],
+    },
   },
   onwarn: (warning, handler) => {
     if (warning.code === 'a11y-click-events-have-key-events') return;
