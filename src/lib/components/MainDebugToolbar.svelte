@@ -163,12 +163,25 @@
     }
   }
 
+  async function resetSortState() {
+    try {
+      appState.update(state => ({
+        ...state,
+        sortKey: undefined,
+        sortDirection: undefined,
+      }));
+      console.log('🔧 Debug: Reset sort state - sortKey and sortDirection set to undefined');
+    } catch (error) {
+      console.error('Debug: Failed to reset sort state:', error);
+    }
+  }
+
   // Release management functions
   async function openReleaseGuide() {
     try {
       // Open release guide in default browser or show info
       console.log('🔧 Debug: Opening release guide...');
-      
+
       // Try to open the RELEASE.md file in VS Code or show instructions
       const releaseInstructions = `
 📦 RELEASE INSTRUCTIONS:
@@ -190,9 +203,9 @@
 
 Monitor progress at: GitHub → Actions tab
       `;
-      
+
       console.log(releaseInstructions);
-      
+
       // Also try to show in a simple alert for immediate visibility
       if (typeof window !== 'undefined') {
         alert('Release instructions logged to console. Check DevTools → Console for details.');
@@ -205,10 +218,10 @@ Monitor progress at: GitHub → Actions tab
   async function checkReleaseStatus() {
     try {
       console.log('🔧 Debug: Checking release status...');
-      
+
       // Get current version from package.json context (if available)
       const currentVersion = '0.0.0'; // This would need to be dynamically loaded
-      
+
       const statusInfo = `
 🎵 SOUND STITCH RELEASE STATUS:
 
@@ -231,7 +244,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
 - npm run release:minor (new features)
 - npm run release:major (breaking changes)
       `;
-      
+
       console.log(statusInfo);
     } catch (error) {
       console.error('Debug: Failed to check release status:', error);
@@ -241,7 +254,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
   async function simulateReleasePrep() {
     try {
       console.log('🔧 Debug: Simulating release preparation...');
-      
+
       // This would normally check git status, versions, etc.
       const prepCheck = `
 🔍 RELEASE PREPARATION CHECKLIST:
@@ -259,9 +272,9 @@ Project: Sound Stitch (Tauri + SvelteKit)
    scripts/release.bat (Windows)
    ./scripts/release.sh (Mac/Linux)
       `;
-      
+
       console.log(prepCheck);
-      
+
       // Simulate version sync check
       console.log('🔧 Debug: Version sync check completed');
     } catch (error) {
@@ -310,6 +323,10 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <button class="btn btn-xs btn-outline-success" on:click={resetNoActiveSamples}>
           <i class="fa fa-check-circle"></i>
           Reset
+        </button>
+        <button class="btn btn-xs btn-outline-secondary" on:click={resetSortState}>
+          <i class="fa fa-sort"></i>
+          Reset Sort
         </button>
       </div>
 

@@ -106,6 +106,8 @@ export const appState = persisted<AppState>('appState', {
   timelineItems: [],
   isLoopingTimelineAudio: false,
   hasNoActiveSamples: false,
+  sortKey: undefined,
+  sortDirection: undefined,
 });
 
 const defaults: AppState = {
@@ -160,6 +162,9 @@ export async function addSource(paths?: string | string[]) {
   const defaultSectionColor = ABLETON_COLORS[0];
   const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
 
+  const tState = get(appState);
+  console.log(tState);
+
   try {
     // Get file paths for each folder
     const folderFilesResult = await invokeWithPerf<Record<string, string[]>>(
@@ -180,6 +185,13 @@ export async function addSource(paths?: string | string[]) {
       });
 
       if (fileMetadataResult.ok === true) {
+        // Calculate starting index for new files - always use sequential indexing
+        let nextIndex = 0;
+        const allExistingFiles = getAllFiles(tState.sections);
+        if (allExistingFiles.length > 0) {
+          nextIndex = Math.max(...allExistingFiles.map(f => f.index)) + 1;
+        }
+        console.log(folderFilesResult);
         const newSourceSections: Section[] = Object.entries(folderFilesResult.value).map(
           ([folderPath, discoveredFiles]) => {
             const filesWithMetadata: AudioFileItem[] = discoveredFiles
@@ -187,12 +199,15 @@ export async function addSource(paths?: string | string[]) {
                 const fileMetadata = fileMetadataResult.value.find(
                   metadata => metadata.path === filePath
                 );
+
+                // Use sequential indexing for all new files
+                const properIndex = nextIndex++;
+
                 return fileMetadata
                   ? {
-                      path: filePath,
-                      color: defaultSectionColor,
                       ...fileMetadata,
-                      index: fileIndex,
+                      color: defaultSectionColor,
+                      index: properIndex,
                       active: true,
                     }
                   : null;
@@ -208,6 +223,8 @@ export async function addSource(paths?: string | string[]) {
             };
           }
         );
+
+        console.log(newSourceSections);
 
         // Update app state with new sections
         appState.update(currentState => {
@@ -545,75 +562,3 @@ export function applySyncIndexes(newOrder: [string, number][]): void {
     return updatedState;
   });
 }
-
-let prevSortKey: string | null = null;
-let prevSortDirection: 'asc' | 'desc' | null = null;
-let debounceTimeout: number | undefined;
-
-// appState.subscribe($appState => {
-//   // Clear the previous timeout if it exists
-//   if (debounceTimeout) clearTimeout(debounceTimeout);
-
-//   debounceTimeout = window.setTimeout(() => {
-//     if (!$appState.sortKey || !$appState.sortDirection) return;
-
-//     // Only proceed if sortKey or sortDirection changed
-//     if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
-//       return;
-//     }
-
-//     prevSortKey = $appState.sortKey;
-//     prevSortDirection = $appState.sortDirection;
-
-//     // Compute new sorted order
-
-//     console.log(files);
-
-//     // Build array for Rust: { id, index }
-//     const updates = files.map((file, index) => ({
-//       id: file.id, // UUID string
-//       index,
-//     }));
-
-//     console.log(updates);
-
-//     const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-//       started: data => {
-//         console.log('STARTED SORT');
-//       },
-//       progress: data => {
-//         // appState.update((state) => {
-//         //   const s = state.sections;
-//         //   const allFiles = getAllFiles(s);
-//         //   allFiles.forEach((f) => {
-//         //     if (f.id === data.id) {
-//         //       console.log("FOUND MATCH ");
-//         //     }
-//         //   });
-//         //   state.sections = s;
-//         //   const t = state.timelineItems;
-//         //   t.forEach((timelineItem) => {
-//         //     if (timelineItem.id === data.id) {
-//         //       timelineItem.startOffset = data.startOffset;
-//         //     }
-//         //   });
-//         //   t.sort((a, b) => a.startOffset - b.startOffset);
-//         //   state.timelineItems = t;
-//         //   return state;
-//         // });
-//         // console.log(data);
-//         // console.log("PROGRESS");
-//       },
-//       finished: data => {
-//         console.log('FINISHED SORT');
-//       },
-//     });
-
-//     invoke('update_sorting', { updates, onEvent })
-//       .then(newOrder => {
-//         updateInputs($appState.sections);
-//         console.log(newOrder);
-//       })
-//       .catch(err => console.error('Tauri invoke failed', err));
-//   }, 100); // 100ms debounce
-// });
