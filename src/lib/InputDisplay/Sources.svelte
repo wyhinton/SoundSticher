@@ -249,7 +249,7 @@
               inputsUnderMouse = [];
             }
             if (addNewFolderOnDrop && atDrop.length === 0) {
-              addSource(paths[0]);
+              addSource(paths);
             }
             positionStore.reset();
             clearUnderMouse();
