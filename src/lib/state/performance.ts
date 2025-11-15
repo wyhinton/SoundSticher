@@ -12,6 +12,7 @@ import {
 import type { BufferAudioEvent, CombineAudioEvent, ExportAudioEvent } from './events';
 import { exportState, type ExportSettings, type ExportState } from './export';
 import { CLEAR_COMMAND } from 'tauri-plugin-clipboard-api';
+import { createTypedEventChannel } from '$lib/utils/channelMaker';
 
 export interface PerformanceMetric {
   time: number;
@@ -126,50 +127,47 @@ export async function updateInputs(sections: Section[]) {
     folderPath: s.folderPath,
     paths: s.files.map(f => ({ path: f.path })),
   }));
-  const onCombineAudioEvent = new Channel<CombineAudioEvent>();
-
-  onCombineAudioEvent.onmessage = message => {
-    console.log(message);
-    if (message.event === 'started') {
+  const onCombineAudioEvent = createTypedEventChannel<CombineAudioEvent>({
+    onStarted: data => {
       appState.update(state => {
-        console.log(message);
+        console.log(data);
         state.isCombiningFile = true;
-        state.combinedFileLength = message.data.duration;
+        state.combinedFileLength = data.duration;
         state.timelineItems = [];
         return state;
       });
-    }
-    if (message.event === 'progress') {
+    },
+    onProgress: data => {
       appState.update(s => {
-        const curwaveform = document.getElementById('waveform-path').getAttribute('d');
-        s.combinedFile = { svgPath: message.data.svgPath };
+        const curwaveform = document.getElementById('waveform-path')?.getAttribute('d');
+        s.combinedFile = { svgPath: data.svgPath };
         if (curwaveform) {
-          s.combinedFile.svgPath = curwaveform + message.data.svgPath;
+          s.combinedFile.svgPath = curwaveform + data.svgPath;
         }
-        let timelineItemToUpdate = s.timelineItems.find(clip => clip.id == message.data.id);
-        // console.log(message.data.id)
+        let timelineItemToUpdate = s.timelineItems.find(clip => clip.id == data.id);
         if (!timelineItemToUpdate) {
-          s.timelineItems.push({ type: 'audio-file', ...message.data });
+          s.timelineItems.push({ type: 'audio-file', ...data });
         } else {
-          timelineItemToUpdate = { type: 'audio-file', ...message.data };
+          timelineItemToUpdate = { type: 'audio-file', ...data };
         }
-        const toGiveId = getAllFiles(s.sections).find(f => f.path === message.data.fileName);
-        toGiveId.id = message.data.id;
+        const toGiveId = getAllFiles(s.sections).find(f => f.path === data.fileName);
+        if (toGiveId) {
+          toGiveId.id = data.id;
+        }
         s.sections = s.sections;
         return s;
       });
-    }
-    if (message.event === 'finished') {
+    },
+    onFinished: data => {
       appState.update(s => {
         s.isCombiningFile = false;
-        s.combinedFile = { svgPath: message.data.svgPath };
-        // Set hasNoActiveSamples based on the empty property
-        s.hasNoActiveSamples = message.data.empty;
-        console.log(message.data.empty);
+        s.combinedFile = { svgPath: data.svgPath };
+        s.hasNoActiveSamples = data.empty;
+        console.log(data.empty);
         return s;
       });
-    }
-  };
+    },
+  });
 
   const onBufferAudioEvent = new Channel<BufferAudioEvent>();
   onBufferAudioEvent.onmessage = message => {
