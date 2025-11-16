@@ -5,6 +5,7 @@
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
+  import { debugState, timelineDebugMode } from '../state/debug.svelte';
 
   // Visibility state
   let isVisible = false;
@@ -355,6 +356,19 @@ Project: Sound Stitch (Tauri + SvelteKit)
       </div>
 
       <div class="button-group">
+        <span class="group-title">Timeline</span>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-success={!$debugState.timelineDebugMode}
+          class:btn-success={$debugState.timelineDebugMode}
+          on:click={timelineDebugMode.toggle}
+        >
+          <i class="fa fa-bug"></i>
+          Timeline Debug
+        </button>
+      </div>
+
+      <div class="button-group">
         <span class="group-title">Release</span>
         <button class="btn btn-xs btn-outline-success" on:click={openReleaseGuide}>
           <i class="fa fa-rocket"></i>
@@ -374,7 +388,9 @@ Project: Sound Stitch (Tauri + SvelteKit)
     <div class="debug-info">
       <small>
         <i class="fa fa-info-circle"></i>
-        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Ctrl+Shift+Space to toggle
+        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
+          ? 'ON'
+          : 'OFF'} | Ctrl+Shift+Space to toggle
       </small>
     </div>
   </div>
