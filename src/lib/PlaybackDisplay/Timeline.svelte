@@ -27,6 +27,12 @@
 
   // Subscribe to debug state
   $: DEBUG_MODE = $debugState.timelineDebugMode;
+  import {
+    DragDropManager,
+    type DragStartEvent,
+    type DragMoveEvent,
+    type DragEndEvent,
+  } from './Timeline/DragDropManager';
 
   const dispatch = createEventDispatcher();
 
@@ -40,6 +46,10 @@
 
   // D3 Manager instance
   let d3Manager: D3TimelineManager | null = null;
+
+  // Drag Drop Manager instance
+  let dragDropManager: DragDropManager;
+
   const originalPathWidth = 1000;
 
   // Reactive properties from D3 manager
@@ -51,20 +61,27 @@
   let playHeadPosition = 0;
   let playHeadX = 0;
 
-  // Initialize D3 manager when dependencies change
+  // Initialize managers when dependencies change
   $: if (width > 0 && $durationSeconds > 0) {
-    initializeD3Manager();
+    initializeManagers();
   }
 
-  // Drag and drop state
-  let isDragging = false;
-  let draggedSegmentIndex = -1;
-  let dropIndicatorIndex = -1;
-  let dropIndicatorX = 0;
+  // Drag and drop state - now managed by DragDropManager
   let arrowHeadY = 0; // Y position for the drop indicator arrowhead
   let arrowHeadSize = 6; // Size of the drop indicator arrowhead
   const debugShowDropLine = false;
 
+  // Reactive values from drag drop manager
+  $: dragDropState = dragDropManager?.getState() ?? {
+    isDragging: false,
+    draggedSegmentIndex: -1,
+    dropIndicatorIndex: -1,
+    dropIndicatorX: 0,
+  };
+
+  $: ({ isDragging, draggedSegmentIndex, dropIndicatorIndex, dropIndicatorX } = dragDropState);
+
+  const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
 
   // Selection state (similar to Sources.svelte)
@@ -125,15 +142,18 @@
     dispatch('selectionChange', selectedSegments);
   }
 
-  function initializeD3Manager() {
-    if (!svgEl || !axisGroup || !pathGroup) return;
+  function initializeManagers() {
+    if (!svgEl || !axisGroup || !pathGroup || !container) return;
 
-    // Clean up existing manager
+    // Clean up existing managers
     if (d3Manager) {
       d3Manager.destroy();
     }
+    if (dragDropManager) {
+      dragDropManager.destroy();
+    }
 
-    // Create new manager
+    // Create new D3 manager
     d3Manager = new D3TimelineManager({
       width,
       height,
@@ -148,12 +168,16 @@
       },
     });
 
-    // Initialize with DOM elements
+    // Initialize D3 manager with DOM elements
     d3Manager.initialize(svgEl, axisGroup, pathGroup);
+
+    // Create new drag drop manager
+    dragDropManager = new DragDropManager(appState);
+    dragDropManager.initialize(d3Manager, container);
 
     // Update reactive values
     scaleX = d3Manager.getScaleX();
-    xScale = d3Manager.getXScale();
+    xScale = d3Manager.getXScale() ?? xScale;
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
@@ -237,150 +261,36 @@
   onMount(() => {
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
-      // The D3 manager will be updated through reactive statements
+      // The managers will be updated through reactive statements
     });
 
     resizeObserver.observe(container);
 
     return () => {
       resizeObserver.disconnect();
-      // Clean up D3 manager
+      // Clean up managers
       if (d3Manager) {
         d3Manager.destroy();
+      }
+      if (dragDropManager) {
+        dragDropManager.destroy();
       }
     };
   });
 
-  function handleDragStart(
-    event: CustomEvent<{ index: number; startPos: { x: number; y: number }; segmentId: number }>
-  ) {
-    console.log(`%cHERE LINE :182 %c`, 'color: yellow; font-weight: bold', '');
-
-    const { index, startPos, segmentId } = event.detail;
-    console.log(index);
-    isDragging = true;
-    draggedSegmentIndex = index;
-    dropIndicatorIndex = -1;
-
-    console.log(`Timeline: Started dragging segment ${index}`);
+  function handleDragStart(event: CustomEvent<DragStartEvent>) {
+    if (!dragDropManager) return;
+    dragDropManager.handleDragStart(event.detail);
   }
 
-  function handleDragMove(
-    event: CustomEvent<{
-      index: number;
-      mousePos: { x: number; y: number };
-      dragDistance: number;
-      event: d3.D3DragEvent<SVGGElement, unknown, d3.SubjectPosition>;
-    }>
-  ) {
-    console.log(`%cHERE LINE :196 %c`, 'color: yellow; font-weight: bold', '');
-
-    if (!isDragging || !d3Manager || !$appState?.timelineItems) return;
-
-    const { index, mousePos, dragDistance } = event.detail;
-
-    // Calculate drop position using the D3 manager
-    const containerRect = container.getBoundingClientRect();
-    const relativeX = mousePos.x - containerRect.left;
-
-    const dropPosition = d3Manager.calculateDropPosition(
-      relativeX,
-      $appState.timelineItems as TimelineItem[]
-    );
-
-    dropIndicatorIndex = dropPosition.index;
-    dropIndicatorX = dropPosition.x;
+  function handleDragMove(event: CustomEvent<DragMoveEvent>) {
+    if (!dragDropManager) return;
+    dragDropManager.handleDragMove(event.detail);
   }
 
-  function handleDragEnd(
-    event: CustomEvent<{
-      index: number;
-      endPos: { x: number; y: number };
-      dragDistance: number;
-      event: d3.D3DragEvent<SVGGElement, unknown, d3.SubjectPosition>;
-    }>
-  ) {
-    console.log(`%cHERE LINE :252 %c`, 'color: yellow; font-weight: bold', '');
-
-    if (!isDragging) return;
-
-    const { index, endPos, dragDistance } = event.detail;
-
-    console.log(`Timeline: Ended dragging segment ${index} to position ${dropIndicatorIndex}`);
-
-    // Perform the reorder if we have a valid drop position
-    if (
-      dropIndicatorIndex >= 0 &&
-      dropIndicatorIndex !== index &&
-      dropIndicatorIndex !== index + 1 &&
-      $appState?.timelineItems
-    ) {
-      console.log(`Reordering: moving segment ${index} to position ${dropIndicatorIndex}`);
-
-      // Create a copy of the timeline items array and perform the reorder
-      const items = [...$appState.timelineItems];
-      const draggedItem = items[index];
-
-      // Remove the dragged item from its current position
-      items.splice(index, 1);
-
-      // Insert it at the new position (adjust index if moving forward)
-      const insertIndex = dropIndicatorIndex > index ? dropIndicatorIndex - 1 : dropIndicatorIndex;
-      items.splice(insertIndex, 0, draggedItem);
-
-      // Build array for Rust backend: { id, index }
-      const updates = items.map((item, newIndex) => ({
-        id: item.id, // Assuming timeline items have an id field
-        index: newIndex,
-      }));
-
-      console.log('Timeline reorder updates:', updates);
-
-      // Create progress channel for the reorder operation
-      const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-        started: data => {
-          console.log('Timeline reorder started');
-        },
-        progress: data => {
-          console.log('Timeline reorder progress:', data);
-        },
-        finished: data => {
-          // appState.update((state)=>{
-          //   const allFiles = getAllFiles(state.sections);
-          //   allFiles.forEach((f)=>{
-          //     const newIndex = data.value
-          //   })
-
-          // })
-          console.log('Timeline reorder finished');
-        },
-      });
-
-      // Call backend update_sorting function similar to Sources.svelte
-      invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
-        .then(newOrder => {
-          console.log('Received new order from backend:', newOrder);
-
-          // Update inputs after state change
-          updateInputs($appState.sections);
-
-          // Use the reusable index syncing function
-          if (newOrder.ok && newOrder.value) {
-            applySyncIndexes(newOrder.value);
-          }
-        })
-        .catch(error => {
-          console.error('Failed to reorder timeline items:', error);
-        });
-      console.log('Final sections after update:', get(appState).sections[0].files);
-      // console.log('Timeline reorder completed:', newOrder);
-    }
-
-    // Reset drag state
-    isDragging = false;
-    draggedSegmentIndex = -1;
-    dropIndicatorIndex = -1;
-    dropIndicatorX = 0;
+  function handleDragEnd(event: CustomEvent<DragEndEvent>) {
+    if (!dragDropManager) return;
+    dragDropManager.handleDragEnd(event.detail);
   }
 
   const tempYCenter = 35;
@@ -567,6 +477,7 @@
 
 <style>
   .waveform-svg-parent {
+    /* Timeline waveform container */
   }
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);

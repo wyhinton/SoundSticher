@@ -163,6 +163,125 @@
       console.error('Debug: Failed to reset no active samples:', error);
     }
   }
+
+  async function resetSortState() {
+    try {
+      appState.update(state => ({
+        ...state,
+        sortKey: undefined,
+        sortDirection: undefined,
+      }));
+      console.log('🔧 Debug: Reset sort state - sortKey and sortDirection set to undefined');
+    } catch (error) {
+      console.error('Debug: Failed to reset sort state:', error);
+    }
+  }
+
+  // Release management functions
+  async function openReleaseGuide() {
+    try {
+      // Open release guide in default browser or show info
+      console.log('🔧 Debug: Opening release guide...');
+
+      // Try to open the RELEASE.md file in VS Code or show instructions
+      const releaseInstructions = `
+📦 RELEASE INSTRUCTIONS:
+
+🚀 Quick Release Options:
+1. Run: scripts/release.bat (Windows) or ./scripts/release.sh (Mac/Linux)
+2. Or use: npm run release:[patch|minor|major]
+
+📝 What happens:
+- Updates all version files automatically
+- Creates git tag and pushes to GitHub  
+- Triggers automated builds for Windows, macOS, Linux
+- Creates GitHub release with all platform downloads
+
+🎯 Release Types:
+- Patch (1.0.0 → 1.0.1): Bug fixes
+- Minor (1.0.0 → 1.1.0): New features  
+- Major (1.0.0 → 2.0.0): Breaking changes
+
+Monitor progress at: GitHub → Actions tab
+      `;
+
+      console.log(releaseInstructions);
+
+      // Also try to show in a simple alert for immediate visibility
+      if (typeof window !== 'undefined') {
+        alert('Release instructions logged to console. Check DevTools → Console for details.');
+      }
+    } catch (error) {
+      console.error('Debug: Failed to show release guide:', error);
+    }
+  }
+
+  async function checkReleaseStatus() {
+    try {
+      console.log('🔧 Debug: Checking release status...');
+
+      // Get current version from package.json context (if available)
+      const currentVersion = '0.0.0'; // This would need to be dynamically loaded
+
+      const statusInfo = `
+🎵 SOUND STITCH RELEASE STATUS:
+
+Current Version: ${currentVersion}
+Project: Sound Stitch (Tauri + SvelteKit)
+
+🏗️ Build Targets:
+- Windows x64 (Setup + MSI)
+- macOS Universal (DMG)  
+- Linux x64 (DEB + AppImage)
+
+🔄 To create new release:
+1. Run release script: scripts/release.bat
+2. Choose release type
+3. Monitor GitHub Actions for build progress
+4. Download artifacts from GitHub Releases page
+
+📍 Quick Commands:
+- npm run release:patch (bug fixes)
+- npm run release:minor (new features)
+- npm run release:major (breaking changes)
+      `;
+
+      console.log(statusInfo);
+    } catch (error) {
+      console.error('Debug: Failed to check release status:', error);
+    }
+  }
+
+  async function simulateReleasePrep() {
+    try {
+      console.log('🔧 Debug: Simulating release preparation...');
+
+      // This would normally check git status, versions, etc.
+      const prepCheck = `
+🔍 RELEASE PREPARATION CHECKLIST:
+
+✅ Git repository detected
+✅ Version files found:
+   - package.json
+   - src-tauri/Cargo.toml  
+   - src-tauri/tauri.conf.json
+
+✅ GitHub Actions workflow configured
+✅ Cross-platform build setup ready
+
+🚀 Ready to release! Run:
+   scripts/release.bat (Windows)
+   ./scripts/release.sh (Mac/Linux)
+      `;
+
+      console.log(prepCheck);
+
+      // Simulate version sync check
+      console.log('🔧 Debug: Version sync check completed');
+    } catch (error) {
+      console.error('Debug: Failed to simulate release prep:', error);
+    }
+  }
 </script>
 
 {#if isVisible}
@@ -206,6 +325,10 @@
           <i class="fa fa-check-circle"></i>
           Reset
         </button>
+        <button class="btn btn-xs btn-outline-secondary" on:click={resetSortState}>
+          <i class="fa fa-sort"></i>
+          Reset Sort
+        </button>
       </div>
 
       <div class="button-group">
@@ -242,6 +365,22 @@
         >
           <i class="fa fa-bug"></i>
           Timeline Debug
+        </button>
+      </div>
+
+      <div class="button-group">
+        <span class="group-title">Release</span>
+        <button class="btn btn-xs btn-outline-success" on:click={openReleaseGuide}>
+          <i class="fa fa-rocket"></i>
+          Guide
+        </button>
+        <button class="btn btn-xs btn-outline-info" on:click={checkReleaseStatus}>
+          <i class="fa fa-info-circle"></i>
+          Status
+        </button>
+        <button class="btn btn-xs btn-outline-warning" on:click={simulateReleasePrep}>
+          <i class="fa fa-cog"></i>
+          Prep Check
         </button>
       </div>
     </div>

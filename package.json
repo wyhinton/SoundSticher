@@ -1,7 +1,7 @@
 {
   "name": "tauri-v2-sveltekit-template",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.2",
   "type": "module",
   "scripts": {
     "tauri": "tauri",
@@ -14,7 +14,13 @@
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "type-check": "svelte-check --tsconfig ./tsconfig.json --threshold warning"
+    "type-check": "svelte-check --tsconfig ./tsconfig.json --threshold warning",
+    "sync": "svelte-kit sync",
+    "release": "node -e \"require('child_process').spawn(process.platform === 'win32' ? '.\\\\scripts\\\\release.bat' : './scripts/release.sh', [], {stdio: 'inherit', shell: true})\"",
+    "release:patch": "npm version patch && git push && git push --tags",
+    "release:minor": "npm version minor && git push && git push --tags",
+    "release:major": "npm version major && git push && git push --tags",
+    "version:sync": "node -e \"const pkg=require('./package.json'); const fs=require('fs'); const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); tauri.version=pkg.version; fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri,null,2)); const cargo=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/version\\s*=\\s*\\\"[^\\\"]*\\\"/,'version = \\\"'+pkg.version+'\\\"'); fs.writeFileSync('src-tauri/Cargo.toml',cargo);\""
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^6.7.2",

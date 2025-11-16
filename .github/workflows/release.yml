@@ -1,0 +1,143 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Setup Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Sync SvelteKit
+        run: pnpm run sync
+
+      - name: Get version
+        id: get-version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update version in files
+        shell: bash
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          
+          echo "Updating to version: $VERSION_NO_V"
+          
+          # Update package.json (force update)
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            pkg.version = '$VERSION_NO_V';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Updated package.json to version $VERSION_NO_V');
+          "
+          
+          # Update Cargo.toml (only the package version, not dependency versions)
+          node -e "
+            const fs = require('fs');
+            let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+            // Only update the first version line (package version)
+            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"$VERSION_NO_V\"');
+            fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+            console.log('Updated Cargo.toml to version $VERSION_NO_V');
+          "
+          
+          # Update tauri.conf.json  
+          node -e "
+            const fs = require('fs');
+            const tauri = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json'));
+            tauri.version = '$VERSION_NO_V';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 2));
+            console.log('Updated tauri.conf.json to version $VERSION_NO_V');
+          "
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ steps.get-version.outputs.version }}
+          releaseName: 'Sound Stitch ${{ steps.get-version.outputs.version }}'
+          releaseBody: |
+            # Sound Stitch ${{ steps.get-version.outputs.version }}
+            
+            ## 🎵 Audio Mixing & Processing Application
+            
+            Download the appropriate version for your operating system below.
+            
+            ## 🔧 Installation Notes
+            
+            - **Windows**: Run the setup executable as administrator if needed
+            - **macOS**: Open the DMG and drag the app to Applications folder  
+            - **Linux**: Install the .deb package or make the AppImage executable
+            
+            ---
+            Built with ❤️ using Tauri + SvelteKit
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
