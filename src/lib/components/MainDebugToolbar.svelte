@@ -5,6 +5,7 @@
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
+  import { debugState, timelineDebugMode } from '../state/debug.svelte';
 
   // Visibility state
   let isVisible = false;
@@ -230,12 +231,27 @@
           Clear
         </button>
       </div>
+
+      <div class="button-group">
+        <span class="group-title">Timeline</span>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-success={!$debugState.timelineDebugMode}
+          class:btn-success={$debugState.timelineDebugMode}
+          on:click={timelineDebugMode.toggle}
+        >
+          <i class="fa fa-bug"></i>
+          Timeline Debug
+        </button>
+      </div>
     </div>
 
     <div class="debug-info">
       <small>
         <i class="fa fa-info-circle"></i>
-        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Ctrl+Shift+Space to toggle
+        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
+          ? 'ON'
+          : 'OFF'} | Ctrl+Shift+Space to toggle
       </small>
     </div>
   </div>

@@ -21,6 +21,12 @@
   import { get } from 'svelte/store';
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
+  import { debugState } from '../state/debug.svelte';
+
+  export let DEBUG_MODE = false;
+
+  // Subscribe to debug state
+  $: DEBUG_MODE = $debugState.timelineDebugMode;
 
   const dispatch = createEventDispatcher();
 
@@ -59,7 +65,6 @@
   let arrowHeadSize = 6; // Size of the drop indicator arrowhead
   const debugShowDropLine = false;
 
-  const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
 
   // Selection state (similar to Sources.svelte)
@@ -402,10 +407,13 @@
     }}
     on:keydown={handleKeyDown}
     bind:this={container}
-    style="width: 100%;"
     role="application"
     aria-label="Timeline"
     tabindex="0"
+    style="
+    width: 100%;
+    cursor: {isDragging ? 'grabbing' : 'default'};
+    "
   >
     <svg class="waveform-svg-parent" bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
       <g transform={`translate(0, ${20})`}>
@@ -487,6 +495,7 @@
           items={$appState?.timelineItems}
           {originalPathWidth}
           {currentTransform}
+          {isDragging}
         ></LabelLayer>
       {/if}
 

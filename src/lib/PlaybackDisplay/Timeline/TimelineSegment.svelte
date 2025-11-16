@@ -144,7 +144,6 @@
       data-segment-active={active}
       on:click={handleSegmentClick}
       on:keydown={handleSegmentKeyDown}
-      role="button"
       tabindex="0"
       aria-label="Timeline segment {index + 1}"
       style="
@@ -158,7 +157,6 @@
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
-        cursor: {isDragging ? 'grabbing' : 'grab'};
         {isSelected ? 'border: 2px solid rgba(59, 130, 246, 0.8);' : ''}
         {!active
         ? 'border: 2px solid rgba(255, 69, 0, 0.6); background-color: rgba(255, 69, 0, 0.2) !important;'
