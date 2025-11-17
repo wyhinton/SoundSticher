@@ -42,9 +42,10 @@ export class DragDropManager {
   constructor(appStateStore: Writable<AppState>) {
     this.appStateStore = appStateStore;
     // Check if we're in development mode
-    this.isDev = typeof import.meta !== 'undefined' && 
-                 typeof (import.meta as any).env !== 'undefined' && 
-                 (import.meta as any).env.DEV === true;
+    this.isDev =
+      typeof import.meta !== 'undefined' &&
+      typeof (import.meta as any).env !== 'undefined' &&
+      (import.meta as any).env.DEV === true;
     this.state = {
       isDragging: false,
       draggedSegmentIndex: -1,
@@ -99,7 +100,7 @@ export class DragDropManager {
    */
   handleDragStart(event: DragStartEvent): void {
     this.log(`Started dragging segment ${event.index}`);
-    
+
     this.state.isDragging = true;
     this.state.draggedSegmentIndex = event.index;
     this.state.dropIndicatorIndex = -1;
@@ -137,7 +138,7 @@ export class DragDropManager {
     this.log(`Ended dragging segment ${event.index} to position ${this.state.dropIndicatorIndex}`);
 
     const appState = get(this.appStateStore);
-    
+
     // Perform the reorder if we have a valid drop position
     if (
       this.state.dropIndicatorIndex >= 0 &&
@@ -156,8 +157,8 @@ export class DragDropManager {
    * Perform the actual reorder operation
    */
   private async performReorder(
-    sourceIndex: number, 
-    targetIndex: number, 
+    sourceIndex: number,
+    targetIndex: number,
     appState: AppState
   ): Promise<void> {
     this.log(`Reordering segment ${sourceIndex} to position ${targetIndex}`);
@@ -192,7 +193,7 @@ export class DragDropManager {
         started: () => {
           this.log('Reorder started');
         },
-        progress: (data) => {
+        progress: data => {
           this.log('Reorder progress:', data);
         },
         finished: () => {
@@ -201,8 +202,11 @@ export class DragDropManager {
       });
 
       // Call backend update_sorting function
-      const newOrder = await invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent });
-      
+      const newOrder = await invokeWithPerf<[string, number][]>('update_sorting', {
+        updates,
+        onEvent,
+      });
+
       this.log('Received new order from backend:', newOrder);
 
       // Update inputs after state change

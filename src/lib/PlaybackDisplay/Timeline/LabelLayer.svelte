@@ -1,14 +1,19 @@
 <script lang="ts">
   import type { ZoomTransform } from 'd3-zoom';
   import type { TimelineItem } from '../../state/state.svelte';
-  import { formatFileName } from '../../utils/format';
+  import {
+    getDisplayName,
+    getItemSize,
+    getItemColor,
+    getItemTextColor,
+    shouldShowLabel,
+  } from '../../utils/timelineHelpers';
   import * as d3 from 'd3';
 
   export let items: TimelineItem[] = [];
   export let originalPathWidth: number;
   export let currentTransform: ZoomTransform;
   export let scaleX: number;
-  export let xScale: d3.ScaleLinear<number, number, never>;
   export let isDragging: boolean;
   // Estimate monospace char width at 10px font size
   const charWidth = 6.2;
@@ -34,12 +39,13 @@
     const rectX = t.startOffset * originalPathWidth * currentTransform.k * scaleX;
     return rectX;
   });
-  $: rectWidthArr = items.map(t => t.size * originalPathWidth * scaleX * currentTransform.k);
-  $: nameArr = items.map(item => formatFileName(item.fileName));
-
-  const textBgColor = 'rgb(48, 145, 241)';
-  // const textBgColor = 'rgba(0, 0, 0, 0.6)';
-  const textColor = 'rgba(0, 0, 0, 0.6)';
+  $: rectWidthArr = items.map(
+    t => getItemSize(t) * originalPathWidth * scaleX * currentTransform.k
+  );
+  $: nameArr = items.map(item => getDisplayName(item));
+  $: bgColorArr = items.map(item => getItemColor(item));
+  $: textColorArr = items.map(item => getItemTextColor(item));
+  $: showLabelArr = items.map(item => shouldShowLabel(item));
 </script>
 
 <g class="clip-labels">
@@ -53,78 +59,64 @@
     stroke="red"
   ></rect> -->
   {#each items as t, i}
-    <g transform={`translate(${currentTransform.x}, 0)`} cursor={isDragging ? 'grabbing' : 'grab'}>
-      <clipPath id={`header-clip-${i}`}>
-        <path
-          d={`
-          M ${rectXArr[i]} ${borderRadius}
-          Q ${rectXArr[i]} 0 ${rectXArr[i] + borderRadius} 0
-          L ${rectXArr[i] + rectWidthArr[i] - borderRadius} 0
-          Q ${rectXArr[i] + rectWidthArr[i]} 0 ${rectXArr[i] + rectWidthArr[i]} ${borderRadius}
-          L ${rectXArr[i] + rectWidthArr[i]} ${headerHeight}
-          L ${rectXArr[i]} ${headerHeight}
-          Z
-        `}
-        />
-      </clipPath>
-
-      <!-- NEW BACKGROUND -->
-      <rect
-        x={rectXArr[i]}
-        y={0}
-        width={rectWidthArr[i]}
-        height={headerHeight}
-        stroke="blue"
-        fill={textBgColor}
-        clip-path={`url(#header-clip-${i})`}
-        class="draggable-header"
-      />
-      <line
-        x1={rectXArr[i]}
-        y1={0}
-        x2={rectXArr[i]}
-        y2={80}
-        stroke={textColor}
-        stroke-width={1.5}
-      />
-      <clipPath id={`clip-${i}`}>
-        <rect x={rectXArr[i]} y={0} width={rectWidthArr[i]} height="80" stroke="red" />
-      </clipPath>
-
-      <!-- <rect
-        x={rectXArr[i]}
-        y={0}
-        width={rectWidthArr[i]}
-        height="80"
-        fill-opacity={0.5}
-        stroke="red"
-      /> -->
-      <!-- Background -->
-      <!-- <rect
-        x={rectXArr[i] + textXOffset}
-        y={labelYArr[i] - fontSize / 2 - paddingY}
-        width={nameArr[i].length * charWidth + paddingX * 2}
-        height={headerHeight}
-        fill={textBgColor}
-        clip-path={`url(#clip-${i})`}
-        rx="2"
-        
-      /> -->
-      <!-- Text -->
-      <text
-        x={rectXArr[i] + textXOffset}
-        y={labelYArr[i]}
-        dominant-baseline="middle"
-        fill={textColor}
-        font-size={fontSize}
-        font-family="monospace"
-        font-weight="bold"
-        pointer-events="none"
-        clip-path={`url(#clip-${i})`}
+    {#if showLabelArr[i] && rectXArr[i] !== undefined && rectWidthArr[i] !== undefined}
+      <g
+        transform={`translate(${currentTransform.x}, 0)`}
+        cursor={isDragging ? 'grabbing' : 'grab'}
       >
-        {nameArr[i]}
-      </text>
-    </g>
+        <clipPath id={`header-clip-${i}`}>
+          <path
+            d={`
+            M ${rectXArr[i]} ${borderRadius}
+            Q ${rectXArr[i]} 0 ${rectXArr[i] + borderRadius} 0
+            L ${rectXArr[i] + rectWidthArr[i] - borderRadius} 0
+            Q ${rectXArr[i] + rectWidthArr[i]} 0 ${rectXArr[i] + rectWidthArr[i]} ${borderRadius}
+            L ${rectXArr[i] + rectWidthArr[i]} ${headerHeight}
+            L ${rectXArr[i]} ${headerHeight}
+            Z
+          `}
+          />
+        </clipPath>
+
+        <!-- NEW BACKGROUND -->
+        <rect
+          x={rectXArr[i]}
+          y={0}
+          width={rectWidthArr[i]}
+          height={headerHeight}
+          stroke="blue"
+          fill={bgColorArr[i]}
+          clip-path={`url(#header-clip-${i})`}
+          class="draggable-header"
+        />
+        <line
+          x1={rectXArr[i]}
+          y1={0}
+          x2={rectXArr[i]}
+          y2={80}
+          stroke={textColorArr[i]}
+          stroke-width={1.5}
+        />
+        <clipPath id={`clip-${i}`}>
+          <rect x={rectXArr[i]} y={0} width={rectWidthArr[i]} height="80" stroke="red" />
+        </clipPath>
+
+        <!-- Text -->
+        <text
+          x={rectXArr[i] + textXOffset}
+          y={labelYArr[i]}
+          dominant-baseline="middle"
+          fill={textColorArr[i]}
+          font-size={fontSize}
+          font-family="monospace"
+          font-weight="bold"
+          pointer-events="none"
+          clip-path={`url(#clip-${i})`}
+        >
+          {nameArr[i]}
+        </text>
+      </g>
+    {/if}
   {/each}
 </g>
 

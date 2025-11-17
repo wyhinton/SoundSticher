@@ -1,7 +1,7 @@
 export const files = $state<string[]>([]);
 import { persisted } from 'svelte-persisted-store';
 import { derived, get, writable } from 'svelte/store';
-import { ABLETON_COLORS, type AbletonColor } from '$lib/utils/colors';
+import { ABLETON_COLORS, type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
 import { Channel, invoke } from '@tauri-apps/api/core';
@@ -159,7 +159,7 @@ let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
 export async function addSource(paths?: string | string[]) {
-  const defaultSectionColor = ABLETON_COLORS[0];
+  const defaultSectionColor = getDefaultColor();
   const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
 
   const tState = get(appState);
@@ -268,7 +268,9 @@ export function deleteSection(index: number) {
 export function updatePath(sectionIndex: number, value: string) {
   appState.update(state => {
     console.log(state.sections);
-    state.sections[sectionIndex].folderPath = value;
+    if (state.sections[sectionIndex]) {
+      state.sections[sectionIndex].folderPath = value;
+    }
     return state;
   });
   get_file_paths_in_folder(sectionIndex);
@@ -439,19 +441,23 @@ interface CachedCombineResult {
 listen<CachedCombineResult>('combined-cached', event => {
   console.log(event);
   appState.update(state => {
-    state.combinedFile.svgPath += event.payload.svgPath;
-    console.log(state.combinedFile.svgPath.length);
-    state.combinedFileLength = event.payload.duration;
+    if (state.combinedFile?.svgPath) {
+      state.combinedFile.svgPath += event.payload.svgPath;
+      console.log(state.combinedFile.svgPath.length);
+      state.combinedFileLength = event.payload.duration;
+    }
     return state;
   });
 });
 
 listen<string>('processed-segment', event => {
   appState.update(state => {
-    state.combinedFile = {
-      ...state.combinedFile,
-      svgPath: state.combinedFile.svgPath + event.payload,
-    };
+    if (state.combinedFile) {
+      state.combinedFile = {
+        ...state.combinedFile,
+        svgPath: state.combinedFile.svgPath + event.payload,
+      };
+    }
     return state;
   });
 });

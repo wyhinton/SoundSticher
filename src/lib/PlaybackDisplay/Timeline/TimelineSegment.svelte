@@ -10,16 +10,16 @@
   export let index: number;
   export let startOffset: number;
   export let size: number;
-  export let label: string;
   export let scaleX: number;
   export let originalPathWidth: number;
   export let zoomTransform: d3.ZoomTransform; // pass currentTransform from parent
-  export let itemType: TimelineItemType;
   import { createEventDispatcher, onMount } from 'svelte';
   export let DEBUG_MODE: boolean;
   export let id: string | undefined;
   export let isSelected: boolean = false;
   export let active: boolean = true;
+  export let canBeDragged: boolean = true;
+  export let itemColor: string = '#3091f1';
   export let onSegmentSelect: ((index: number, isShiftSelect?: boolean) => void) | undefined =
     undefined;
   export let onSegmentToggle: ((index: number) => void) | undefined = undefined;
@@ -138,6 +138,7 @@
       class:selected={isSelected}
       class:inactive={!active}
       class:dragging={isDragging}
+      class:non-draggable={!canBeDragged}
       data-timeline-segment
       data-segment-index={index}
       data-segment-id={id}
@@ -149,44 +150,23 @@
       style="
         width: 100%;
         height: 150px;
-        background-color: rgba(0, 200, 255, {isSelected
-        ? 0.3
-        : $hoveredSourceItem == index
-          ? 0.4
-          : $fillAlpha});
+        background-color: {itemColor
+        .replace('rgb(', 'rgba(')
+        .replace(')', `, ${isSelected ? 0.3 : $hoveredSourceItem == index ? 0.4 : $fillAlpha})`)};
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
+        cursor: {canBeDragged ? 'grab' : 'default'};
         {isSelected ? 'border: 2px solid rgba(59, 130, 246, 0.8);' : ''}
         {!active
         ? 'border: 2px solid rgba(255, 69, 0, 0.6); background-color: rgba(255, 69, 0, 0.2) !important;'
         : ''}
       "
-    >
-      <!-- <div
-        on:mouseenter={() => hoveredTimelineItem.set(index)}
-        on:mouseleave={() => hoveredTimelineItem.set(null)}
-        class="segment-head"
-      ></div> -->
-
-      {#if DEBUG_MODE}
-        dragging: {isDragging}
-        id: {id}
-      {/if}
-    </div>
+    ></div>
   </foreignObject>
 </g>
 
 <style>
-  .segment-head {
-    border: 1px solid red;
-    width: 100%;
-    height: 10px;
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: rgb(48, 145, 241);
-  }
   .timeline-segment-div {
     transition:
       background-color 0.2s ease,
@@ -243,6 +223,17 @@
     border-color: rgba(0, 200, 255, 0.8) !important;
     box-shadow: 0 4px 12px rgba(0, 200, 255, 0.4);
     opacity: 0.9;
+  }
+
+  /* Non-draggable items styling */
+  .timeline-segment-div.non-draggable {
+    cursor: default !important;
+    opacity: 0.7;
+  }
+
+  .timeline-segment-div.non-draggable:hover {
+    transform: none; /* Don't lift non-draggable items */
+    box-shadow: none;
   }
 
   /* SVG group drag styling */
