@@ -11,6 +11,14 @@
   } from '../state/state.svelte';
   import { listen, TauriEvent } from '@tauri-apps/api/event';
   import { formatFileName } from '../utils/format';
+  import {
+    getDisplayName,
+    getItemSize,
+    isItemActive,
+    canItemBeDragged,
+    getItemColor,
+    isAudioFileItem,
+  } from '../utils/timelineHelpers';
   import TimelineSegment from './Timeline/TimelineSegment.svelte';
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
@@ -23,10 +31,7 @@
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
   import { debugState } from '../state/debug.svelte';
 
-  export let DEBUG_MODE = false;
-
   // Subscribe to debug state
-  $: DEBUG_MODE = $debugState.timelineDebugMode;
   import {
     DragDropManager,
     type DragStartEvent,
@@ -230,18 +235,22 @@
 
       event.preventDefault();
 
-      // Get the IDs of the selected segments
+      // Get the IDs of selected audio file items only (spacers might not be deletable)
       const selectedIds: string[] = [];
       if ($appState?.timelineItems) {
         Array.from(selectedSegments).forEach(index => {
           if (index < $appState.timelineItems.length) {
-            selectedIds.push($appState.timelineItems[index].id);
+            const item = $appState.timelineItems[index];
+            // Only allow deletion of audio files
+            if (item && isAudioFileItem(item)) {
+              selectedIds.push(item.id);
+            }
           }
         });
       }
 
       if (selectedIds.length > 0) {
-        console.log('Deactivating selected segments:', selectedIds);
+        console.log('Deactivating selected audio segments:', selectedIds);
 
         // Use the state manager for optimistic updates and automatic sync
         audioFileStateManager
@@ -311,6 +320,8 @@
   {/if}
 
   <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
     on:click={e => {
       handleClick(e);
@@ -360,16 +371,16 @@
                   {scaleX}
                   index={i}
                   startOffset={timelineItem.startOffset}
-                  size={timelineItem.size}
-                  label={formatFileName(timelineItem.fileName)}
+                  size={getItemSize(timelineItem)}
                   {originalPathWidth}
                   zoomTransform={currentTransform}
-                  itemType={timelineItem.type}
                   id={timelineItem.id}
-                  active={timelineItem.active ?? true}
+                  active={isItemActive(timelineItem)}
                   isSelected={selectedSegments.has(i)}
                   onSegmentSelect={selectSegment}
                   onSegmentToggle={toggleSegmentSelection}
+                  canBeDragged={canItemBeDragged(timelineItem)}
+                  itemColor={getItemColor(timelineItem)}
                   {DEBUG_MODE}
                   on:dragStart={handleDragStart}
                   on:dragMove={handleDragMove}
@@ -400,7 +411,6 @@
       </g>
       {#if $appState?.timelineItems.length > 0}
         <LabelLayer
-          {xScale}
           {scaleX}
           items={$appState?.timelineItems}
           {originalPathWidth}
@@ -457,15 +467,18 @@
         {#each $appState.timelineItems as item, i}
           <div class="item" class:dragged={i === draggedSegmentIndex}>
             <b>#{i}</b>
-            {formatFileName(item.fileName || 'Unknown')} | Start: {(item.startOffset * 100).toFixed(
-              1
-            )}% | Size: {(item.size * 100).toFixed(1)}% | X: {(
+            <span class="item-type">[{item.type}]</span>
+            {getDisplayName(item)} | Start: {(item.startOffset * 100).toFixed(1)}% | Size: {(
+              getItemSize(item) * 100
+            ).toFixed(1)}% | Active: {isItemActive(item)} | X: {(
               item.startOffset *
               originalPathWidth *
               scaleX
-            ).toFixed(0)}-{((item.startOffset + item.size) * originalPathWidth * scaleX).toFixed(
-              0
-            )}px
+            ).toFixed(0)}-{(
+              (item.startOffset + getItemSize(item)) *
+              originalPathWidth *
+              scaleX
+            ).toFixed(0)}px
           </div>
         {/each}
       {:else}
