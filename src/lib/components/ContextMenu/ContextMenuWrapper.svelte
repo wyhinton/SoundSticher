@@ -11,11 +11,13 @@
     generalProvider,
   } from './providers';
   import { appState } from '../../state/state.svelte';
+  import { debugState } from '../../state/debug.svelte';
 
   // Context for passing to providers
   let selectedTimelineSegments: Set<number> = new Set();
   let selectedSourceRows: Set<number> = new Set();
 
+  
   // Register providers in order of priority (first match wins)
   onMount(() => {
     contextMenuManager.registerProvider('timeline-segment', timelineSegmentProvider);
@@ -35,6 +37,13 @@
   });
 
   function handleContextMenu(event: MouseEvent) {
+    // Check if custom context menus are enabled
+    const debugSettings = get(debugState);
+    if (!debugSettings.useCustomContextMenu) {
+      // Let the browser handle the context menu
+      return;
+    }
+
     event.preventDefault();
 
     const context = {
