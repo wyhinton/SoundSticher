@@ -5,7 +5,7 @@
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  import { debugState, timelineDebugMode } from '../state/debug.svelte';
+  import { debugState, timelineDebugMode, customContextMenu } from '../state/debug.svelte';
 
   // Visibility state
   let isVisible = false;
@@ -369,6 +369,19 @@ Project: Sound Stitch (Tauri + SvelteKit)
       </div>
 
       <div class="button-group">
+        <span class="group-title">Context Menu</span>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-primary={!$debugState.useCustomContextMenu}
+          class:btn-primary={$debugState.useCustomContextMenu}
+          on:click={customContextMenu.toggle}
+        >
+          <i class="fa fa-mouse-pointer"></i>
+          Custom Menu
+        </button>
+      </div>
+
+      <div class="button-group">
         <span class="group-title">Release</span>
         <button class="btn btn-xs btn-outline-success" on:click={openReleaseGuide}>
           <i class="fa fa-rocket"></i>
@@ -390,7 +403,8 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <i class="fa fa-info-circle"></i>
         DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
           ? 'ON'
-          : 'OFF'} | Ctrl+Shift+Space to toggle
+          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Ctrl+Shift+Space
+        to toggle
       </small>
     </div>
   </div>

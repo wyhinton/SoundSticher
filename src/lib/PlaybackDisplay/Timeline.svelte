@@ -30,6 +30,7 @@
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
   import { debugState } from '../state/debug.svelte';
+  import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
 
   // Subscribe to debug state
   import {
@@ -436,55 +437,19 @@
   </div>
 
   <!-- Debug Panel -->
-  {#if DEBUG_MODE}
-    <div class="debug">
-      <div>
-        <b>Drag:</b>
-        {isDragging} |
-        <b>Segment:</b>
-        {draggedSegmentIndex >= 0 ? draggedSegmentIndex : '-'} |
-        <b>Drop:</b>
-        {dropIndicatorIndex >= 0 ? dropIndicatorIndex : '-'} |
-        <b>DropX:</b>
-        {dropIndicatorX.toFixed(0)}px
-      </div>
-      <div>
-        <b>W:</b>
-        {width} |
-        <b>ScaleX:</b>
-        {scaleX.toFixed(2)} |
-        <b>Dur:</b>
-        {$durationSeconds.toFixed(1)}s |
-        <b>PlayPos:</b>
-        {playHeadPosition.toFixed(1)}s |
-        <b>Zoom:</b>
-        {currentTransform.k.toFixed(1)}x |
-        <b>Pan:</b>
-        {currentTransform.x.toFixed(0)}px
-      </div>
-      {#if $appState?.timelineItems && $appState.timelineItems.length > 0}
-        <div><b>Items ({$appState.timelineItems.length}):</b></div>
-        {#each $appState.timelineItems as item, i}
-          <div class="item" class:dragged={i === draggedSegmentIndex}>
-            <b>#{i}</b>
-            <span class="item-type">[{item.type}]</span>
-            {getDisplayName(item)} | Start: {(item.startOffset * 100).toFixed(1)}% | Size: {(
-              getItemSize(item) * 100
-            ).toFixed(1)}% | Active: {isItemActive(item)} | X: {(
-              item.startOffset *
-              originalPathWidth *
-              scaleX
-            ).toFixed(0)}-{(
-              (item.startOffset + getItemSize(item)) *
-              originalPathWidth *
-              scaleX
-            ).toFixed(0)}px
-          </div>
-        {/each}
-      {:else}
-        <div>No items</div>
-      {/if}
-    </div>
+  {#if $debugState.timelineDebugMode}
+    <TimelineDebugPanel
+      {isDragging}
+      {draggedSegmentIndex}
+      {dropIndicatorIndex}
+      {dropIndicatorX}
+      {width}
+      {scaleX}
+      {playHeadPosition}
+      {currentTransform}
+      timelineItems={$appState?.timelineItems || []}
+      {originalPathWidth}
+    />
   {/if}
 </div>
 
@@ -528,25 +493,5 @@
     font-size: 14px;
     color: var(--bs-secondary);
     opacity: 0.8;
-  }
-
-  /* Debug Panel Styles */
-  .debug {
-    margin-top: 10px;
-    background: #000;
-    border: 1px solid #333;
-    padding: 8px;
-    font-family: monospace;
-    font-size: 11px;
-    color: #fff;
-  }
-
-  .debug div {
-    margin: 2px 0;
-  }
-
-  .debug .item.dragged {
-    background: #333;
-    color: #ff0;
   }
 </style>
