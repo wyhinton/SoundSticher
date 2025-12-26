@@ -2,6 +2,7 @@
   import { toCssRgb } from '../utils/colors';
   import { updatePath, deleteSection } from '../state/state.svelte';
   import type { Section } from '../state/state.svelte';
+  import EditableInput from './EditableInput.svelte';
 
   export let item: Section;
   export let sectionIndex: number;
@@ -55,27 +56,19 @@
 >
   <td>
     <div
-      style:margin-top="3px"
       class:under-drag={inputsUnderMouse.includes(sectionIndex)}
       class="d-flex justify-content-start align-items-center"
     >
       <i class="fas fa-folder my-0 mx-2"></i>
-      <input
-        style:color={toCssRgb(item.color.rgb, 1)}
-        class="folder-input input-group-sm my-auto"
-        onchange={e => {
-          updatePath(sectionIndex, (e.target as HTMLInputElement).value);
-        }}
-        bind:value={item.folderPath}
-        type="text"
-        id="name"
-        placeholder="Enter your name"
+      <EditableInput
+        bind:fullPath={item.folderPath}
+        on:change={e => updatePath(sectionIndex, e.detail)}
       />
     </div>
     <div class="d-flex"></div>
   </td>
   <td>
-    <div class="stat text-center mt-1">
+    <div class="stat text-center">
       <div>{item.files.length}</div>
     </div>
   </td>
@@ -135,6 +128,7 @@
     background-color: var(--bs-primary-bg-subtle) !important;
     padding: 0px !important;
     font-size: 12px;
+    vertical-align: middle;
   }
 
   .action-button {
