@@ -227,6 +227,7 @@
     top: 0;
     font-size: 11px;
     color: #9d9d9d !important;
+    border-bottom: 0px !important;
   }
 
   .audio-number {
@@ -244,11 +245,11 @@
     font-family: 'Fira Code';
   }
 
-  tr:hover > td {
+  tbody tr:hover > td {
     background-color: transparent !important;
   }
 
-  tr:hover {
+  tbody tr:hover {
     /* background: red !important; */
     /* background-color: red !important; */
     border: 1px dotted white;

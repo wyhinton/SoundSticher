@@ -335,6 +335,8 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="position-relative"
   onclick={handleSourcePanelClick}
@@ -377,12 +379,12 @@
     {/if}
 
     {#if $appState.sections.length > 0}
-      <SourceToolbar
+      <!-- <SourceToolbar
         selectedRowCount={selectedRows.size}
         onSelectAll={handleSelectAll}
         onClearSelection={handleClearSelection}
         onDeleteSelected={handleDeleteSelected}
-      />
+      /> -->
     {/if}
 
     <table class="w-100 table m-0">

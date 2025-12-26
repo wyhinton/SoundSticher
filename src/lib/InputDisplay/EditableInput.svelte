@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
 
-  export let fullPath = "/some/long/path/filename.txt";
+  export let fullPath = '/some/long/path/filename.txt';
   let isEditing = false;
   let inputEl: HTMLInputElement;
 
@@ -27,29 +27,6 @@
   }
 </script>
 
-<style>
-  .wrapper {
-    position: relative;
-    width: fit-content;
-  }
-
-  .input {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    width: 200px;
-  }
-
-  .display-input {
-    pointer-events: auto;
-  }
-
-  .edit-input {
-    pointer-events: auto;
-  }
-</style>
-
 <div class="wrapper">
   {#if !isEditing}
     <input
@@ -64,10 +41,31 @@
     <input
       bind:this={inputEl}
       class="input edit-input"
-      value={fullPath }
+      value={fullPath}
       on:blur={handleInputChange}
-      on:keydown={(e) => e.key === 'Enter' && handleInputChange(e)}
+      on:keydown={e => e.key === 'Enter' && handleInputChange(e)}
     />
   {/if}
 </div>
 
+<style>
+  .wrapper {
+    /* position: relative; */
+    width: fit-content;
+  }
+
+  .input {
+    top: 0;
+    left: 0;
+    width: 100%;
+    width: 200px;
+  }
+
+  .display-input {
+    pointer-events: auto;
+  }
+
+  .edit-input {
+    pointer-events: auto;
+  }
+</style>
