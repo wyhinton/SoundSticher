@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::thread::{self, sleep};
 use std::time::{Duration, Instant};
 use symphonia::core::audio::SampleBuffer;
@@ -161,27 +161,54 @@ pub async fn update_inputs(
         }
 
         let mut combined: Vec<i16> = Vec::new();
-        //TODO: DUPLICATE FILES
-        for (i, path) in valid_paths.iter().enumerate() {
+
+        // First pass: collect all samples and calculate total length
+        let mut new_files: Vec<(String, Vec<i16>)> = Vec::new();
+        let mut total_new_samples = 0;
+
+        for path in valid_paths.iter() {
             if !audio_files.contains_key(path) {
                 let samples = get_samples(path)?;
-                combined.extend(&samples);
-                audio_files.insert(
-                    path.clone(),
-                    AudioFile {
-                        samples,
-                        start_offset: 0.,
-                        waveform_path: String::from(""),
-                        id: Uuid::new_v4(),
-                        path: path.clone(),
-                        active: true, // Default to active
-                    },
-                );
-                let progress = (i as f32) / ((valid_paths.len() - 1) as f32);
-                let _ = app_handle.emit("buffering-progress", progress);
-                inserted_count += 1;
-                println!("➡️📖 INSERTING {} into BTree", path.clone());
+                total_new_samples += samples.len();
+                new_files.push((path.clone(), samples));
             }
+        }
+
+        // Calculate total samples including existing files
+        let existing_total_samples: usize = audio_files.values().map(|f| f.samples.len()).sum();
+        let grand_total_samples = existing_total_samples + total_new_samples;
+
+        //TODO: DUPLICATE FILES
+        for (i, (path, samples)) in new_files.iter().enumerate() {
+            combined.extend(samples);
+
+            // Calculate proportional width based on relative length
+            let relative_length = samples.len() as f64 / grand_total_samples as f64;
+            let segment_width = 1000.0 * relative_length; // Proportional to 1000px total width
+
+            // Generate waveform path when first inserting the sample
+            let waveform_path = generate_waveform_path(
+                samples,
+                segment_width as usize, // Proportional width
+                70,                     // Height
+                0.0, // No offset, we'll translate this later based on start_offset
+            );
+
+            audio_files.insert(
+                path.clone(),
+                AudioFile {
+                    samples: samples.clone(),
+                    start_offset: 0.,
+                    waveform_path,
+                    id: Uuid::new_v4(),
+                    path: path.clone(),
+                    active: true, // Default to active
+                },
+            );
+            let progress = (i as f32) / ((new_files.len() - 1).max(1) as f32);
+            let _ = app_handle.emit("buffering-progress", progress);
+            inserted_count += 1;
+            println!("➡️📖 INSERTING {} into BTree", path.clone());
         }
 
         let mut combined_audio = state.combined_audio.lock().unwrap();
@@ -304,31 +331,26 @@ pub async fn combine_all_cached_samples(
                 return Ok("stopped".to_string());
             }
 
-            // Update the original file in the BTreeMap with new start_offset and waveform_path
+            // Update the original file in the BTreeMap with new start_offset (no waveform regeneration)
             if let Some(original_file) = audio_files.values_mut().find(|f| f.id == audio_file.id) {
                 original_file.start_offset =
                     (current_sample_offset as f64) / (total_samples as f64);
                 combined_samples.extend(&audio_file.samples);
 
                 let relative_length = audio_file.samples.len() as f64 / total_samples as f64;
-                let segment_width = full_waveform_width * relative_length;
-                let x_offset =
-                    full_waveform_width * (current_sample_offset as f64 / total_samples as f64);
+
                 if *process_count.lock().unwrap() != orig {
                     println!("🛑 Stopped while adding samples");
                     return Ok("stopped".to_string());
                 }
-                let svg_path = generate_waveform_path(
-                    &audio_file.samples,
-                    segment_width as usize,
-                    70,
-                    x_offset,
-                );
-                original_file.waveform_path = svg_path.clone();
+
+                // Use the pre-calculated waveform path (no regeneration needed)
+                let svg_path = &original_file.waveform_path;
+
                 on_event
                     .send(CombineAudioEvent::Progress {
                         file_name: audio_file.path.clone(),
-                        svg_path: original_file.waveform_path.clone(),
+                        svg_path: svg_path.clone(),
                         start_offset: original_file.start_offset,
                         size: relative_length,
                         id: audio_file.id.to_string(),
@@ -340,7 +362,7 @@ pub async fn combine_all_cached_samples(
                     return Ok("stopped".to_string());
                 }
                 // sleep(Duration::from_millis(500)); // slow down 200ms per file
-                combined_svg_string.push_str(&svg_path);
+                combined_svg_string.push_str(svg_path);
                 current_sample_offset += audio_file.samples.len();
             }
         }

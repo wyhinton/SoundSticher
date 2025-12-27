@@ -63,7 +63,11 @@
   {#if timelineItems && timelineItems.length > 0}
     <div><b>Items ({timelineItems.length}):</b></div>
     {#each timelineItems as item, i}
-      <div class="item" class:dragged={i === draggedSegmentIndex} class:selected={selectedSegments.has(i)}>
+      <div
+        class="item"
+        class:dragged={i === draggedSegmentIndex}
+        class:selected={selectedSegments.has(i)}
+      >
         <b>#{i}</b>
         <span class="item-type">[{item.type}]</span>
         {getDisplayName(item)} | Start: {(item.startOffset * 100).toFixed(1)}% | Size: {(

@@ -18,6 +18,7 @@
     canItemBeDragged,
     getItemColor,
     isAudioFileItem,
+    getItemSvgPath,
   } from '../utils/timelineHelpers';
   import TimelineSegment from './Timeline/TimelineSegment.svelte';
   import LabelLayer from './Timeline/LabelLayer.svelte';
@@ -370,6 +371,7 @@
             transform={`scale(${scaleX}, 1) `}
             pointer-events="none"
             id="waveform-path"
+            opacity="0"
           />
 
           <Playhead {playHeadX} {currentTransform} />
@@ -388,10 +390,12 @@
                   id={timelineItem.id}
                   active={isItemActive(timelineItem)}
                   isSelected={selectedSegments.has(i)}
+                  isBeingDragged={isDragging && draggedSegmentIndex === i}
                   onSegmentSelect={selectSegment}
                   onSegmentToggle={toggleSegmentSelection}
                   canBeDragged={canItemBeDragged(timelineItem)}
                   itemColor={getItemColor(timelineItem)}
+                  svgPath={getItemSvgPath(timelineItem)}
                   {DEBUG_MODE}
                   on:dragStart={handleDragStart}
                   on:dragMove={handleDragMove}

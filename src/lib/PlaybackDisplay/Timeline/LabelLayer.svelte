@@ -51,10 +51,10 @@
   // Function to convert RGB color and darken it
   function darkenColor(rgbColor: string, factor: number = 0.6): string {
     console.log(rgbColor);
-    
+
     // Parse RGB values from string like "rgb(255, 0, 0)" or "#ffffff"
     let r, g, b;
-    
+
     if (rgbColor.startsWith('#')) {
       // Handle hex format
       const hex = rgbColor.replace('#', '');

@@ -1,7 +1,7 @@
 // src/lib/stores/appState.ts
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { persisted } from 'svelte-persisted-store';
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import {
   appState,
   getAllFiles,
@@ -90,9 +90,10 @@ export const resetPerformance = () => {
       acc[key as PerfMetricName] = [];
       return acc;
     }, {} as PerformanceState);
-
+    console.log(cleared);
     return cleared;
   });
+  console.log(get(performanceStore));
 };
 
 type CommandError = {
@@ -107,7 +108,6 @@ export async function invokeWithPerf<T = string, E = CommandError>(
   args?: Record<string, any>
 ): Promise<Result<T, E>> {
   const start = performance.now();
-
   try {
     const result = await invoke<T>(command, args);
     const end = performance.now();
