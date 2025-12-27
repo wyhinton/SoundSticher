@@ -17,9 +17,11 @@
   export let DEBUG_MODE: boolean;
   export let id: string | undefined;
   export let isSelected: boolean = false;
+  export let isBeingDragged: boolean = false;
   export let active: boolean = true;
   export let canBeDragged: boolean = true;
   export let itemColor: string = '#3091f1';
+  export let svgPath: string | null = null;
   export let onSegmentSelect: ((index: number, isShiftSelect?: boolean) => void) | undefined =
     undefined;
   export let onSegmentToggle: ((index: number) => void) | undefined = undefined;
@@ -129,6 +131,19 @@
   class="segment-rect"
   class:dragging={isDragging}
 >
+  <!-- Render waveform path if available -->
+  {#if svgPath}
+    <path
+      d={svgPath}
+      fill="none"
+      stroke="#3091f1"
+      stroke-width="1"
+      transform={`translate(${rectX}, 0)`}
+      class="waveform-path"
+      class:dragging={isDragging}
+    />
+  {/if}
+
   <foreignObject x={rectX} y={-20} width={rectWidth} height="150">
     <div
       bind:this={timelineDiv}
@@ -238,5 +253,15 @@
   /* Ensure the foreignObject content renders properly */
   foreignObject {
     overflow: visible;
+  }
+
+  /* Waveform path styling */
+  :global(.waveform-path) {
+    transition: stroke 0.2s ease;
+    pointer-events: none;
+  }
+
+  :global(.waveform-path.dragging) {
+    stroke: rgba(0, 200, 255, 0.9);
   }
 </style>

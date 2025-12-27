@@ -1,4 +1,8 @@
-import type { TimelineItem, AudioFileTimelineItem, SpacerTimelineItem } from '../state/state.svelte';
+import type {
+  TimelineItem,
+  AudioFileTimelineItem,
+  SpacerTimelineItem,
+} from '../state/state.svelte';
 import { formatFileName } from './format';
 
 // Type guards
@@ -117,14 +121,14 @@ export function shouldShowLabel(item: TimelineItem): boolean {
 export function processTimelineItems(items: TimelineItem[]) {
   items.forEach((item, index) => {
     console.log(`Processing item ${index}: ${item.type}`);
-    
+
     // Type-safe operations
     if (isAudioFileItem(item)) {
       // TypeScript knows this is AudioFileTimelineItem
       console.log(`  Audio file: ${item.fileName}, active: ${item.active}`);
       console.log(`  SVG path length: ${item.svgPath.length}`);
     } else if (isSpacerItem(item)) {
-      // TypeScript knows this is SpacerTimelineItem  
+      // TypeScript knows this is SpacerTimelineItem
       console.log(`  Spacer duration: ${item.length}s`);
     }
   });

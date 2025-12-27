@@ -98,19 +98,24 @@
   });
 
   interface AppStateDebug {
-    audio_files: { [key: string]: number };
+    audio_files: { [key: string]: any };
     combined_audio: string;
+    buffering_samples: boolean;
+    svg_path: string;
+    cancel_token: number;
+    combine_process: number;
   }
 
   let appStateDebug: undefined | AppStateDebug = undefined;
+  let backendHighlighted = '';
 
   // BACKEND JSON VISUALIZER
   $: {
     if (appStateDebug) {
       const backendStateJSON = JSON.stringify(appStateDebug, null, 2);
-      highlighted = Prism.highlight(backendStateJSON, Prism.languages.json, 'json');
+      backendHighlighted = Prism.highlight(backendStateJSON, Prism.languages.json, 'json');
       if (appBackendState) {
-        appBackendState.innerHTML = highlighted;
+        appBackendState.innerHTML = backendHighlighted;
       }
     }
   }
@@ -163,32 +168,45 @@
       onEvent: onCombineAudioEvent,
     });
   };
+
   let intervalId: number;
-  // Make sure to clear the waveform path on mount if no combined audio is present
+  let refreshBackendState = false; // Toggle for auto-refresh
+  let isFetching = false;
+
+  // Function to fetch backend state
+  async function fetchBackendState() {
+    if (isFetching) return;
+    isFetching = true;
+
+    try {
+      let zDebug = await invokeWithPerf<AppStateDebug>('get_app_state');
+
+      if (zDebug.ok) {
+        appStateDebug = zDebug.value;
+      }
+    } catch (err) {
+      console.error('Failed to fetch app state', err);
+    } finally {
+      isFetching = false;
+    }
+  }
+
+  // Reactive statement to handle auto-refresh toggle
+  $: {
+    if (refreshBackendState) {
+      // Start interval when toggle is enabled
+      intervalId = setInterval(fetchBackendState, 1000);
+    } else {
+      // Clear interval when toggle is disabled
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    }
+  }
+
   onMount(() => {
-    let isFetching = false;
-
-    // intervalId = setInterval(async () => {
-    //   if (isFetching) return;
-    //   isFetching = true;
-
-    //   try {
-    //     appStateDebug = await invokeWithPerf<AppStateDebug>("get_app_state");
-
-    //     if (appStateDebug.combined_audio === "empty") {
-    //       appState.update((s) => {
-    //         if (s.combinedFile) s.combinedFile.svgPath = undefined;
-    //         s.combinedFileLength = undefined;
-    //         s.timelineItems = [];
-    //         return s;
-    //       });
-    //     }
-    //   } catch (err) {
-    //     console.error("Failed to fetch app state", err);
-    //   } finally {
-    //     isFetching = false;
-    //   }
-    // }, 1000);
+    // Initial fetch
+    fetchBackendState();
   });
 
   onDestroy(() => {
@@ -260,6 +278,20 @@
     }}
     class="btn btn-sm"><i class="fa fa-clipboard"></i>Copy state to clipboard</button
   >
+
+  <!-- Backend State Controls -->
+  <div class="backend-controls">
+    <label class="toggle-label">
+      <input type="checkbox" bind:checked={refreshBackendState} />
+      <i class="fa fa-sync-alt"></i> Refresh Backend State
+    </label>
+    {#if !refreshBackendState}
+      <button on:click={fetchBackendState} class="btn btn-sm" disabled={isFetching}>
+        <i class="fa {isFetching ? 'fa-spinner fa-spin' : 'fa-download'}"></i>
+        {isFetching ? 'Fetching...' : 'Get Backend State'}
+      </button>
+    {/if}
+  </div>
   <button
     on:click={() => {
       test_async();
@@ -366,5 +398,29 @@
   }
   .btn {
     border: 1px solid white !important;
+  }
+
+  .backend-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+    padding: 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .toggle-label input[type='checkbox'] {
+    margin: 0;
   }
 </style>
