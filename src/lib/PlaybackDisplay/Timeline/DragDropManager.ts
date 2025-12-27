@@ -52,6 +52,7 @@ export class DragDropManager {
   private container: HTMLElement | null = null;
   private appStateStore: Writable<AppState>;
   private isDev: boolean;
+  private selectedSegments: Set<number> = new Set();
 
   constructor(appStateStore: Writable<AppState>) {
     this.appStateStore = appStateStore;
@@ -60,6 +61,13 @@ export class DragDropManager {
       typeof import.meta !== 'undefined' &&
       typeof (import.meta as any).env !== 'undefined' &&
       (import.meta as any).env.DEV === true;
+  }
+
+  /**
+   * Update the selected segments that should be moved together during drag operations
+   */
+  setSelectedSegments(selectedSegments: Set<number>): void {
+    this.selectedSegments = new Set(selectedSegments);
   }
 
   private setState(next: DragDropState) {
@@ -197,21 +205,52 @@ export class DragDropManager {
   ): Promise<void> {
     this.log(`Reordering segment ${sourceIndex} to position ${targetIndex}`);
 
-    // Create a copy of the timeline items array and perform the reorder
+    // Create a copy of the timeline items array
     const items = [...appState.timelineItems];
-    const draggedItem = items[sourceIndex];
-
-    if (!draggedItem) {
-      this.logError('No item found at source index', sourceIndex);
-      return;
+    
+    // Determine which segments to move
+    let segmentsToMove: number[];
+    if (this.selectedSegments.size > 1 && this.selectedSegments.has(sourceIndex)) {
+      // Move all selected segments as a group
+      segmentsToMove = Array.from(this.selectedSegments).sort((a, b) => a - b);
+      this.log(`Moving ${segmentsToMove.length} selected segments:`, segmentsToMove);
+    } else {
+      // Move only the dragged segment
+      segmentsToMove = [sourceIndex];
+      this.log(`Moving single segment: ${sourceIndex}`);
     }
 
-    // Remove the dragged item from its current position
-    items.splice(sourceIndex, 1);
+    // Validate all segments exist
+    for (const index of segmentsToMove) {
+      if (!items[index]) {
+        this.logError('No item found at source index', index);
+        return;
+      }
+    }
 
-    // Insert it at the new position (adjust index if moving forward)
-    const insertIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex;
-    items.splice(insertIndex, 0, draggedItem);
+    // Extract the items to move
+    const itemsToMove = segmentsToMove.map(index => items[index]).filter(item => item !== undefined);
+    
+    // Remove the segments from their current positions (in reverse order to maintain indices)
+    const segmentsToRemove = [...segmentsToMove].sort((a, b) => b - a);
+    for (const index of segmentsToRemove) {
+      items.splice(index, 1);
+    }
+
+    // Calculate the insertion point
+    // We need to adjust for the segments we've already removed
+    let insertIndex = targetIndex;
+    for (const removedIndex of segmentsToMove) {
+      if (removedIndex < targetIndex) {
+        insertIndex--;
+      }
+    }
+    
+    // Ensure insertIndex is valid
+    insertIndex = Math.max(0, Math.min(insertIndex, items.length));
+
+    // Insert all moved items at the new position
+    items.splice(insertIndex, 0, ...itemsToMove);
 
     // Build array for Rust backend: { id, index }
     const updates = items.map((item, newIndex) => ({

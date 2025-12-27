@@ -119,6 +119,12 @@
 
     lastSelectedIndex = segmentIndex;
     selectedSegments = new Set(selectedSegments);
+    
+    // Update the drag drop manager with the new selection
+    if (dragDropManager) {
+      dragDropManager.setSelectedSegments(selectedSegments);
+    }
+    
     dispatch('selectionChange', selectedSegments);
   }
 
@@ -134,6 +140,12 @@
     selectedSegments.clear();
     selectedSegments = new Set(selectedSegments);
     lastSelectedIndex = null;
+    
+    // Update the drag drop manager with the cleared selection
+    if (dragDropManager) {
+      dragDropManager.setSelectedSegments(selectedSegments);
+    }
+    
     dispatch('selectionChange', selectedSegments);
   }
 
@@ -169,6 +181,9 @@
     // Create new drag drop manager
     dragDropManager = new DragDropManager(appState);
     dragDropManager.initialize(d3Manager, container);
+    
+    // Initialize with current selection
+    dragDropManager.setSelectedSegments(selectedSegments);
 
     // ✅ Subscribe to manager's state store (Option A)
     unsubscribeDragDrop = dragDropManager.state.subscribe(s => {
@@ -215,7 +230,14 @@
 
   function handleKeyDown(event: KeyboardEvent) {
     // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
-    if (import.meta.env.DEV && event.ctrlKey && event.shiftKey && event.code === 'Space') {
+    if (
+      typeof import.meta !== 'undefined' &&
+      typeof (import.meta as any).env !== 'undefined' &&
+      (import.meta as any).env.DEV &&
+      event.ctrlKey && 
+      event.shiftKey && 
+      event.code === 'Space'
+    ) {
       event.preventDefault();
       event.stopPropagation();
       timelineDebugMode.toggle();
