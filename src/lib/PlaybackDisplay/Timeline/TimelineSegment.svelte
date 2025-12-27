@@ -218,7 +218,6 @@
 
   /* Non-draggable items styling */
   .timeline-segment-div.non-draggable {
-    /* cursor: default !important; */
     opacity: 0.7;
   }
 
