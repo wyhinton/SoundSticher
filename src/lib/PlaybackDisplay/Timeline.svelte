@@ -89,9 +89,11 @@
   let draggedSegmentIndex = -1;
   let dropIndicatorIndex = -1;
   let dropIndicatorX = 0;
+  let segmentsToMove: number[] = [];
 
   // keep locals in sync with dragDropState
-  $: ({ isDragging, draggedSegmentIndex, dropIndicatorIndex, dropIndicatorX } = dragDropState);
+  $: ({ isDragging, draggedSegmentIndex, dropIndicatorIndex, dropIndicatorX, segmentsToMove } =
+    dragDropState);
 
   const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
@@ -119,12 +121,12 @@
 
     lastSelectedIndex = segmentIndex;
     selectedSegments = new Set(selectedSegments);
-    
+
     // Update the drag drop manager with the new selection
     if (dragDropManager) {
       dragDropManager.setSelectedSegments(selectedSegments);
     }
-    
+
     dispatch('selectionChange', selectedSegments);
   }
 
@@ -140,12 +142,12 @@
     selectedSegments.clear();
     selectedSegments = new Set(selectedSegments);
     lastSelectedIndex = null;
-    
+
     // Update the drag drop manager with the cleared selection
     if (dragDropManager) {
       dragDropManager.setSelectedSegments(selectedSegments);
     }
-    
+
     dispatch('selectionChange', selectedSegments);
   }
 
@@ -181,7 +183,7 @@
     // Create new drag drop manager
     dragDropManager = new DragDropManager(appState);
     dragDropManager.initialize(d3Manager, container);
-    
+
     // Initialize with current selection
     dragDropManager.setSelectedSegments(selectedSegments);
 
@@ -234,8 +236,8 @@
       typeof import.meta !== 'undefined' &&
       typeof (import.meta as any).env !== 'undefined' &&
       (import.meta as any).env.DEV &&
-      event.ctrlKey && 
-      event.shiftKey && 
+      event.ctrlKey &&
+      event.shiftKey &&
       event.code === 'Space'
     ) {
       event.preventDefault();
@@ -425,6 +427,7 @@
           {originalPathWidth}
           {currentTransform}
           {isDragging}
+          {segmentsToMove}
         ></LabelLayer>
       {/if}
 
@@ -459,6 +462,7 @@
       {originalPathWidth}
       {selectedSegments}
       {lastSelectedIndex}
+      {segmentsToMove}
     />
   {/if}
 </div>

@@ -17,7 +17,6 @@
   let selectedTimelineSegments: Set<number> = new Set();
   let selectedSourceRows: Set<number> = new Set();
 
-  
   // Register providers in order of priority (first match wins)
   onMount(() => {
     contextMenuManager.registerProvider('timeline-segment', timelineSegmentProvider);

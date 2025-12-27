@@ -11,6 +11,7 @@ export type DragDropState = {
   draggedSegmentIndex: number;
   dropIndicatorIndex: number;
   dropIndicatorX: number;
+  segmentsToMove: number[];
 };
 
 export const DEFAULT_DD: DragDropState = {
@@ -18,6 +19,7 @@ export const DEFAULT_DD: DragDropState = {
   draggedSegmentIndex: -1,
   dropIndicatorIndex: -1,
   dropIndicatorX: 0,
+  segmentsToMove: [],
 };
 
 export interface DragStartEvent {
@@ -119,12 +121,25 @@ export class DragDropManager {
   handleDragStart(event: DragStartEvent): void {
     this.log(`Started dragging segment ${event.index}`);
 
+    // Determine which segments to move
+    let segmentsToMove: number[];
+    if (this.selectedSegments.size > 1 && this.selectedSegments.has(event.index)) {
+      // Move all selected segments as a group
+      segmentsToMove = Array.from(this.selectedSegments).sort((a, b) => a - b);
+      this.log(`Will move ${segmentsToMove.length} selected segments:`, segmentsToMove);
+    } else {
+      // Move only the dragged segment
+      segmentsToMove = [event.index];
+      this.log(`Will move single segment: ${event.index}`);
+    }
+
     this.setState({
       ...this._state,
       isDragging: true,
       draggedSegmentIndex: event.index,
       dropIndicatorIndex: -1,
       dropIndicatorX: 0,
+      segmentsToMove,
     });
   }
 
@@ -207,18 +222,10 @@ export class DragDropManager {
 
     // Create a copy of the timeline items array
     const items = [...appState.timelineItems];
-    
-    // Determine which segments to move
-    let segmentsToMove: number[];
-    if (this.selectedSegments.size > 1 && this.selectedSegments.has(sourceIndex)) {
-      // Move all selected segments as a group
-      segmentsToMove = Array.from(this.selectedSegments).sort((a, b) => a - b);
-      this.log(`Moving ${segmentsToMove.length} selected segments:`, segmentsToMove);
-    } else {
-      // Move only the dragged segment
-      segmentsToMove = [sourceIndex];
-      this.log(`Moving single segment: ${sourceIndex}`);
-    }
+
+    // Use the segments to move from the state
+    const segmentsToMove = this._state.segmentsToMove;
+    this.log(`Moving ${segmentsToMove.length} segments:`, segmentsToMove);
 
     // Validate all segments exist
     for (const index of segmentsToMove) {
@@ -229,8 +236,10 @@ export class DragDropManager {
     }
 
     // Extract the items to move
-    const itemsToMove = segmentsToMove.map(index => items[index]).filter(item => item !== undefined);
-    
+    const itemsToMove = segmentsToMove
+      .map(index => items[index])
+      .filter(item => item !== undefined);
+
     // Remove the segments from their current positions (in reverse order to maintain indices)
     const segmentsToRemove = [...segmentsToMove].sort((a, b) => b - a);
     for (const index of segmentsToRemove) {
@@ -245,7 +254,7 @@ export class DragDropManager {
         insertIndex--;
       }
     }
-    
+
     // Ensure insertIndex is valid
     insertIndex = Math.max(0, Math.min(insertIndex, items.length));
 

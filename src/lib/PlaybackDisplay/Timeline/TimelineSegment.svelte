@@ -156,10 +156,6 @@
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
-        {isSelected ? 'border: 2px solid rgba(59, 130, 246, 0.8);' : ''}
-        {!active
-        ? 'border: 2px solid rgba(255, 69, 0, 0.6); background-color: rgba(255, 69, 0, 0.2) !important;'
-        : ''}
       "
     ></div>
   </foreignObject>
@@ -188,7 +184,6 @@
   .timeline-segment-div:hover {
     opacity: 0.9;
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 200, 255, 0.2);
   }
 
   .timeline-segment-div.hovered {
@@ -197,7 +192,6 @@
 
   .timeline-segment-div.selected {
     background-color: rgba(59, 130, 246, 0.3) !important;
-    border: 2px solid rgba(59, 130, 246, 0.8) !important;
   }
 
   .timeline-segment-div.selected:hover {
@@ -219,8 +213,6 @@
   /* Drag state styling - segment being dragged gets highlighted */
   .timeline-segment-div.dragging {
     background-color: rgba(0, 200, 255, 0.6) !important;
-    border-color: rgba(0, 200, 255, 0.8) !important;
-    box-shadow: 0 4px 12px rgba(0, 200, 255, 0.4);
     opacity: 0.9;
   }
 
