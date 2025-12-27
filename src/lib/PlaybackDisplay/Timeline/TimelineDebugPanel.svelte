@@ -14,6 +14,8 @@
   export let currentTransform: d3.ZoomTransform;
   export let timelineItems: TimelineItem[] = [];
   export let originalPathWidth: number;
+  export let selectedSegments: Set<number>;
+  export let lastSelectedIndex: number | null;
 </script>
 
 <div class="debug">
@@ -41,10 +43,20 @@
     <b>Pan:</b>
     {currentTransform.x.toFixed(0)}px
   </div>
+  <div>
+    <b>Selected ({selectedSegments.size}):</b>
+    {#if selectedSegments.size > 0}
+      [{Array.from(selectedSegments).join(', ')}] |
+    {:else}
+      none |
+    {/if}
+    <b>LastSel:</b>
+    {lastSelectedIndex !== null ? lastSelectedIndex : '-'}
+  </div>
   {#if timelineItems && timelineItems.length > 0}
     <div><b>Items ({timelineItems.length}):</b></div>
     {#each timelineItems as item, i}
-      <div class="item" class:dragged={i === draggedSegmentIndex}>
+      <div class="item" class:dragged={i === draggedSegmentIndex} class:selected={selectedSegments.has(i)}>
         <b>#{i}</b>
         <span class="item-type">[{item.type}]</span>
         {getDisplayName(item)} | Start: {(item.startOffset * 100).toFixed(1)}% | Size: {(
@@ -89,6 +101,16 @@
   .debug .item.dragged {
     background: #333;
     color: #ff0;
+  }
+
+  .debug .item.selected {
+    background: #006600;
+    color: #00ff00;
+  }
+
+  .debug .item.dragged.selected {
+    background: #663300;
+    color: #ffaa00;
   }
 
   .debug .item-type {

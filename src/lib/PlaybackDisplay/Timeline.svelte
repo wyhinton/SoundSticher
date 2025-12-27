@@ -428,6 +428,8 @@
       {currentTransform}
       timelineItems={$appState?.timelineItems || []}
       {originalPathWidth}
+      {selectedSegments}
+      {lastSelectedIndex}
     />
   {/if}
 </div>

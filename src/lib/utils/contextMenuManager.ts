@@ -1,6 +1,10 @@
 import { debugState } from '../state/debug.svelte';
 import { get } from 'svelte/store';
-import type { ContextMenuConfig, ContextMenuProvider, ContextMenuContext } from '../components/ContextMenu/types';
+import type {
+  ContextMenuConfig,
+  ContextMenuProvider,
+  ContextMenuContext,
+} from '../components/ContextMenu/types';
 
 /**
  * Context menu manager that handles whether to use custom or browser context menus
@@ -26,7 +30,7 @@ export class ContextMenuManager {
     context: Omit<ContextMenuContext, 'event'>
   ): boolean {
     const debugSettings = get(debugState);
-    
+
     if (!debugSettings.useCustomContextMenu) {
       // Return false to let browser handle the context menu
       return false;
@@ -41,7 +45,7 @@ export class ContextMenuManager {
     };
 
     const config = provider(fullContext);
-    
+
     if (config) {
       this.contextMenuConfig = config;
       this.contextMenuVisible = true;
