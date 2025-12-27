@@ -16,6 +16,7 @@
   export let originalPathWidth: number;
   export let selectedSegments: Set<number>;
   export let lastSelectedIndex: number | null;
+  export let segmentsToMove: number[] = [];
 </script>
 
 <div class="debug">
@@ -51,7 +52,13 @@
       none |
     {/if}
     <b>LastSel:</b>
-    {lastSelectedIndex !== null ? lastSelectedIndex : '-'}
+    {lastSelectedIndex !== null ? lastSelectedIndex : '-'} |
+    <b>ToMove:</b>
+    {#if segmentsToMove.length > 0}
+      [{segmentsToMove.join(', ')}]
+    {:else}
+      none
+    {/if}
   </div>
   {#if timelineItems && timelineItems.length > 0}
     <div><b>Items ({timelineItems.length}):</b></div>
