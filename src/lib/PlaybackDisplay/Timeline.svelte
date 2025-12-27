@@ -269,6 +269,12 @@
 
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
     if (!dragDropManager) return;
+    
+    // If the dragged segment is not in the current selection, clear the selection
+    if (!selectedSegments.has(event.detail.index)) {
+      handleClearSelection();
+    }
+    
     dragDropManager.handleDragStart(event.detail);
   }
 
