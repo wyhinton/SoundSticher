@@ -29,7 +29,7 @@
   import { get } from 'svelte/store';
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
-  import { debugState } from '../state/debug.svelte';
+  import { debugState, timelineDebugMode } from '../state/debug.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
 
   import {
@@ -214,6 +214,15 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
+    if (import.meta.env.DEV && event.ctrlKey && event.shiftKey && event.code === 'Space') {
+      event.preventDefault();
+      event.stopPropagation();
+      timelineDebugMode.toggle();
+      console.log('🔧 Timeline: Toggled debug mode:', !$debugState.timelineDebugMode);
+      return;
+    }
+
     if (event.key === 'Delete' && selectedSegments.size > 0) {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
