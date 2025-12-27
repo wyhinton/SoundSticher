@@ -156,7 +156,6 @@
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
-        cursor: {canBeDragged ? 'grab' : 'default'};
         {isSelected ? 'border: 2px solid rgba(59, 130, 246, 0.8);' : ''}
         {!active
         ? 'border: 2px solid rgba(255, 69, 0, 0.6); background-color: rgba(255, 69, 0, 0.2) !important;'
@@ -227,7 +226,7 @@
 
   /* Non-draggable items styling */
   .timeline-segment-div.non-draggable {
-    cursor: default !important;
+    /* cursor: default !important; */
     opacity: 0.7;
   }
 
