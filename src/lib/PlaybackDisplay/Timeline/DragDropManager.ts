@@ -4,13 +4,21 @@ import { generateProgressChannel, type SortAudioEvent } from '../../state/events
 import { Channel } from '@tauri-apps/api/core';
 import { applySyncIndexes, type AppState } from '../../state/state.svelte';
 import { get, type Writable } from 'svelte/store';
+import { writable, type Readable } from 'svelte/store';
 
-export interface DragDropState {
+export type DragDropState = {
   isDragging: boolean;
   draggedSegmentIndex: number;
   dropIndicatorIndex: number;
   dropIndicatorX: number;
-}
+};
+
+export const DEFAULT_DD: DragDropState = {
+  isDragging: false,
+  draggedSegmentIndex: -1,
+  dropIndicatorIndex: -1,
+  dropIndicatorX: 0,
+};
 
 export interface DragStartEvent {
   index: number;
@@ -33,7 +41,13 @@ export interface DragEndEvent {
 }
 
 export class DragDropManager {
-  private state: DragDropState;
+  private _state: DragDropState = DEFAULT_DD;
+
+  private _stateStore = writable<DragDropState>(this._state);
+  public readonly state: Readable<DragDropState> = {
+    subscribe: this._stateStore.subscribe,
+  };
+
   private d3Manager: D3TimelineManager | null = null;
   private container: HTMLElement | null = null;
   private appStateStore: Writable<AppState>;
@@ -46,12 +60,15 @@ export class DragDropManager {
       typeof import.meta !== 'undefined' &&
       typeof (import.meta as any).env !== 'undefined' &&
       (import.meta as any).env.DEV === true;
-    this.state = {
-      isDragging: false,
-      draggedSegmentIndex: -1,
-      dropIndicatorIndex: -1,
-      dropIndicatorX: 0,
-    };
+  }
+
+  private setState(next: DragDropState) {
+    this._state = next;
+    this._stateStore.set(next);
+  }
+
+  getState(): DragDropState {
+    return this._state;
   }
 
   /**
@@ -89,64 +106,81 @@ export class DragDropManager {
   }
 
   /**
-   * Get the current drag drop state
-   */
-  getState(): Readonly<DragDropState> {
-    return { ...this.state };
-  }
-
-  /**
    * Handle drag start event
    */
   handleDragStart(event: DragStartEvent): void {
     this.log(`Started dragging segment ${event.index}`);
 
-    this.state.isDragging = true;
-    this.state.draggedSegmentIndex = event.index;
-    this.state.dropIndicatorIndex = -1;
-    this.state.dropIndicatorX = 0;
+    this.setState({
+      ...this._state,
+      isDragging: true,
+      draggedSegmentIndex: event.index,
+      dropIndicatorIndex: -1,
+      dropIndicatorX: 0,
+    });
   }
 
   /**
    * Handle drag move event
    */
   handleDragMove(event: DragMoveEvent): void {
-    if (!this.state.isDragging || !this.d3Manager || !this.container) return;
+    const currentState = this.getState();
+    if (!currentState.isDragging || !this.d3Manager || !this.container) {
+      this.log(
+        `Drag move skipped - isDragging: ${currentState.isDragging}, d3Manager: ${!!this.d3Manager}, container: ${!!this.container}`
+      );
+      return;
+    }
 
     const appState = get(this.appStateStore);
-    if (!appState?.timelineItems) return;
+    if (!appState?.timelineItems) {
+      this.log('Drag move skipped - no timeline items in app state');
+      return;
+    }
 
     // Calculate drop position using the D3 manager
     const containerRect = this.container.getBoundingClientRect();
     const relativeX = event.mousePos.x - containerRect.left;
+
+    this.log(
+      `Drag move - segment ${event.index}, mouseX: ${event.mousePos.x}, relativeX: ${relativeX}, dragDistance: ${event.dragDistance}`
+    );
 
     const dropPosition = this.d3Manager.calculateDropPosition(
       relativeX,
       appState.timelineItems as TimelineItem[]
     );
 
-    this.state.dropIndicatorIndex = dropPosition.index;
-    this.state.dropIndicatorX = dropPosition.x;
+    this.log(`Drop position calculated - index: ${dropPosition.index}, x: ${dropPosition.x}`);
+
+    this.setState({
+      ...this._state,
+      dropIndicatorIndex: dropPosition.index,
+      dropIndicatorX: dropPosition.x,
+    });
   }
 
   /**
    * Handle drag end event
    */
   async handleDragEnd(event: DragEndEvent): Promise<void> {
-    if (!this.state.isDragging) return;
+    const currentState = this.getState();
+    if (!currentState.isDragging) return;
 
-    this.log(`Ended dragging segment ${event.index} to position ${this.state.dropIndicatorIndex}`);
+    this.log(
+      `Ended dragging segment ${event.index} to position ${currentState.dropIndicatorIndex}`
+    );
 
     const appState = get(this.appStateStore);
 
     // Perform the reorder if we have a valid drop position
     if (
-      this.state.dropIndicatorIndex >= 0 &&
-      this.state.dropIndicatorIndex !== event.index &&
-      this.state.dropIndicatorIndex !== event.index + 1 &&
+      currentState.dropIndicatorIndex >= 0 &&
+      currentState.dropIndicatorIndex !== event.index &&
+      currentState.dropIndicatorIndex !== event.index + 1 &&
       appState?.timelineItems
     ) {
-      await this.performReorder(event.index, this.state.dropIndicatorIndex, appState);
+      await this.performReorder(event.index, currentState.dropIndicatorIndex, appState);
     }
 
     // Reset drag state
@@ -228,10 +262,7 @@ export class DragDropManager {
    * Reset the drag state
    */
   private resetDragState(): void {
-    this.state.isDragging = false;
-    this.state.draggedSegmentIndex = -1;
-    this.state.dropIndicatorIndex = -1;
-    this.state.dropIndicatorX = 0;
+    this.setState(DEFAULT_DD);
   }
 
   /**
@@ -247,27 +278,27 @@ export class DragDropManager {
    * Check if currently dragging
    */
   get isDragging(): boolean {
-    return this.state.isDragging;
+    return this._state.isDragging;
   }
 
   /**
    * Get the current dragged segment index
    */
   get draggedSegmentIndex(): number {
-    return this.state.draggedSegmentIndex;
+    return this._state.draggedSegmentIndex;
   }
 
   /**
    * Get the current drop indicator index
    */
   get dropIndicatorIndex(): number {
-    return this.state.dropIndicatorIndex;
+    return this._state.dropIndicatorIndex;
   }
 
   /**
    * Get the current drop indicator X position
    */
   get dropIndicatorX(): number {
-    return this.state.dropIndicatorX;
+    return this._state.dropIndicatorX;
   }
 }

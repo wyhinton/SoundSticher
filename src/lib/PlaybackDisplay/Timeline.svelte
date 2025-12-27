@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
   import { createEventDispatcher } from 'svelte';
   import {
@@ -32,12 +32,13 @@
   import { debugState } from '../state/debug.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
 
-  // Subscribe to debug state
   import {
     DragDropManager,
     type DragStartEvent,
     type DragMoveEvent,
     type DragEndEvent,
+    type DragDropState, // <-- add this type export in DragDropManager.ts
+    DEFAULT_DD, // <-- export this from DragDropManager.ts (recommended)
   } from './Timeline/DragDropManager';
 
   const dispatch = createEventDispatcher();
@@ -54,7 +55,10 @@
   let d3Manager: D3TimelineManager | null = null;
 
   // Drag Drop Manager instance
-  let dragDropManager: DragDropManager;
+  let dragDropManager: DragDropManager | null = null;
+
+  // subscription cleanup
+  let unsubscribeDragDrop: null | (() => void) = null;
 
   const originalPathWidth = 1000;
 
@@ -72,25 +76,27 @@
     initializeManagers();
   }
 
-  // Drag and drop state - now managed by DragDropManager
-  let arrowHeadY = 0; // Y position for the drop indicator arrowhead
-  let arrowHeadSize = 6; // Size of the drop indicator arrowhead
+  // Drag and drop state
+  let arrowHeadY = 0;
+  let arrowHeadSize = 6;
   const debugShowDropLine = false;
 
-  // Reactive values from drag drop manager
-  $: dragDropState = dragDropManager?.getState() ?? {
-    isDragging: false,
-    draggedSegmentIndex: -1,
-    dropIndicatorIndex: -1,
-    dropIndicatorX: 0,
-  };
+  // ✅ reactive drag-drop state (now driven by store subscription)
+  let dragDropState: DragDropState = DEFAULT_DD;
 
+  // These locals drive your template
+  let isDragging = false;
+  let draggedSegmentIndex = -1;
+  let dropIndicatorIndex = -1;
+  let dropIndicatorX = 0;
+
+  // keep locals in sync with dragDropState
   $: ({ isDragging, draggedSegmentIndex, dropIndicatorIndex, dropIndicatorX } = dragDropState);
 
   const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
 
-  // Selection state (similar to Sources.svelte)
+  // Selection state
   let selectedSegments: Set<number> = new Set();
   let lastSelectedIndex: number | null = null;
 
@@ -100,34 +106,19 @@
     isShiftSelect: boolean = false
   ) {
     if (isShiftSelect && lastSelectedIndex !== null) {
-      // Shift-select: select range from lastSelectedIndex to segmentIndex
       const start = Math.min(lastSelectedIndex, segmentIndex);
       const end = Math.max(lastSelectedIndex, segmentIndex);
-
-      // Add all indices in the range to selection
-      for (let i = start; i <= end; i++) {
-        selectedSegments.add(i);
-      }
+      for (let i = start; i <= end; i++) selectedSegments.add(i);
     } else if (isMultiSelect) {
-      // Toggle selection for multi-select
-      if (selectedSegments.has(segmentIndex)) {
-        selectedSegments.delete(segmentIndex);
-      } else {
-        selectedSegments.add(segmentIndex);
-      }
+      if (selectedSegments.has(segmentIndex)) selectedSegments.delete(segmentIndex);
+      else selectedSegments.add(segmentIndex);
     } else {
-      // Single selection - clear others and select this one
       selectedSegments.clear();
       selectedSegments.add(segmentIndex);
     }
 
-    // Update last selected index for future shift-selects
     lastSelectedIndex = segmentIndex;
-
-    // Trigger reactivity
     selectedSegments = new Set(selectedSegments);
-
-    // Dispatch selection change for context menu
     dispatch('selectionChange', selectedSegments);
   }
 
@@ -143,8 +134,6 @@
     selectedSegments.clear();
     selectedSegments = new Set(selectedSegments);
     lastSelectedIndex = null;
-
-    // Dispatch selection change for context menu
     dispatch('selectionChange', selectedSegments);
   }
 
@@ -152,12 +141,13 @@
     if (!svgEl || !axisGroup || !pathGroup || !container) return;
 
     // Clean up existing managers
-    if (d3Manager) {
-      d3Manager.destroy();
-    }
-    if (dragDropManager) {
-      dragDropManager.destroy();
-    }
+    if (d3Manager) d3Manager.destroy();
+
+    if (dragDropManager) dragDropManager.destroy();
+
+    // ✅ Clean up previous subscription (important since you recreate the manager)
+    unsubscribeDragDrop?.();
+    unsubscribeDragDrop = null;
 
     // Create new D3 manager
     d3Manager = new D3TimelineManager({
@@ -174,14 +164,18 @@
       },
     });
 
-    // Initialize D3 manager with DOM elements
     d3Manager.initialize(svgEl, axisGroup, pathGroup);
 
     // Create new drag drop manager
     dragDropManager = new DragDropManager(appState);
     dragDropManager.initialize(d3Manager, container);
 
-    // Update reactive values
+    // ✅ Subscribe to manager's state store (Option A)
+    unsubscribeDragDrop = dragDropManager.state.subscribe(s => {
+      dragDropState = s;
+    });
+
+    // Update values
     scaleX = d3Manager.getScaleX();
     xScale = d3Manager.getXScale() ?? xScale;
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
@@ -194,10 +188,7 @@
 
   // Update manager options when width or duration changes
   $: if (d3Manager && (width > 0 || $durationSeconds > 0)) {
-    d3Manager.updateOptions({
-      width,
-      durationSeconds: $durationSeconds,
-    });
+    d3Manager.updateOptions({ width, durationSeconds: $durationSeconds });
     scaleX = d3Manager.getScaleX();
   }
 
@@ -211,59 +202,38 @@
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
 
-    // Check if click is on a timeline segment using the manager
     const clickedSegmentIndex = $appState?.timelineItems
       ? d3Manager.findClickedSegment(relativeX, $appState.timelineItems as TimelineItem[])
       : null;
 
-    // If clicked on empty space, clear selection and set playhead
     if (clickedSegmentIndex === null) {
       handleClearSelection();
-
       const clickedTime = d3Manager.clickToTime(relativeX);
-      console.log(clickedTime);
       invokeWithPerf('set_timeline_play_position', { position: clickedTime });
     }
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    // Check if Delete key was pressed and we have selected segments
     if (event.key === 'Delete' && selectedSegments.size > 0) {
-      // Don't trigger if user is typing in an input field
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
-      }
-
       event.preventDefault();
 
-      // Get the IDs of selected audio file items only (spacers might not be deletable)
       const selectedIds: string[] = [];
       if ($appState?.timelineItems) {
         Array.from(selectedSegments).forEach(index => {
           if (index < $appState.timelineItems.length) {
             const item = $appState.timelineItems[index];
-            // Only allow deletion of audio files
-            if (item && isAudioFileItem(item)) {
-              selectedIds.push(item.id);
-            }
+            if (item && isAudioFileItem(item)) selectedIds.push(item.id);
           }
         });
       }
 
       if (selectedIds.length > 0) {
-        console.log('Deactivating selected audio segments:', selectedIds);
-
-        // Use the state manager for optimistic updates and automatic sync
         audioFileStateManager
           .setFilesActive(selectedIds, false)
-          .then(() => {
-            console.log('Successfully deactivated selected segments');
-            // Clear selection after successful deactivation
-            handleClearSelection();
-          })
-          .catch(error => {
-            console.error('Failed to deactivate segments:', error);
-          });
+          .then(() => handleClearSelection())
+          .catch(error => console.error('Failed to deactivate segments:', error));
       }
     }
   }
@@ -271,21 +241,21 @@
   onMount(() => {
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
-      // The managers will be updated through reactive statements
     });
 
     resizeObserver.observe(container);
 
     return () => {
       resizeObserver.disconnect();
-      // Clean up managers
-      if (d3Manager) {
-        d3Manager.destroy();
-      }
-      if (dragDropManager) {
-        dragDropManager.destroy();
-      }
+      if (d3Manager) d3Manager.destroy();
+      if (dragDropManager) dragDropManager.destroy();
+      unsubscribeDragDrop?.();
     };
+  });
+
+  onDestroy(() => {
+    // in case the component is destroyed without onMount cleanup firing as expected
+    unsubscribeDragDrop?.();
   });
 
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
