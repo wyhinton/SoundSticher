@@ -25,7 +25,25 @@
   <polygon
     points={`${(debugShowDropLine ? 100 : dropIndicatorX) - arrowHeadSize},${arrowHeadY} ${(debugShowDropLine ? 100 : dropIndicatorX) + arrowHeadSize},${arrowHeadY} ${debugShowDropLine ? 100 : dropIndicatorX},${arrowHeadY + arrowHeadSize + 1}`}
     fill="#00BFFF"
-    opacity="0.8"
+    opacity="1"
     pointer-events="none"
+    class="drop-indicator-arrow"
   />
 {/if}
+
+<style>
+  .drop-indicator-arrow {
+    animation: bob 1.2s ease-in-out infinite;
+    transform-origin: center;
+  }
+
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(3px);
+    }
+  }
+</style>
