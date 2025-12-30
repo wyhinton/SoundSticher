@@ -27,6 +27,7 @@
   import EditableInput from './EditableInput.svelte';
   import SourceRow from './SourceRow.svelte';
   import SourceToolbar from './SourceToolbar.svelte';
+  import Favorites from './Favorites.svelte';
   import { get } from 'svelte/store';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
@@ -333,6 +334,40 @@
         .catch(err => console.error('Tauri invoke failed', err));
     }, 100); // 100ms debounce
   });
+
+  // Add tab state at the end of script section
+  let activeTab: string = 'Global';
+  let tabContentHeight: number = 120; // Default height in pixels
+  let isResizing: boolean = false;
+
+  function setActiveTab(tab: string) {
+    activeTab = tab;
+  }
+
+  function handleResizeStart(event: MouseEvent) {
+    event.preventDefault();
+    isResizing = true;
+
+    const startY = event.clientY;
+    const startHeight = tabContentHeight;
+
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizing) return;
+
+      const deltaY = e.clientY - startY;
+      const newHeight = Math.max(80, Math.min(400, startHeight + deltaY)); // Min 80px, Max 400px
+      tabContentHeight = newHeight;
+    }
+
+    function handleMouseUp() {
+      isResizing = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    }
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -348,7 +383,7 @@
   <div
     bind:this={tableContainer}
     class:drop-add={$addNewFolderOnDrop}
-    class="table-responsive h-100"
+    class="table-responsive h-100 d-flex flex-column justify-content-between"
     style:background-color="rgb(15 21 27)"
     style:width="400px"
     id="sources-panel"
@@ -408,6 +443,59 @@
         {/each}
       </tbody>
     </table>
+
+    <div>
+      <!-- Tab navigation -->
+      <div class="tab-navigation">
+        <div
+          class="tab"
+          class:active={activeTab === 'Global'}
+          onclick={() => setActiveTab('Global')}
+        >
+          Global
+        </div>
+        <div class="tab" class:active={activeTab === 'Group'} onclick={() => setActiveTab('Group')}>
+          Group
+        </div>
+        <div
+          class="tab"
+          class:active={activeTab === 'Favorites'}
+          onclick={() => setActiveTab('Favorites')}
+        >
+          Favorites
+        </div>
+      </div>
+      <!-- Tab content - add your content here based on the active tab -->
+      <div class="tab-content" style="height: {tabContentHeight}px;">
+        {#if activeTab === 'Global'}
+          <div class="tab-panel">
+            <p>Global content goes here</p>
+            <!-- Add your global content here -->
+          </div>
+        {/if}
+        {#if activeTab === 'Group'}
+          <div class="tab-panel">
+            <p>Group content goes here</p>
+            <!-- Add your group content here -->
+          </div>
+        {/if}
+        {#if activeTab === 'Favorites'}
+          <div class="tab-panel">
+            <Favorites />
+          </div>
+        {/if}
+      </div>
+      <!-- Resize handle -->
+      <div
+        class="resize-handle"
+        class:resizing={isResizing}
+        onmousedown={handleResizeStart}
+        role="separator"
+        aria-label="Resize tab content"
+      >
+        <div class="resize-indicator"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -431,11 +519,135 @@
 
   .no-inputs-warning {
     position: absolute;
-    top: 100%;
+    top: 80%;
     left: 50%;
     transform: translate(-50%, -150%);
     font-size: 12px;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Tab styles */
+  .tab-navigation {
+    display: flex;
+    background-color: rgb(15 21 27);
+    padding: 0 8px;
+    border-bottom: 1px solid #555;
+    gap: 2px;
+    height: 30px;
+  }
+
+  .tab {
+    padding: 8px 16px;
+    cursor: pointer;
+    position: relative;
+    background: #2a2a2a;
+    border: 1px solid #555;
+    border-bottom: none;
+    color: #9d9d9d;
+    font-size: 11px;
+    transition: all 0.2s ease;
+    border-radius: 6px 6px 0 0;
+    margin-top: 4px;
+    min-width: 70px;
+  }
+
+  .tab:hover {
+    background-color: #3a3a3a;
+    color: #fff;
+    border-color: #666;
+  }
+
+  .tab.active {
+    color: #fff;
+    font-weight: bold;
+    background-color: rgb(15 21 27);
+    border-color: #777;
+    margin-top: 0;
+    padding-top: 8px;
+    z-index: 1;
+    position: relative;
+  }
+
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgb(15 21 27);
+  }
+
+  .tab-content {
+    background-color: rgb(15 21 27);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    overflow-y: auto;
+    resize: vertical;
+    min-height: 80px;
+    max-height: 400px;
+  }
+
+  .tab-panel {
+    color: #9d9d9d;
+    font-size: 12px;
+    line-height: 1.4;
+    height: 100%;
+  }
+
+  .tab-panel p {
+    margin: 0 0 12px 0;
+    color: #ccc;
+  }
+
+  .resize-handle {
+    height: 8px;
+    background-color: rgb(15 21 27);
+    cursor: ns-resize;
+    border-top: 1px solid #555;
+    border-bottom: 1px solid #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+  }
+
+  .resize-handle:hover {
+    background-color: #2a2a2a;
+  }
+
+  .resize-handle.resizing {
+    background-color: #3a3a3a;
+  }
+
+  .resize-indicator {
+    width: 40px;
+    height: 2px;
+    background-color: #666;
+    border-radius: 1px;
+    position: relative;
+  }
+
+  .resize-indicator::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #666;
+    border-radius: 1px;
+  }
+
+  .resize-indicator::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: #666;
+    border-radius: 1px;
   }
 </style>

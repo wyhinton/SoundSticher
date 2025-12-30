@@ -11,6 +11,8 @@
 }
 
 
+
+
 @font-face {
   font-family: 'Ubuntu';
   src: url('../fonts/Ubuntu/Ubuntu-Regular.ttf') format('truetype');
@@ -34,6 +36,10 @@
   font-family: 'Fira Code';
 }
 
+
+.h-fill-available{
+  height: -webkit-fill-available;
+}
 
 /* Add this to your global stylesheet */
 .skeleton {
