@@ -83,17 +83,19 @@
     <MainDebugToolbar />
   {/if}
 
-  <div class="content-area flex-grow-1">
-    <div class="px-0 d-flex">
+  <div class="content-area flex-grow-1 d-flex justify-content-between flex-column">
+    <div class="px-0 d-flex h-fill-available">
       <Sources></Sources>
       <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
       <Section sections={$appState.sections}></Section>
     </div>
     <!-- <Waveform></Waveform> -->
-    <PlottedInfo></PlottedInfo>
-    <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
-    ></Plotted>
-    <Export></Export>
+    <div>
+      <PlottedInfo></PlottedInfo>
+      <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
+      ></Plotted>
+      <Export></Export>
+    </div>
   </div>
 
   <!-- Debug Toolbar - Development Only -->

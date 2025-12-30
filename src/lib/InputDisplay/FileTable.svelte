@@ -105,14 +105,14 @@
 </script>
 
 <div style:width="-webkit-fill-available" class="card d-flex flex-column position-relative">
-  <div class="d-flex flex-column" style:background-color="#080808">
+  <div class="d-flex flex-column h-fill-available" style:background-color="#080808">
     <div class="d-flex flex-column"></div>
     {#if sections.length === 0}
       <div class="position-absolute no-inputs-warning">No inputs</div>
     {/if}
 
     <div class="table-responsive section-table dot-grid-background">
-      <table class="table table-xs border-0">
+      <table class="table table-xs border-0 m-0">
         <thead>
           <tr class="">
             <th class="number-column"> # </th>
@@ -215,8 +215,7 @@
     transform: translate(-50%, -50%);
   }
   .section-table {
-    max-height: 400px;
-    min-height: 400px;
+    min-height: 200px;
   }
 
   th {
