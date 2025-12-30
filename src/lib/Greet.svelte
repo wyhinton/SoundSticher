@@ -11,7 +11,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { invokeWithPerf, updateInputs } from './state/performance';
   import Export from './Export.svelte';
-  import Footer from './Footer.svelte';
+  import Footer from './StatusFooter.svelte';
   import { exportState } from './state/export';
   import { get } from 'svelte/store';
   import { initializeStateSynchronization } from './state/stateSynchronization';

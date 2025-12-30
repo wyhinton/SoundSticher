@@ -413,44 +413,6 @@ pub fn cancel_combine(state: State<'_, Arc<AppState>>) -> Result<(), Error> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn export_combined_audio_as_wav(
-    state: State<'_, Arc<AppState>>,
-    output_path: String,
-) -> Result<String, String> {
-    // Get a lock on the combined audio
-    let combined_audio = state.combined_audio.lock().unwrap();
-    let Some(samples) = &*combined_audio else {
-        return Err("⚠️ No combined audio available".to_string());
-    };
-
-    if samples.is_empty() {
-        return Err("⚠️ Combined audio is empty".to_string());
-    }
-
-    // Define WAV format
-    let spec = WavSpec {
-        channels: 2,
-        sample_rate: 44100,
-        bits_per_sample: 16,
-        sample_format: SampleFormat::Int,
-    };
-
-    // Create file
-    let path = Path::new(&output_path);
-    let writer = WavWriter::create(&path, spec).map_err(|e| e.to_string())?;
-
-    // Write samples
-    let mut writer = writer;
-    for sample in samples {
-        writer.write_sample(*sample).map_err(|e| e.to_string())?;
-    }
-
-    writer.finalize().map_err(|e| e.to_string())?;
-
-    Ok(format!("WAV file successfully saved to {}", output_path))
-}
-
 fn get_samples(file_path: &str) -> Result<Vec<i16>, Error> {
     let file = File::open(file_path).map_err(|_| Error::InvalidPath)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());

@@ -7,10 +7,10 @@ disallowed-methods = []
 disallowed-types = []
 
 # Additional lints to enable
-extra-lints = [
-    "unused_imports",
-    "dead_code",
-    "unused_variables",
-    "unused_mut",
-    "unreachable_code",
-]
+# extra-lints = [
+#     "unused_imports",
+#     "dead_code",
+#     "unused_variables",
+#     "unused_mut",
+#     "unreachable_code",
+# ]

@@ -26,6 +26,8 @@
   let appStateContainer: HTMLElement;
   let appBackendState: HTMLElement;
   let appExportState: HTMLElement;
+  let exportStateJSON = '';
+  let exportStateHighlighted = '';
 
   // Reactive derived state for simplified display
   $: forPrint = {
@@ -78,7 +80,7 @@
 
   const openAudioFolder = () => {
     invokeWithPerf('open_in_explorer', {
-      path: 'C:\\Users\\Primary User\\Desktop\\AUDIO',
+      fileToOpen: 'C:\\Users\\Primary User\\Desktop\\AUDIO',
     });
   };
   const testExport = () => {
@@ -121,11 +123,10 @@
   }
 
   $: {
-    const exportStateJSON = JSON.stringify(get(exportState), null, 2);
-    console.log();
-    highlighted = Prism.highlight(exportStateJSON, Prism.languages.json, 'json');
+    exportStateJSON = JSON.stringify($exportState, null, 2);
+    exportStateHighlighted = Prism.highlight(exportStateJSON, Prism.languages.json, 'json');
     if (appExportState) {
-      appExportState.innerHTML = highlighted;
+      appExportState.innerHTML = exportStateHighlighted;
     }
   }
 

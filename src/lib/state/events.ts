@@ -65,6 +65,7 @@ export type ExportAudioEvent =
       event: 'finished';
       data: {
         outputPath: string;
+        message: string;
       };
     };
 

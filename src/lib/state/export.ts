@@ -20,6 +20,7 @@ export type ExportState = {
   progress: number;
   message?: string;
   error?: string;
+  outputPath?: string;
 };
 
 export type EstimatedFileSize = {
