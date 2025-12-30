@@ -27,6 +27,7 @@
   import EditableInput from './EditableInput.svelte';
   import SourceRow from './SourceRow.svelte';
   import SourceToolbar from './SourceToolbar.svelte';
+  import Favorites from './Favorites.svelte';
   import { get } from 'svelte/store';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
@@ -346,24 +347,24 @@
   function handleResizeStart(event: MouseEvent) {
     event.preventDefault();
     isResizing = true;
-    
+
     const startY = event.clientY;
     const startHeight = tabContentHeight;
-    
+
     function handleMouseMove(e: MouseEvent) {
       if (!isResizing) return;
-      
+
       const deltaY = e.clientY - startY;
       const newHeight = Math.max(80, Math.min(400, startHeight + deltaY)); // Min 80px, Max 400px
       tabContentHeight = newHeight;
     }
-    
+
     function handleMouseUp() {
       isResizing = false;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     }
-    
+
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }
@@ -480,13 +481,12 @@
         {/if}
         {#if activeTab === 'Favorites'}
           <div class="tab-panel">
-            <p>Favorites content goes here</p>
-            <!-- Add your favorites content here -->
+            <Favorites />
           </div>
         {/if}
       </div>
       <!-- Resize handle -->
-      <div 
+      <div
         class="resize-handle"
         class:resizing={isResizing}
         onmousedown={handleResizeStart}
@@ -519,7 +519,7 @@
 
   .no-inputs-warning {
     position: absolute;
-    top: 100%;
+    top: 80%;
     left: 50%;
     transform: translate(-50%, -150%);
     font-size: 12px;
@@ -581,7 +581,6 @@
 
   .tab-content {
     background-color: rgb(15 21 27);
-    padding: 16px;
     border-top: none;
     border-radius: 0 0 4px 4px;
     overflow-y: auto;

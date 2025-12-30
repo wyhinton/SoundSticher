@@ -41,6 +41,8 @@ export interface AppState {
   sortDirection?: 'asc' | 'desc';
   isLoopingTimelineAudio: boolean;
   hasNoActiveSamples: boolean;
+  favorites: Favorite[];
+  _version?: number; // Internal version tracking for migrations
 }
 
 interface AudioFileItem {
@@ -97,18 +99,105 @@ export interface SpacerTimelineItem extends BaseTimelineItem {
 
 export type TimelineItem = AudioFileTimelineItem | SpacerTimelineItem;
 
-export const appState = persisted<AppState>('appState', {
-  sections: [],
-  isCombiningFile: false,
-  combinedFileLength: 0,
-  playingCombined: false,
-  combinedFile: undefined,
-  timelineItems: [],
-  isLoopingTimelineAudio: false,
-  hasNoActiveSamples: false,
-  sortKey: undefined,
-  sortDirection: undefined,
-});
+interface Favorite {
+  path: string;
+}
+
+const CURRENT_STATE_VERSION = 1; // Increment this when you need to run migrations
+
+// Function to validate and migrate appState from localStorage
+function validateAndMigrateAppState(loadedState: any): AppState {
+  const defaultState: AppState = {
+    sections: [],
+    isCombiningFile: false,
+    combinedFileLength: 0,
+    playingCombined: false,
+    combinedFile: undefined,
+    timelineItems: [],
+    isLoopingTimelineAudio: false,
+    hasNoActiveSamples: false,
+    sortKey: undefined,
+    sortDirection: undefined,
+    favorites: [],
+    _version: CURRENT_STATE_VERSION,
+  };
+
+  // If no state exists, return default
+  if (!loadedState || typeof loadedState !== 'object') {
+    console.log('No valid appState found in localStorage, using defaults');
+    return defaultState;
+  }
+
+  // Check if migration is needed
+  const needsMigration = !loadedState._version || loadedState._version < CURRENT_STATE_VERSION;
+  
+  if (!needsMigration) {
+    // State is current, just ensure it has all required properties
+    return {
+      ...defaultState,
+      ...loadedState,
+      _version: CURRENT_STATE_VERSION,
+    };
+  }
+
+  console.log(`Migrating appState from version ${loadedState._version || 0} to ${CURRENT_STATE_VERSION}`);
+
+  // Perform migration - merge loaded state with defaults to ensure all properties exist
+  const migratedState: AppState = {
+    ...defaultState,
+    ...loadedState,
+    // Ensure favorites array exists and is valid
+    favorites: Array.isArray(loadedState.favorites) ? loadedState.favorites : [],
+    // Ensure sections array exists and is valid
+    sections: Array.isArray(loadedState.sections) ? loadedState.sections : [],
+    // Ensure timelineItems array exists and is valid
+    timelineItems: Array.isArray(loadedState.timelineItems) ? loadedState.timelineItems : [],
+    // Update version to current
+    _version: CURRENT_STATE_VERSION,
+  };
+
+  console.log('AppState migration completed:', {
+    fromVersion: loadedState._version || 0,
+    toVersion: CURRENT_STATE_VERSION,
+    hasOriginalFavorites: !!loadedState.favorites,
+    migratedFavoritesCount: migratedState.favorites.length,
+    sectionsCount: migratedState.sections.length,
+  });
+
+  return migratedState;
+}
+
+export const appState = persisted<AppState>(
+  'appState',
+  {
+    sections: [],
+    isCombiningFile: false,
+    combinedFileLength: 0,
+    playingCombined: false,
+    combinedFile: undefined,
+    timelineItems: [],
+    isLoopingTimelineAudio: false,
+    hasNoActiveSamples: false,
+    sortKey: undefined,
+    sortDirection: undefined,
+    favorites: [],
+    _version: CURRENT_STATE_VERSION,
+  },
+  {
+    serializer: {
+      parse: (text: string) => {
+        try {
+          const parsed = JSON.parse(text);
+          return validateAndMigrateAppState(parsed);
+        } catch (error) {
+          console.error('Error parsing appState from localStorage:', error);
+          return validateAndMigrateAppState(null);
+        }
+      },
+      stringify: JSON.stringify,
+    },
+  }
+);
 
 const defaults: AppState = {
   sections: [],
@@ -119,6 +208,8 @@ const defaults: AppState = {
   timelineItems: [],
   isLoopingTimelineAudio: false,
   hasNoActiveSamples: false,
+  favorites: [],
+  _version: CURRENT_STATE_VERSION,
 };
 
 export const hoveredSourceItem = writable<null | number>(null);
@@ -567,4 +658,48 @@ export function applySyncIndexes(newOrder: [string, number][]): void {
 
     return updatedState;
   });
+}
+
+export function addToFavorites(folderPath: string) {
+  appState.update(state => {
+    // Ensure favorites array exists
+    if (!Array.isArray(state.favorites)) {
+      state.favorites = [];
+    }
+
+    // Check if the path is already in favorites
+    const alreadyExists = state.favorites.some(fav => fav && fav.path === folderPath);
+
+    if (!alreadyExists) {
+      state.favorites.push({ path: folderPath });
+      console.log(`Added ${folderPath} to favorites`);
+    } else {
+      console.log(`${folderPath} is already in favorites`);
+    }
+
+    return state;
+  });
+}
+
+export function removeFromFavorites(folderPath: string) {
+  appState.update(state => {
+    // Ensure favorites array exists
+    if (!Array.isArray(state.favorites)) {
+      state.favorites = [];
+      return state;
+    }
+
+    state.favorites = state.favorites.filter(fav => fav && fav.path !== folderPath);
+    console.log(`Removed ${folderPath} from favorites`);
+    return state;
+  });
+}
+
+export function isFavorite(folderPath: string): boolean {
+  const currentState = get(appState);
+  // Ensure favorites array exists and is valid
+  if (!currentState || !Array.isArray(currentState.favorites)) {
+    return false;
+  }
+  return currentState.favorites.some(fav => fav && fav.path === folderPath);
 }
