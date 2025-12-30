@@ -11,7 +11,6 @@ import {
 } from './state.svelte';
 import type { BufferAudioEvent, CombineAudioEvent, ExportAudioEvent } from './events';
 import { exportState, type ExportSettings, type ExportState } from './export';
-import { CLEAR_COMMAND } from 'tauri-plugin-clipboard-api';
 import { createTypedEventChannel } from '$lib/utils/channelMaker';
 
 export interface PerformanceMetric {
@@ -33,7 +32,6 @@ export interface PerformanceState {
   cancel_combine: PerformanceMetric[];
   pause_timeline_audio: PerformanceMetric[];
   clear_audio_files: PerformanceMetric[];
-  export_combined_audio_as_wav: PerformanceMetric[];
   get_app_state: PerformanceMetric[];
   test_async: PerformanceMetric[];
   export_audio: PerformanceMetric[];
@@ -58,7 +56,6 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   cancel_combine: [],
   pause_timeline_audio: [],
   clear_audio_files: [],
-  export_combined_audio_as_wav: [],
   get_app_state: [],
   test_async: [],
   export_audio: [],
@@ -210,8 +207,7 @@ export async function exportAudio(settings: ExportSettings, outputPath: string) 
     }
   };
   const res = await invokeWithPerf<string, CommandError>('export_audio', {
-    sampleRate: settings.sampleRate,
-    format: settings.format,
+    settings: settings,
     outputFile: outputPath,
     onEvent: onExportAudioEvent,
   });

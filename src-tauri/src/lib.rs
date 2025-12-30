@@ -1,6 +1,6 @@
 use log;
 use std::collections::HashMap;
-use std::fs::{File, metadata};
+use std::fs::{metadata, File};
 use std::io::BufReader;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -138,7 +138,6 @@ pub fn run() {
             combine::combine_all_cached_samples_with_custom_order,
             combine::get_custom_order,
             combine::cancel_combine,
-            combine::export_combined_audio_as_wav,
             combine::toggle_audio_file_active,
             combine::set_audio_file_active,
             combine::set_audio_files_active_batch,

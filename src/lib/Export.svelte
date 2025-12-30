@@ -11,6 +11,8 @@
   } from './state/export';
   import { formatPercent } from './utils/format';
   import { appState, getAllFiles } from './state/state.svelte';
+  import { createTypedEventChannelWithLogging } from './utils/channelMaker';
+  import type { ExportAudioEvent } from './state/events';
 
   const dispatch = createEventDispatcher();
 
@@ -19,8 +21,6 @@
 
   // whenever you update a field
   const update = (k: keyof ExportSettings, v: any) => {
-    console.log(k);
-    console.log(v);
     if (k === 'format') {
       // Apply format-specific defaults when format changes
       expState.settings = applyFormatDefaults(expState.settings!, v);
@@ -42,6 +42,16 @@
   };
   $: visibleFields = formatFields[expState.settings?.format] ?? [];
 
+  const openInExplorer = async (filePath: string) => {
+    try {
+      console.log('📁 Opening file in explorer:', filePath);
+      await invokeWithPerf('open_in_explorer', {
+        fileToOpen: filePath,
+      });
+    } catch (error) {
+      console.error('❌ Failed to open in explorer:', error);
+    }
+  };
   const saveAudio = async () => {
     const path = await testSave({
       filters: [
@@ -50,11 +60,67 @@
           extensions: [expState.settings.format],
         },
       ],
+      title: 'Save audio',
+      defaultPath: expState.settings?.filename,
     });
+    console.log(path);
     if (path) {
-      await invokeWithPerf('export_combined_audio_as_wav', {
-        outputPath: path,
+      // Create typed event channel with logging for export progress
+      const onEvent = createTypedEventChannelWithLogging<ExportAudioEvent>('Export', {
+        onStarted: data => {
+          console.log('🎵 Export started:', data);
+          exportState.update(state => ({
+            ...state,
+            progress: 0,
+            message: `Starting export to ${data.outputPath}`,
+            error: undefined,
+          }));
+        },
+        onProgress: data => {
+          console.log('📈 Export progress:', data);
+          exportState.update(state => ({
+            ...state,
+            progress: data.progress,
+            message: data.message,
+            error: undefined,
+          }));
+        },
+        onFinished: data => {
+          console.log('🎉 Export completed:', data);
+          exportState.update(state => ({
+            ...state,
+            progress: 1,
+            message: data.message,
+            error: undefined,
+            outputPath: data.outputPath,
+          }));
+          // Clear the progress after a short delay
+          setTimeout(() => {
+            exportState.update(state => ({
+              ...state,
+              progress: 0,
+              message: undefined,
+              outputPath: undefined,
+            }));
+          }, 5000);
+        },
       });
+
+      try {
+        await invokeWithPerf('export_audio', {
+          settings: expState.settings,
+          outputFile: path,
+          onEvent: onEvent,
+        });
+      } catch (error) {
+        console.error('❌ Export failed:', error);
+        exportState.update(state => ({
+          ...state,
+          progress: 0,
+          message: undefined,
+          error: `Export failed: ${error}`,
+        }));
+      }
     }
   };
 </script>
@@ -211,5 +277,54 @@
     100% {
       content: '';
     }
+  }
+
+  .export-completed {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .success-text {
+    color: #68d391;
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  .file-path-link {
+    background: linear-gradient(135deg, #4a5568, #2d3748);
+    border: 1px solid #68d391;
+    border-radius: 4px;
+    color: #e2e8f0;
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    user-select: text;
+  }
+
+  .file-path-link:hover {
+    background: linear-gradient(135deg, #68d391, #4fd1c7);
+    color: #1a202c;
+    border-color: #9ae6b4;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .file-path-link:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  .file-path-link:focus {
+    outline: 2px solid #68d391;
+    outline-offset: 2px;
   }
 </style>
