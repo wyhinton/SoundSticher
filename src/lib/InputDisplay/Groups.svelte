@@ -1,6 +1,7 @@
 <script lang="ts">
   import { GroupRegistry, type GroupDef, type GroupsState, testGroups } from '../state/groups';
   import { appState } from '../state/state.svelte';
+  import GroupItem from './GroupItem.svelte';
 
   // Initialize groups state with test data for now
   let groupsState: GroupsState = {
@@ -44,20 +45,6 @@
     }
   }
 
-  // Get group type for display
-  function getGroupType(def: GroupDef): string {
-    switch (def.kind) {
-      case 'query':
-        return def.query.kind;
-      case 'op':
-        return `${def.op} (${def.refs.length} refs)`;
-      case 'not':
-        return `not ${def.ref}`;
-      default:
-        return 'unknown';
-    }
-  }
-
   // Get result count for a group
   function getResultCount(groupName: string): number {
     return groupResults.get(groupName)?.size ?? 0;
@@ -92,25 +79,13 @@
               {#each groupNames as groupName}
                 {@const def = groupsState.defs[groupName]}
                 {#if def}
-                  <div
-                    class="group-item"
-                    class:selected={selectedGroup === groupName}
-                    onclick={() => selectGroup(groupName)}
-                  >
-                    <div class="group-main">
-                      <span class="group-name">{groupName}</span>
-                      <span class="group-type">{getGroupType(def)}</span>
-                    </div>
-                    <div class="group-details">
-                      <span class="result-count">
-                        {#if groupResults.has(groupName)}
-                          {getResultCount(groupName)} items
-                        {:else}
-                          <em>not evaluated</em>
-                        {/if}
-                      </span>
-                    </div>
-                  </div>
+                  <GroupItem
+                    {groupName}
+                    definition={def}
+                    isSelected={selectedGroup === groupName}
+                    resultCount={groupResults.has(groupName) ? getResultCount(groupName) : null}
+                    onSelect={selectGroup}
+                  />
                 {/if}
               {/each}
             </div>
@@ -129,25 +104,15 @@
         <div class="folder-content">
           {#each ungroupedDefs as groupName}
             {@const def = groupsState.defs[groupName]}
-            <div
-              class="group-item"
-              class:selected={selectedGroup === groupName}
-              onclick={() => selectGroup(groupName)}
-            >
-              <div class="group-main">
-                <span class="group-name">{groupName}</span>
-                <span class="group-type">{getGroupType(def)}</span>
-              </div>
-              <div class="group-details">
-                <span class="result-count">
-                  {#if groupResults.has(groupName)}
-                    {getResultCount(groupName)} items
-                  {:else}
-                    <em>not evaluated</em>
-                  {/if}
-                </span>
-              </div>
-            </div>
+            {#if def}
+              <GroupItem
+                {groupName}
+                definition={def}
+                isSelected={selectedGroup === groupName}
+                resultCount={groupResults.has(groupName) ? getResultCount(groupName) : null}
+                onSelect={selectGroup}
+              />
+            {/if}
           {/each}
         </div>
       </div>
@@ -238,56 +203,6 @@
     margin-top: 4px;
     border-left: 1px solid #444;
     padding-left: 12px;
-  }
-
-  .group-item {
-    margin: 2px 0;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: 1px solid transparent;
-  }
-
-  .group-item:hover {
-    background: #2a2a2a;
-    border-color: #555;
-  }
-
-  .group-item.selected {
-    background: #1e40af;
-    border-color: #3b82f6;
-  }
-
-  .group-main {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-  }
-
-  .group-name {
-    font-weight: 500;
-    color: #fff;
-    font-size: 12px;
-  }
-
-  .group-type {
-    color: #888;
-    font-size: 10px;
-    background: #444;
-    padding: 2px 6px;
-    border-radius: 3px;
-  }
-
-  .group-details {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .result-count {
-    color: #888;
-    font-size: 10px;
   }
 
   .group-details-panel {
