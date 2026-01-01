@@ -239,7 +239,9 @@
               step="0.1"
               value={definition.query.clause.gt || 0}
               oninput={e => {
-                const current = (definition.query as { kind: 'where'; clause: WhereClause & { field: 'duration' } }).clause;
+                const current = (
+                  definition.query as { kind: 'where'; clause: WhereClause & { field: 'duration' } }
+                ).clause;
                 handleParamUpdate({
                   clause: {
                     field: 'duration',
@@ -259,7 +261,9 @@
               step="0.1"
               value={definition.query.clause.lt || ''}
               oninput={e => {
-                const current = (definition.query as { kind: 'where'; clause: WhereClause & { field: 'duration' } }).clause;
+                const current = (
+                  definition.query as { kind: 'where'; clause: WhereClause & { field: 'duration' } }
+                ).clause;
                 const value = (e.target as HTMLInputElement).value;
                 handleParamUpdate({
                   clause: {
