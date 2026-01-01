@@ -41,6 +41,8 @@
 
   // FRONTEND JSON VISUALIZER
   $: {
+    // Include _rev in the reactive dependencies to force updates when content revision changes
+    const currentRev = $appState._rev;
     const frontendStateJSON = JSON.stringify(forPrint, null, 2);
     highlighted = Prism.highlight(frontendStateJSON, Prism.languages.json, 'json');
     if (appStateContainer) {
