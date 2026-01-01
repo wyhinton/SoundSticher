@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { GroupRegistry, type GroupDef, type GroupsState, testGroups } from '../state/groups';
+  import { GroupRegistry, type GroupDef, type GroupsState, type ItemQuery, testGroups, patchGroupQuery } from '../state/groups';
   import { appState } from '../state/state.svelte';
   import { selectionService } from '../state/selection.svelte';
   import GroupItem from './GroupItem.svelte';
 
-  // Initialize groups state with test data for now
-  let groupsState: GroupsState = {
+  // Initialize groups state - use appState groups if available, otherwise fall back to test data
+  $: groupsState = $appState.groups || {
     defs: Object.fromEntries(testGroups.map(g => [g.name, g.def])),
     folders: {
       'Basic Queries': ['sec0_half', 'global_last', 'active_only'],
@@ -80,6 +80,34 @@
     name =>
       !Object.values(groupsState.folders || {}).some(folderGroups => folderGroups.includes(name))
   );
+
+  // Handle query parameter updates
+  function handleUpdateQuery(groupName: string, patch: Partial<ItemQuery>) {
+    // Clear the cache for this group since we're updating it
+    registry.invalidateAll();
+    
+    // Update the query using the patchGroupQuery function
+    patchGroupQuery(groupName, patch);
+    
+    // Re-evaluate the group if it's currently selected
+    if (selectedGroup === groupName) {
+      try {
+        const result = registry.eval(groupName, $appState);
+        groupResults.set(groupName, result);
+        groupResults = new Map(groupResults);
+        
+        // Update selection with new results
+        const segmentIndices = convertFileIdsToSegmentIndices(result);
+        selectionService.apply({
+          mode: 'replace',
+          ids: segmentIndices,
+          source: 'groups',
+        });
+      } catch (error) {
+        console.error('Failed to re-evaluate group after update:', error);
+      }
+    }
+  }
 </script>
 
 <div class="groups-container">
@@ -110,6 +138,7 @@
                     isSelected={selectedGroup === groupName}
                     resultCount={groupResults.has(groupName) ? getResultCount(groupName) : null}
                     onSelect={selectGroup}
+                    onUpdateQuery={handleUpdateQuery}
                   />
                 {/if}
               {/each}
@@ -136,6 +165,7 @@
                 isSelected={selectedGroup === groupName}
                 resultCount={groupResults.has(groupName) ? getResultCount(groupName) : null}
                 onSelect={selectGroup}
+                onUpdateQuery={handleUpdateQuery}
               />
             {/if}
           {/each}
