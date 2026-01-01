@@ -219,7 +219,20 @@
 
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
+    const relativeY = event.clientY - rect.top;
 
+    // Check if click is in the x-axis area (bottom 20px of the timeline)
+    const isXAxisClick = relativeY >= height - 20;
+
+    if (isXAxisClick) {
+      // Click is in the x-axis area - set playhead position and clear selection
+      handleClearSelection();
+      const clickedTime = d3Manager.clickToTime(relativeX);
+      invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+      return;
+    }
+
+    // Check for segment clicks only if not in x-axis area
     const clickedSegmentIndex = $appState?.timelineItems
       ? d3Manager.findClickedSegment(relativeX, $appState.timelineItems as TimelineItem[])
       : null;

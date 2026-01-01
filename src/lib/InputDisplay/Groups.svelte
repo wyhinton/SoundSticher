@@ -188,23 +188,6 @@
     overflow: hidden;
   }
 
-  .groups-header {
-    border-bottom: 1px solid #444;
-    padding-bottom: 8px;
-  }
-
-  .groups-header h4 {
-    margin: 0;
-    font-size: 14px;
-    color: #fff;
-    font-weight: 600;
-  }
-
-  .groups-header small {
-    color: #888;
-    font-size: 11px;
-  }
-
   .groups-list {
     flex: 1;
     overflow-y: auto;
@@ -258,7 +241,6 @@
   }
 
   .group-item {
-    padding: 8px;
     margin: 2px 0;
     border-radius: 4px;
     cursor: pointer;
