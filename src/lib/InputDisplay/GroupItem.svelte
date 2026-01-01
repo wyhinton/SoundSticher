@@ -22,11 +22,7 @@
   }
 </script>
 
-<div
-  class="group-item"
-  class:selected={isSelected}
-  onclick={() => onSelect(groupName)}
->
+<div class="group-item" class:selected={isSelected} onclick={() => onSelect(groupName)}>
   <div class="group-main">
     <span class="group-name">{groupName}</span>
     <span class="group-type">{getGroupType(definition)}</span>

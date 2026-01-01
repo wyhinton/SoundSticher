@@ -22,6 +22,7 @@ export type ItemQuery =
       orderBy?: 'index' | 'duration';
       take?: 'first' | 'last';
     }
+  | { kind: 'randomSectionPercent'; sectionIndex: number; percent: number; seed: number } // ✅ new
   | { kind: 'lastOfEachSection' }
   | { kind: 'lastOfAllSections' }
   | { kind: 'where'; clause: WhereClause };
@@ -49,7 +50,9 @@ export class GroupRegistry {
     const cached = this.cache.get(name);
     if (cached && cached.version === version) {
       if (isLogging) {
-        logger.groups.cache(`Using cached result for "${name}" (version ${version}), size: ${cached.value.size}`);
+        logger.groups.cache(
+          `Using cached result for "${name}" (version ${version}), size: ${cached.value.size}`
+        );
       }
       return cached.value;
     }
@@ -62,7 +65,7 @@ export class GroupRegistry {
     const value = selector(state);
 
     this.cache.set(name, { version, value });
-    
+
     if (isLogging) {
       logger.groups.success(`Evaluated group "${name}" -> ${value.size} items`, Array.from(value));
     }
@@ -73,9 +76,9 @@ export class GroupRegistry {
   invalidateAll() {
     const isLogging = get(loggingState).groupsLog;
     const cacheSize = this.cache.size;
-    
+
     this.cache.clear();
-    
+
     if (isLogging) {
       logger.groups.cache(`Invalidated all cached groups (${cacheSize} entries cleared)`);
     }
@@ -88,7 +91,7 @@ export class GroupRegistry {
     const isLogging = get(loggingState).groupsLog;
     const defs = this.getDefs();
     const def = defs?.[name];
-    
+
     if (!def) {
       if (isLogging) {
         logger.groups.error(`Unknown group "${name}"`);
@@ -190,6 +193,23 @@ function runQuery(state: AppState, q: ItemQuery): Set<string> {
         if (matchesWhere(f, q.clause)) out.add(f.id);
       }
       return out;
+    }
+    case 'randomSectionPercent': {
+      const sec = state.sections[q.sectionIndex];
+      if (!sec) return new Set();
+
+      const files = [...sec.files];
+      const count = Math.max(0, Math.floor(files.length * clamp01(q.percent)));
+
+      // Deterministic randomness: same (seed + section contents) => same selection.
+      // To make it robust to file order changes, we can sort by stable key first.
+      files.sort((a, b) => a.id.localeCompare(b.id));
+
+      const rand = mulberry32(q.seed);
+      shuffleInPlace(files, rand);
+
+      const picked = files.slice(0, count);
+      return new Set(picked.map(f => f.id));
     }
   }
 }
@@ -296,18 +316,53 @@ appState.subscribe(state => {
   const currentRev = state._rev ?? 0;
   const isLogging = get(loggingState).groupsLog;
 
-  if (isLogging) {
-    console.log(`%cHERE LINE :264 %c`, 'color: yellow; font-weight: bold', '');
-    logger.groups.info(`AppState revision check: current=${currentRev}, last=${lastRev}`);
-  }
-
   // If content revision changed, cached group results are invalid
   if (currentRev !== lastRev) {
     if (isLogging) {
-      logger.groups.warning(`Content revision changed from ${lastRev} to ${currentRev} - invalidating cache`);
+      logger.groups.warning(
+        `Content revision changed from ${lastRev} to ${currentRev} - invalidating cache`
+      );
     }
-    
+
     groupRegistry.invalidateAll();
     lastRev = currentRev;
   }
 });
+
+function mulberry32(seed: number) {
+  let t = seed >>> 0;
+  return function () {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleInPlace<T>(arr: NonNullable<T>[], rand: () => number) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const temp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = temp;
+  }
+}
+
+export function patchGroupQuery(
+  groupName: string,
+  patch: Partial<ItemQuery>,
+  // optional: assert query kind to avoid patching wrong shapes
+  expectedKind?: ItemQuery['kind']
+) {
+  appState.update(s => {
+    const def = s.groups?.defs?.[groupName];
+    if (!def || def.kind !== 'query') return s;
+
+    if (expectedKind && def.query.kind !== expectedKind) return s;
+
+    def.query = { ...def.query, ...patch } as ItemQuery;
+
+    s._rev = (s._rev ?? 0) + 1;
+    return s;
+  });
+}

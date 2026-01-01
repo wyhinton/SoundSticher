@@ -291,19 +291,19 @@ Project: Sound Stitch (Tauri + SvelteKit)
       key: 'groupsLog' as keyof typeof $loggingState,
       label: 'Groups Log',
       icon: 'fa-layer-group',
-      title: 'Toggle Groups system logging'
+      title: 'Toggle Groups system logging',
     },
     {
       key: 'selectionLog' as keyof typeof $loggingState,
       label: 'Selection Log',
       icon: 'fa-mouse-pointer',
-      title: 'Toggle Selection system logging'
+      title: 'Toggle Selection system logging',
     },
     {
       key: 'dragdropLog' as keyof typeof $loggingState,
       label: 'DragDrop Log',
       icon: 'fa-arrows-alt',
-      title: 'Toggle Drag & Drop logging'
+      title: 'Toggle Drag & Drop logging',
     },
     // Add future categories here:
     // {
@@ -314,7 +314,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
     // },
     // {
     //   key: 'audioLog' as keyof typeof $loggingState,
-    //   label: 'Audio Log', 
+    //   label: 'Audio Log',
     //   icon: 'fa-volume-up',
     //   title: 'Toggle Audio logging'
     // },
@@ -476,9 +476,9 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <i class="fa fa-info-circle"></i>
         DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
           ? 'ON'
-          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | 
+          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} |
         {#each loggingCategories as category}
-          {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} | 
+          {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
         {/each}
         Ctrl+Shift+Space to toggle
       </small>

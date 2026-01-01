@@ -114,7 +114,7 @@
       isMultiSelect,
       isShiftSelect,
       lastSelectedIndex,
-      source: 'timeline'
+      source: 'timeline',
     });
 
     // Update last selected index for shift-select operations

@@ -71,11 +71,14 @@ const createSelectionStore = () => {
         } else {
           newIds.add(id);
         }
-        logger.selection.action(`Toggle segment ${id} (${wasSelected ? 'removed' : 'added'}) from ${source}`, {
-          id,
-          source,
-          action: wasSelected ? 'removed' : 'added',
-        });
+        logger.selection.action(
+          `Toggle segment ${id} (${wasSelected ? 'removed' : 'added'}) from ${source}`,
+          {
+            id,
+            source,
+            action: wasSelected ? 'removed' : 'added',
+          }
+        );
         return {
           ids: newIds,
           source,
@@ -98,12 +101,15 @@ const createSelectionStore = () => {
       const currentState = get({ subscribe });
       let newIds: Set<number>;
 
-      logger.selection.action(`Apply ${operation.mode} operation with ${operation.ids.length} items from ${operation.source || 'api'}`, {
-        mode: operation.mode,
-        ids: operation.ids,
-        source: operation.source,
-        currentCount: currentState.ids.size,
-      });
+      logger.selection.action(
+        `Apply ${operation.mode} operation with ${operation.ids.length} items from ${operation.source || 'api'}`,
+        {
+          mode: operation.mode,
+          ids: operation.ids,
+          source: operation.source,
+          currentCount: currentState.ids.size,
+        }
+      );
 
       switch (operation.mode) {
         case 'replace':
@@ -154,12 +160,15 @@ const createSelectionStore = () => {
         ids.push(i);
       }
 
-      logger.selection.action(`Select range ${startId}-${endId} (${ids.length} items) from ${source}`, {
-        startId,
-        endId,
-        count: ids.length,
-        source,
-      });
+      logger.selection.action(
+        `Select range ${startId}-${endId} (${ids.length} items) from ${source}`,
+        {
+          startId,
+          endId,
+          count: ids.length,
+          source,
+        }
+      );
 
       update(state => ({
         ids: new Set([...state.ids, ...ids]),
@@ -194,13 +203,16 @@ const createSelectionStore = () => {
           rangeIds.push(i);
         }
 
-        logger.selection.action(`Shift-click range selection ${start}-${end} (${rangeIds.length} items) from ${source}`, {
-          start,
-          end,
-          count: rangeIds.length,
-          source,
-          type: 'shift-select',
-        });
+        logger.selection.action(
+          `Shift-click range selection ${start}-${end} (${rangeIds.length} items) from ${source}`,
+          {
+            start,
+            end,
+            count: rangeIds.length,
+            source,
+            type: 'shift-select',
+          }
+        );
 
         update(state => ({
           ids: new Set([...state.ids, ...rangeIds]),
@@ -218,12 +230,15 @@ const createSelectionStore = () => {
             newIds.add(segmentIndex);
           }
 
-          logger.selection.action(`Ctrl-click segment ${segmentIndex} (${wasSelected ? 'removed' : 'added'}) from ${source}`, {
-            segmentIndex,
-            source,
-            type: 'ctrl-select',
-            action: wasSelected ? 'removed' : 'added',
-          });
+          logger.selection.action(
+            `Ctrl-click segment ${segmentIndex} (${wasSelected ? 'removed' : 'added'}) from ${source}`,
+            {
+              segmentIndex,
+              source,
+              type: 'ctrl-select',
+              action: wasSelected ? 'removed' : 'added',
+            }
+          );
 
           return {
             ids: newIds,

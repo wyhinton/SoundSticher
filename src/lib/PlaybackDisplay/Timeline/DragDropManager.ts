@@ -143,7 +143,9 @@ export class DragDropManager {
       appState.timelineItems as TimelineItem[]
     );
 
-    logger.dragdrop.move(`Drop position calculated - index: ${dropPosition.index}, x: ${dropPosition.x}`);
+    logger.dragdrop.move(
+      `Drop position calculated - index: ${dropPosition.index}, x: ${dropPosition.x}`
+    );
 
     this.setState({
       ...this._state,
