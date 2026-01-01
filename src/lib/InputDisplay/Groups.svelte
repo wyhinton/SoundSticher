@@ -1,6 +1,7 @@
 <script lang="ts">
   import { GroupRegistry, type GroupDef, type GroupsState, testGroups } from '../state/groups';
   import { appState } from '../state/state.svelte';
+  import { selectionService } from '../state/selection.svelte';
   import GroupItem from './GroupItem.svelte';
 
   // Initialize groups state with test data for now
@@ -39,10 +40,37 @@
       const result = registry.eval(groupName, $appState);
       groupResults.set(groupName, result);
       groupResults = new Map(groupResults);
+      
+      // Convert file IDs to segment indices for selection
+      const segmentIndices = convertFileIdsToSegmentIndices(result);
+      
+      // Update global selection
+      selectionService.apply({
+        mode: 'replace',
+        ids: segmentIndices,
+        source: 'groups'
+      });
+      
       console.log(`Group "${groupName}" selected:`, Array.from(result));
+      console.log(`Selected segment indices:`, segmentIndices);
     } catch (error) {
       console.error(`Error evaluating group "${groupName}":`, error);
     }
+  }
+
+  // Convert file IDs to timeline segment indices
+  function convertFileIdsToSegmentIndices(fileIds: Set<string>): number[] {
+    const indices: number[] = [];
+    
+    if ($appState?.timelineItems) {
+      $appState.timelineItems.forEach((item, index) => {
+        if (item.type === 'audio-file' && fileIds.has(item.id)) {
+          indices.push(index);
+        }
+      });
+    }
+    
+    return indices;
   }
 
   // Get result count for a group

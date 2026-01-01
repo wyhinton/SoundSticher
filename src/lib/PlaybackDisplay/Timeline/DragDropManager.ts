@@ -5,6 +5,7 @@ import { Channel } from '@tauri-apps/api/core';
 import { applySyncIndexes, type AppState } from '../../state/state.svelte';
 import { get, type Writable } from 'svelte/store';
 import { writable, type Readable } from 'svelte/store';
+import { logger } from '../../state/logging';
 
 export type DragDropState = {
   isDragging: boolean;
@@ -53,16 +54,10 @@ export class DragDropManager {
   private d3Manager: D3TimelineManager | null = null;
   private container: HTMLElement | null = null;
   private appStateStore: Writable<AppState>;
-  private isDev: boolean;
   private selectedSegments: Set<number> = new Set();
 
   constructor(appStateStore: Writable<AppState>) {
     this.appStateStore = appStateStore;
-    // Check if we're in development mode
-    this.isDev =
-      typeof import.meta !== 'undefined' &&
-      typeof (import.meta as any).env !== 'undefined' &&
-      (import.meta as any).env.DEV === true;
   }
 
   /**
@@ -82,32 +77,6 @@ export class DragDropManager {
   }
 
   /**
-   * Log to console only in development mode with styling
-   */
-  private log(message: string, ...args: any[]): void {
-    if (this.isDev) {
-      console.log(
-        `%c🎯 DragDrop %c${message}`,
-        'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
-        'color: #4CAF50; font-weight: normal;',
-        ...args
-      );
-    }
-  }
-
-  /**
-   * Log errors to console with styling (always logged)
-   */
-  private logError(message: string, ...args: any[]): void {
-    console.error(
-      `%c❌ DragDrop Error %c${message}`,
-      'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
-      'color: #f44336; font-weight: normal;',
-      ...args
-    );
-  }
-
-  /**
    * Initialize the drag drop manager with required dependencies
    */
   initialize(d3Manager: D3TimelineManager, container: HTMLElement) {
@@ -119,18 +88,18 @@ export class DragDropManager {
    * Handle drag start event
    */
   handleDragStart(event: DragStartEvent): void {
-    this.log(`Started dragging segment ${event.index}`);
+    logger.dragdrop.start(`Started dragging segment ${event.index}`);
 
     // Determine which segments to move
     let segmentsToMove: number[];
     if (this.selectedSegments.size > 1 && this.selectedSegments.has(event.index)) {
       // Move all selected segments as a group
       segmentsToMove = Array.from(this.selectedSegments).sort((a, b) => a - b);
-      this.log(`Will move ${segmentsToMove.length} selected segments:`, segmentsToMove);
+      logger.dragdrop.info(`Will move ${segmentsToMove.length} selected segments:`, segmentsToMove);
     } else {
       // Move only the dragged segment
       segmentsToMove = [event.index];
-      this.log(`Will move single segment: ${event.index}`);
+      logger.dragdrop.info(`Will move single segment: ${event.index}`);
     }
 
     this.setState({
@@ -149,7 +118,7 @@ export class DragDropManager {
   handleDragMove(event: DragMoveEvent): void {
     const currentState = this.getState();
     if (!currentState.isDragging || !this.d3Manager || !this.container) {
-      this.log(
+      logger.dragdrop.info(
         `Drag move skipped - isDragging: ${currentState.isDragging}, d3Manager: ${!!this.d3Manager}, container: ${!!this.container}`
       );
       return;
@@ -157,7 +126,7 @@ export class DragDropManager {
 
     const appState = get(this.appStateStore);
     if (!appState?.timelineItems) {
-      this.log('Drag move skipped - no timeline items in app state');
+      logger.dragdrop.info('Drag move skipped - no timeline items in app state');
       return;
     }
 
@@ -165,7 +134,7 @@ export class DragDropManager {
     const containerRect = this.container.getBoundingClientRect();
     const relativeX = event.mousePos.x - containerRect.left;
 
-    this.log(
+    logger.dragdrop.move(
       `Drag move - segment ${event.index}, mouseX: ${event.mousePos.x}, relativeX: ${relativeX}, dragDistance: ${event.dragDistance}`
     );
 
@@ -174,7 +143,7 @@ export class DragDropManager {
       appState.timelineItems as TimelineItem[]
     );
 
-    this.log(`Drop position calculated - index: ${dropPosition.index}, x: ${dropPosition.x}`);
+    logger.dragdrop.move(`Drop position calculated - index: ${dropPosition.index}, x: ${dropPosition.x}`);
 
     this.setState({
       ...this._state,
@@ -190,7 +159,7 @@ export class DragDropManager {
     const currentState = this.getState();
     if (!currentState.isDragging) return;
 
-    this.log(
+    logger.dragdrop.end(
       `Ended dragging segment ${event.index} to position ${currentState.dropIndicatorIndex}`
     );
 
@@ -218,19 +187,19 @@ export class DragDropManager {
     targetIndex: number,
     appState: AppState
   ): Promise<void> {
-    this.log(`Reordering segment ${sourceIndex} to position ${targetIndex}`);
+    logger.dragdrop.reorder(`Reordering segment ${sourceIndex} to position ${targetIndex}`);
 
     // Create a copy of the timeline items array
     const items = [...appState.timelineItems];
 
     // Use the segments to move from the state
     const segmentsToMove = this._state.segmentsToMove;
-    this.log(`Moving ${segmentsToMove.length} segments:`, segmentsToMove);
+    logger.dragdrop.reorder(`Moving ${segmentsToMove.length} segments:`, segmentsToMove);
 
     // Validate all segments exist
     for (const index of segmentsToMove) {
       if (!items[index]) {
-        this.logError('No item found at source index', index);
+        logger.dragdrop.error('No item found at source index', index);
         return;
       }
     }
@@ -267,19 +236,19 @@ export class DragDropManager {
       index: newIndex,
     }));
 
-    this.log('Reorder updates:', updates);
+    logger.dragdrop.reorder('Reorder updates:', updates);
 
     try {
       // Create progress channel for the reorder operation
       const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
         started: () => {
-          this.log('Reorder started');
+          logger.dragdrop.reorder('Reorder started');
         },
         progress: data => {
-          this.log('Reorder progress:', data);
+          logger.dragdrop.reorder('Reorder progress:', data);
         },
         finished: () => {
-          this.log('Reorder finished');
+          logger.dragdrop.reorder('Reorder finished');
         },
       });
 
@@ -289,7 +258,7 @@ export class DragDropManager {
         onEvent,
       });
 
-      this.log('Received new order from backend:', newOrder);
+      logger.dragdrop.reorder('Received new order from backend:', newOrder);
 
       // Update inputs after state change
       updateInputs(appState.sections);
@@ -299,9 +268,9 @@ export class DragDropManager {
         applySyncIndexes(newOrder.value);
       }
 
-      this.log('Reorder completed successfully');
+      logger.dragdrop.reorder('Reorder completed successfully');
     } catch (error) {
-      this.logError('Failed to reorder timeline items:', error);
+      logger.dragdrop.error('Failed to reorder timeline items:', error);
       throw error;
     }
   }

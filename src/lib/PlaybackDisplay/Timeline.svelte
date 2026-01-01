@@ -29,6 +29,7 @@
   import { Channel } from '@tauri-apps/api/core';
   import { get } from 'svelte/store';
   import { audioFileStateManager } from '../state/stateSynchronization';
+  import { selectionService, selectedIds } from '../state/selection.svelte';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
   import { debugState, timelineDebugMode } from '../state/debug.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
@@ -99,8 +100,8 @@
   const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
 
-  // Selection state
-  let selectedSegments: Set<number> = new Set();
+  // Selection state - now derived from the selection service
+  $: selectedSegments = $selectedIds;
   let lastSelectedIndex: number | null = null;
 
   function handleSegmentSelection(
@@ -108,20 +109,16 @@
     isMultiSelect: boolean = false,
     isShiftSelect: boolean = false
   ) {
-    if (isShiftSelect && lastSelectedIndex !== null) {
-      const start = Math.min(lastSelectedIndex, segmentIndex);
-      const end = Math.max(lastSelectedIndex, segmentIndex);
-      for (let i = start; i <= end; i++) selectedSegments.add(i);
-    } else if (isMultiSelect) {
-      if (selectedSegments.has(segmentIndex)) selectedSegments.delete(segmentIndex);
-      else selectedSegments.add(segmentIndex);
-    } else {
-      selectedSegments.clear();
-      selectedSegments.add(segmentIndex);
-    }
+    // Use the selection service to handle the click
+    selectionService.handleClick(segmentIndex, {
+      isMultiSelect,
+      isShiftSelect,
+      lastSelectedIndex,
+      source: 'timeline'
+    });
 
+    // Update last selected index for shift-select operations
     lastSelectedIndex = segmentIndex;
-    selectedSegments = new Set(selectedSegments);
 
     // Update the drag drop manager with the new selection
     if (dragDropManager) {
@@ -140,8 +137,7 @@
   }
 
   function handleClearSelection() {
-    selectedSegments.clear();
-    selectedSegments = new Set(selectedSegments);
+    selectionService.clear('timeline');
     lastSelectedIndex = null;
 
     // Update the drag drop manager with the cleared selection

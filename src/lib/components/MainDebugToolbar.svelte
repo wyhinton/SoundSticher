@@ -293,6 +293,18 @@ Project: Sound Stitch (Tauri + SvelteKit)
       icon: 'fa-layer-group',
       title: 'Toggle Groups system logging'
     },
+    {
+      key: 'selectionLog' as keyof typeof $loggingState,
+      label: 'Selection Log',
+      icon: 'fa-mouse-pointer',
+      title: 'Toggle Selection system logging'
+    },
+    {
+      key: 'dragdropLog' as keyof typeof $loggingState,
+      label: 'DragDrop Log',
+      icon: 'fa-arrows-alt',
+      title: 'Toggle Drag & Drop logging'
+    },
     // Add future categories here:
     // {
     //   key: 'performanceLog' as keyof typeof $loggingState,
