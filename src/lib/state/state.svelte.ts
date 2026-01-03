@@ -1,11 +1,9 @@
 export const files = $state<string[]>([]);
 import { persisted } from 'svelte-persisted-store';
 import { derived, get, writable } from 'svelte/store';
-import { ABLETON_COLORS, type AbletonColor, getDefaultColor } from '$lib/utils/colors';
+import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
-import { Channel, invoke } from '@tauri-apps/api/core';
-import { generateProgressChannel, type SortAudioEvent } from './events';
 import { GroupsState } from './groups';
 
 export type ErrorKind = {
@@ -199,8 +197,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
           loadedState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)',
         previewPulseColor:
           loadedState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)',
-        waveformStrokeColor:
-          loadedState.uiSettings?.theme?.waveformStrokeColor || '#3091f1',
+        waveformStrokeColor: loadedState.uiSettings?.theme?.waveformStrokeColor || '#3091f1',
         ...loadedState.uiSettings?.theme,
       },
       ...loadedState.uiSettings,
@@ -816,7 +813,7 @@ export function setPreviewThemeColors(colors: {
     if (!state.uiSettings.theme) {
       state.uiSettings.theme = {};
     }
-    
+
     if (colors.backgroundColor) {
       state.uiSettings.theme.previewBackgroundColor = colors.backgroundColor;
     }
@@ -832,7 +829,7 @@ export function setPreviewThemeColors(colors: {
     if (colors.waveformStrokeColor) {
       state.uiSettings.theme.waveformStrokeColor = colors.waveformStrokeColor;
     }
-    
+
     return state;
   });
 }

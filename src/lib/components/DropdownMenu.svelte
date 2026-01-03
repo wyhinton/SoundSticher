@@ -24,8 +24,8 @@
 
 <div class="dropdown-container">
   {#if isOpen}
-    <div 
-      class="dropdown-menu" 
+    <div
+      class="dropdown-menu"
       style="max-height: {maxHeight}; min-width: {minWidth}"
       role="menu"
       aria-label="Dropdown menu"

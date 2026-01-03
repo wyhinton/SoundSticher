@@ -5,7 +5,9 @@
   export let onClose: () => void;
 
   function deleteAllGroups() {
-    const confirmed = confirm('Are you sure you want to delete all groups? This action cannot be undone.');
+    const confirmed = confirm(
+      'Are you sure you want to delete all groups? This action cannot be undone.'
+    );
     if (!confirmed) return;
 
     appState.update(state => {
@@ -61,7 +63,7 @@
     const dataStr = JSON.stringify(groupsData, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
-    
+
     const link = document.createElement('a');
     link.href = url;
     link.download = 'groups-export.json';
@@ -77,16 +79,16 @@
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
-    
-    input.onchange = (event) => {
+
+    input.onchange = event => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = e => {
         try {
           const importedData = JSON.parse(e.target?.result as string);
-          
+
           // Validate the structure
           if (!importedData.defs || typeof importedData.defs !== 'object') {
             throw new Error('Invalid groups file format');
@@ -96,7 +98,7 @@
             state.groups = {
               defs: importedData.defs,
               folders: importedData.folders || {},
-              _version: (importedData._version || 0) + 1
+              _version: (importedData._version || 0) + 1,
             };
             state._rev = (state._rev || 0) + 1;
             return state;
@@ -120,7 +122,7 @@
 
     return {
       totalGroups: Object.keys(groups.defs || {}).length,
-      totalFolders: Object.keys(groups.folders || {}).length
+      totalFolders: Object.keys(groups.folders || {}).length,
     };
   }
 
@@ -133,7 +135,12 @@
       <i class="fa fa-bug"></i>
       Groups Debug
     </span>
-    <button class="btn-close" onclick={onClose} title="Close debug panel" aria-label="Close debug panel">
+    <button
+      class="btn-close"
+      onclick={onClose}
+      title="Close debug panel"
+      aria-label="Close debug panel"
+    >
       <i class="fa fa-times"></i>
     </button>
   </div>
@@ -149,23 +156,39 @@
 
     <div class="button-group">
       <span class="group-title">Actions</span>
-      <button class="btn btn-xs btn-outline-danger" onclick={deleteAllGroups} title="Delete all groups">
+      <button
+        class="btn btn-xs btn-outline-danger"
+        onclick={deleteAllGroups}
+        title="Delete all groups"
+      >
         <i class="fa fa-trash"></i>
         Delete All
       </button>
-      <button class="btn btn-xs btn-outline-primary" onclick={addTestGroups} title="Add test groups">
+      <button
+        class="btn btn-xs btn-outline-primary"
+        onclick={addTestGroups}
+        title="Add test groups"
+      >
         <i class="fa fa-flask"></i>
         Add Tests
       </button>
     </div>
-    
+
     <div class="button-group">
       <span class="group-title">File I/O</span>
-      <button class="btn btn-xs btn-outline-secondary" onclick={exportGroups} title="Export groups to JSON">
+      <button
+        class="btn btn-xs btn-outline-secondary"
+        onclick={exportGroups}
+        title="Export groups to JSON"
+      >
         <i class="fa fa-download"></i>
         Export
       </button>
-      <button class="btn btn-xs btn-outline-secondary" onclick={importGroups} title="Import groups from JSON">
+      <button
+        class="btn btn-xs btn-outline-secondary"
+        onclick={importGroups}
+        title="Import groups from JSON"
+      >
         <i class="fa fa-upload"></i>
         Import
       </button>

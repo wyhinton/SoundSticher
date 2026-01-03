@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GroupDef } from '../state/groups';
   import { ItemQueryDetailsDictionary } from '../state/groups';
+  import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
 
   export let groupName: string;
   export let definition: GroupDef;
@@ -9,6 +10,7 @@
   export let onSelect: (groupName: string) => void;
   export let onHover: ((groupName: string) => void) | undefined = undefined;
   export let onHoverLeave: (() => void) | undefined = undefined;
+  export let onDelete: ((groupName: string) => void) | undefined = undefined;
 
   // Get group type for display
   function getGroupType(def: GroupDef): string {
@@ -30,6 +32,39 @@
       return ItemQueryDetailsDictionary[def.query.kind]?.icon || null;
     }
     return null;
+  }
+
+  // Create unique dropdown ID for this group item
+  const dropdownId = `group-item-${groupName}`;
+
+  // Define dropdown actions
+  $: dropdownActions = [
+    {
+      id: 'rename',
+      label: 'Rename Group',
+      icon: 'fa-edit',
+      disabled: true, // TODO: Implement rename functionality
+      onClick: handleRename,
+    },
+    {
+      id: 'delete',
+      label: 'Delete Group',
+      icon: 'fa-trash',
+      variant: 'danger' as const,
+      disabled: false,
+      onClick: handleDelete,
+    },
+  ];
+
+  function handleRename(event: MouseEvent) {
+    event.stopPropagation();
+    // TODO: Implement rename functionality
+    console.log('Rename group:', groupName);
+  }
+
+  function handleDelete(event: MouseEvent) {
+    event.stopPropagation();
+    onDelete?.(groupName);
   }
 </script>
 
@@ -59,6 +94,12 @@
     </div>
     <div class="group-header-right">
       <span class="group-type">{getGroupType(definition)}</span>
+      <DropDownActionsButton
+        {dropdownId}
+        buttonTitle="Group actions"
+        buttonAriaLabel="Group actions for {groupName}"
+        actions={dropdownActions}
+      />
     </div>
   </div>
   <div class="group-details"></div>
@@ -130,5 +171,15 @@
   .result-count {
     color: #888;
     font-size: 10px;
+  }
+
+  /* Ensure dropdown doesn't interfere with group selection */
+  .group-header-right :global(.dropdown-container) {
+    z-index: 1001;
+  }
+
+  .group-header-right :global(.action-button) {
+    font-size: 10px;
+    padding: 2px 4px;
   }
 </style>

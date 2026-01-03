@@ -254,6 +254,61 @@
     // Invalidate cache since we added a new group
     registry.invalidateAll();
   }
+
+  // Handle group deletion
+  function handleDeleteGroup(groupName: string) {
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete the group "${groupName}"?`)) {
+      return;
+    }
+
+    // Clear selection if the deleted group is currently selected
+    if (selectedGroup === groupName) {
+      selectedGroup = null;
+      selectionService.apply({
+        mode: 'replace',
+        ids: [],
+        source: 'groups',
+      });
+    }
+
+    // Clear preview if the deleted group is being previewed
+    previewService.clearPreview('groups');
+
+    // Remove from results cache
+    groupResults.delete(groupName);
+    groupResults = new Map(groupResults);
+
+    // Update appState to remove the group
+    appState.update(state => {
+      if (!state.groups) return state;
+
+      // Remove the group definition
+      delete state.groups.defs[groupName];
+
+      // Remove from folders
+      if (state.groups.folders) {
+        for (const [folderName, groupNames] of Object.entries(state.groups.folders)) {
+          const index = groupNames.indexOf(groupName);
+          if (index !== -1) {
+            groupNames.splice(index, 1);
+            // Remove empty folders
+            if (groupNames.length === 0) {
+              delete state.groups.folders[folderName];
+            }
+          }
+        }
+      }
+
+      state.groups._version = (state.groups._version || 0) + 1;
+      state._rev = (state._rev || 0) + 1;
+
+      return state;
+    });
+
+    // Invalidate cache since we removed a group
+    registry.invalidateAll();
+  }
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
@@ -292,8 +347,8 @@
     </div>
   </div>
 
-  <div 
-    class="groups-list" 
+  <div
+    class="groups-list"
     role="listbox"
     aria-label="Groups list"
     tabindex="0"
@@ -329,6 +384,7 @@
             onSelect={selectGroup}
             onHover={handleGroupHover}
             onHoverLeave={handleGroupHoverLeave}
+            onDelete={handleDeleteGroup}
           />
         {/if}
       {/each}
@@ -341,7 +397,7 @@
       groupName={selectedGroup}
       definition={groupsState.defs[selectedGroup]!}
       result={groupResults.get(selectedGroup) || null}
-      onClose={() => selectedGroup = null}
+      onClose={() => (selectedGroup = null)}
       onUpdateQuery={handleUpdateQuery}
     />
   {/if}

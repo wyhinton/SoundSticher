@@ -103,8 +103,7 @@
           type="number"
           step="1"
           value={definition.query.seed}
-          oninput={e =>
-            handleParamUpdate({ seed: parseInt((e.target as HTMLInputElement).value) })}
+          oninput={e => handleParamUpdate({ seed: parseInt((e.target as HTMLInputElement).value) })}
         />
       </div>
     {:else if definition.query.kind === 'where'}

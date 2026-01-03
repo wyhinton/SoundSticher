@@ -2,10 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
   import { createEventDispatcher } from 'svelte';
-  import {
-    appState,
-    durationSeconds,
-  } from '../state/state.svelte';
+  import { appState, durationSeconds } from '../state/state.svelte';
   import { listen, TauriEvent } from '@tauri-apps/api/event';
   import {
     getItemSize,
@@ -21,7 +18,12 @@
   import DropIndicator from './Timeline/DropIndicator.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
   import { audioFileStateManager } from '../state/stateSynchronization';
-  import { selectionService, selectedIds, previewIds, previewActive } from '../state/selection.svelte';
+  import {
+    selectionService,
+    selectedIds,
+    previewIds,
+    previewActive,
+  } from '../state/selection.svelte';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
   import { debugState, timelineDebugMode } from '../state/debug.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
@@ -394,7 +396,7 @@
                   active={isItemActive(timelineItem)}
                   isSelected={selectedSegments.has(i)}
                   isInPreview={previewSegments.has(i)}
-                  isPreviewActive={isPreviewActive}
+                  {isPreviewActive}
                   isBeingDragged={isDragging && draggedSegmentIndex === i}
                   onSegmentSelect={selectSegment}
                   onSegmentToggle={toggleSegmentSelection}

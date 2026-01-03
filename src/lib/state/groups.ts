@@ -51,7 +51,8 @@ export const ItemQueryDetailsDictionary: Record<ItemQuery['kind'], ItemQueryInfo
   randomSectionPercent: {
     props: ['sectionIndex', 'percent', 'seed'],
     icon: '🎲',
-    helpText: 'Randomly select a percentage of files from a specific section using a seed for deterministic results',
+    helpText:
+      'Randomly select a percentage of files from a specific section using a seed for deterministic results',
   },
   lastOfEachSection: {
     props: [],
