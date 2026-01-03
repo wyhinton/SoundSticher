@@ -8,6 +8,7 @@ import {
   type CombineAudioResult,
   type Section,
   type SectionSend,
+  bumpRevision,
 } from './state.svelte';
 import type { BufferAudioEvent, CombineAudioEvent, ExportAudioEvent } from './events';
 import { exportState, type ExportSettings, type ExportState } from './export';
@@ -127,7 +128,6 @@ export async function updateInputs(sections: Section[]) {
   const onCombineAudioEvent = createTypedEventChannel<CombineAudioEvent>({
     onStarted: data => {
       appState.update(state => {
-        console.log(data);
         state.isCombiningFile = true;
         state.combinedFileLength = data.duration;
         state.timelineItems = [];
@@ -181,6 +181,13 @@ export async function updateInputs(sections: Section[]) {
     sections: newSends,
     onEvent: onBufferAudioEvent,
   });
+
+  // Bump the content revision after updateInputs completes
+  if (updateInputsResult.ok) {
+    bumpRevision();
+  }
+
+  return updateInputsResult;
 }
 
 export async function exportAudio(settings: ExportSettings, outputPath: string) {

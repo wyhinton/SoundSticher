@@ -1,10 +1,6 @@
 <script lang="ts">
   import * as d3 from 'd3';
-  import {
-    hoveredSourceItem,
-    hoveredTimelineItem,
-    type TimelineItemType,
-  } from '../../state/state.svelte';
+  import { hoveredSourceItem, appState } from '../../state/state.svelte';
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
   export let index: number;
@@ -17,6 +13,8 @@
   export let DEBUG_MODE: boolean;
   export let id: string | undefined;
   export let isSelected: boolean = false;
+  export let isInPreview: boolean = false;
+  export let isPreviewActive: boolean = false;
   export let isBeingDragged: boolean = false;
   export let active: boolean = true;
   export let canBeDragged: boolean = true;
@@ -25,6 +23,16 @@
   export let onSegmentSelect: ((index: number, isShiftSelect?: boolean) => void) | undefined =
     undefined;
   export let onSegmentToggle: ((index: number) => void) | undefined = undefined;
+
+  // Theme colors from app state
+  $: previewBackgroundColor =
+    $appState.uiSettings?.theme?.previewBackgroundColor || 'rgba(255, 165, 0, 0.25)';
+  $: previewBorderColor =
+    $appState.uiSettings?.theme?.previewBorderColor || 'rgba(255, 165, 0, 0.5)';
+  $: previewHoverBackgroundColor =
+    $appState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)';
+  $: previewPulseColor = $appState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)';
+  $: waveformStrokeColor = $appState.uiSettings?.theme?.waveformStrokeColor || '#3091f1';
 
   const dispatch = createEventDispatcher();
 
@@ -136,7 +144,7 @@
     <path
       d={svgPath}
       fill="none"
-      stroke="#3091f1"
+      stroke={waveformStrokeColor}
       stroke-width="1"
       transform={`translate(${rectX}, 0)`}
       class="waveform-path"
@@ -151,6 +159,7 @@
       class="timeline-segment-div"
       class:hovered={$hoveredSourceItem == index}
       class:selected={isSelected}
+      class:preview={isInPreview && isPreviewActive && !isSelected}
       class:inactive={!active}
       class:dragging={isDragging}
       class:non-draggable={!canBeDragged}
@@ -160,6 +169,7 @@
       data-segment-active={active}
       on:click={handleSegmentClick}
       on:keydown={handleSegmentKeyDown}
+      role="button"
       tabindex="0"
       aria-label="Timeline segment {index + 1}"
       style="
@@ -167,10 +177,26 @@
         height: 150px;
         background-color: {itemColor
         .replace('rgb(', 'rgba(')
-        .replace(')', `, ${isSelected ? 0.3 : $hoveredSourceItem == index ? 0.4 : $fillAlpha})`)};
+        .replace(
+          ')',
+          `, ${
+            isSelected
+              ? 0.3
+              : isInPreview && isPreviewActive
+                ? 0.25
+                : $hoveredSourceItem == index
+                  ? 0.4
+                  : $fillAlpha
+          })`
+        )};
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
+        --preview-bg-color: {previewBackgroundColor};
+        --preview-border-color: {previewBorderColor};
+        --preview-hover-bg-color: {previewHoverBackgroundColor};
+        --preview-pulse-color-light: {previewPulseColor};
+        --preview-pulse-color-transparent: {previewPulseColor.replace(/[\d\.]+\)$/g, '0.2)')};
       "
     ></div>
   </foreignObject>
@@ -211,6 +237,17 @@
 
   .timeline-segment-div.selected:hover {
     background-color: rgba(59, 130, 246, 0.4) !important;
+  }
+
+  /* Preview state styling */
+  .timeline-segment-div.preview {
+    background-color: var(--preview-bg-color) !important;
+    border: 1px solid var(--preview-border-color);
+    animation: preview-pulse 1.5s ease-in-out infinite;
+  }
+
+  .timeline-segment-div.preview:hover {
+    background-color: var(--preview-hover-bg-color) !important;
   }
 
   /* Inactive state styling */
@@ -263,5 +300,18 @@
 
   :global(.waveform-path.dragging) {
     stroke: rgba(0, 200, 255, 0.9);
+  }
+
+  /* Preview pulse animation */
+  @keyframes preview-pulse {
+    0%,
+    100% {
+      border-color: var(--preview-pulse-color-light);
+      box-shadow: 0 0 0 0 var(--preview-pulse-color-light);
+    }
+    50% {
+      border-color: var(--preview-border-color);
+      box-shadow: 0 0 0 2px var(--preview-pulse-color-transparent);
+    }
   }
 </style>

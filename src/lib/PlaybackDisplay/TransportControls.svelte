@@ -2,8 +2,6 @@
   import { appState, durationSeconds } from '$lib/state/state.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
-  import TimeDisplay from './TimeDisplay.svelte';
-  import { formatMilliseconds } from '$lib/utils/format';
   import { invokeWithPerf } from '$lib/state/performance';
 
   let bufferingProgress = 0;
@@ -14,7 +12,6 @@
   });
 
   listen<number>('timeline-progress', event => {
-    console.log(event.payload * $durationSeconds);
     playHeadPosition = event.payload * $durationSeconds;
   });
 
@@ -22,7 +19,6 @@
   async function handlePlay() {
     try {
       let startPosition = playHeadPosition;
-      console.log(startPosition);
       await invoke('play_timeline_audio', { start_seconds: playHeadPosition });
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -30,8 +26,6 @@
   }
 
   async function handlePause() {
-    console.log(`%cHERE LINE :31 %c`, 'color: yellow; font-weight: bold', '');
-
     try {
       await invoke('pause_timeline_audio');
     } catch (error) {
@@ -77,8 +71,6 @@
       await invoke('set_timeline_loop_enabled', {
         loop_enabled: $appState.isLoopingTimelineAudio,
       });
-
-      console.log(`Loop ${$appState.isLoopingTimelineAudio ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error('Error toggling loop:', error);
       // Revert the state change if backend call fails
@@ -90,7 +82,6 @@
   }
 
   listen('audio-playback-ended', e => {
-    console.log(`%cHERE LINE :75 %c`, 'color: brown; font-weight: bold', '');
     if ($appState.isLoopingTimelineAudio) {
       invokeWithPerf('stop_timeline_audio', { start_seconds: 0 }).then(() => {
         invokeWithPerf('play_timeline_audio');

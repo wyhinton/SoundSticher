@@ -10,6 +10,8 @@
     getAllFiles,
     updatePath,
     applySyncIndexes,
+    setActiveTab,
+    setTabContentHeight,
   } from '../state/state.svelte';
   import { onMount, tick } from 'svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -28,6 +30,7 @@
   import SourceRow from './SourceRow.svelte';
   import SourceToolbar from './SourceToolbar.svelte';
   import Favorites from './Favorites.svelte';
+  import Groups from './Groups.svelte';
   import { get } from 'svelte/store';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
@@ -84,17 +87,41 @@
   let inputsUnderMouse: number[] = [];
 
   let isOver;
-  let x;
-  let y;
+  let x: string;
+  let y: string;
   let scaleFactor = 1;
 
   let lottieContainer: HTMLDivElement;
-  let lottieSize = 150;
+  let lottieSize: number;
+
+  // Reactive Lottie size based on available panel space
+  $: {
+    const tabContentHeight = $appState.uiSettings?.tabContentHeight || 120;
+    // Calculate available height: assume table header takes ~40px, tab nav ~35px, some padding
+    const tableHeaderHeight = 40;
+    const tabNavHeight = 35;
+    const padding = 40;
+    const availableHeight = 400 - tabContentHeight - tableHeaderHeight - tabNavHeight - padding; // 400px is max panel height
+
+    // Scale the lottie between 80px (minimum) and 150px (maximum) based on available space
+    const minSize = 80;
+    const maxSize = 150;
+    const minAvailableHeight = 100;
+    const maxAvailableHeight = 250;
+
+    const clampedHeight = Math.max(
+      minAvailableHeight,
+      Math.min(maxAvailableHeight, availableHeight)
+    );
+    const sizeRatio =
+      (clampedHeight - minAvailableHeight) / (maxAvailableHeight - minAvailableHeight);
+    lottieSize = Math.round(minSize + (maxSize - minSize) * sizeRatio);
+  }
 
   // Local selection state
   let selectedRows: Set<number> = new Set();
   let lastSelectedIndex: number | null = null;
-
+  const MAX_PANEL_HEIGHT = 800;
   function handleRowSelection(
     sectionIndex: number,
     isMultiSelect: boolean = false,
@@ -280,6 +307,11 @@
     }
   }
 
+  // Reactive statement to reinitialize Lottie when size changes
+  $: if (lottieSize && lottieContainer) {
+    initLottie();
+  }
+
   let prevSortKey: string | null = null;
   let prevSortDirection: 'asc' | 'desc' | null = null;
   let debounceTimeout: number | undefined;
@@ -336,27 +368,21 @@
   });
 
   // Add tab state at the end of script section
-  let activeTab: string = 'Global';
-  let tabContentHeight: number = 120; // Default height in pixels
   let isResizing: boolean = false;
-
-  function setActiveTab(tab: string) {
-    activeTab = tab;
-  }
 
   function handleResizeStart(event: MouseEvent) {
     event.preventDefault();
     isResizing = true;
 
     const startY = event.clientY;
-    const startHeight = tabContentHeight;
+    const startHeight = $appState.uiSettings?.tabContentHeight || 120;
 
     function handleMouseMove(e: MouseEvent) {
       if (!isResizing) return;
 
       const deltaY = e.clientY - startY;
-      const newHeight = Math.max(80, Math.min(400, startHeight + deltaY)); // Min 80px, Max 400px
-      tabContentHeight = newHeight;
+      const newHeight = Math.max(80, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY)); // Min 80px, Max 400px
+      setTabContentHeight(newHeight);
     }
 
     function handleMouseUp() {
@@ -381,121 +407,168 @@
   aria-label="Source sections"
 >
   <div
-    bind:this={tableContainer}
+    class="sources-container"
     class:drop-add={$addNewFolderOnDrop}
-    class="table-responsive h-100 d-flex flex-column justify-content-between"
     style:background-color="rgb(15 21 27)"
     style:width="400px"
     id="sources-panel"
   >
-    {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
-      <!-- <SineWaveShader></SineWaveShader> -->
-      <div class="position-absolute no-inputs-warning">
-        <div
-          id="lottie-container"
-          class="m-auto"
-          style={`width: ${lottieSize}px; height: ${lottieSize}px;`}
-          bind:this={lottieContainer}
-        ></div>
-        <div class="text-center">No inputs! Drag and Drop a folder of samples or add a section</div>
-        <button class="btn btn-sm m-auto mt-2" onclick={() => addSource()}
-          ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
-        >
-      </div>
-      {@html (() => {
-        initLottie();
-        return '';
-      })()}
-    {/if}
-    {#if $addNewFolderOnDrop}
-      <div class="position-absolute no-inputs warning">
-        <i class="fa fas-plus">+</i>
-      </div>
-    {/if}
+    <!-- Main table section -->
+    <section class="table-section">
+      <div
+        bind:this={tableContainer}
+        class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
+      >
+        {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
+          <!-- <SineWaveShader></SineWaveShader> -->
+          <div class="position-absolute no-inputs-warning">
+            <div
+              id="lottie-container"
+              class="m-auto"
+              style={`width: ${lottieSize}px; height: ${lottieSize}px;`}
+              bind:this={lottieContainer}
+            ></div>
+            <div class="text-center">
+              No inputs! Drag and Drop a folder of samples or add a section
+            </div>
+            <button class="btn btn-sm m-auto mt-2" onclick={() => addSource()}
+              ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
+            >
+          </div>
+          {@html (() => {
+            initLottie();
+            return '';
+          })()}
+        {/if}
+        {#if $addNewFolderOnDrop}
+          <div class="position-absolute no-inputs warning">
+            <i class="fa fas-plus">+</i>
+          </div>
+        {/if}
 
-    {#if $appState.sections.length > 0}
-      <!-- <SourceToolbar
+        {#if $appState.sections.length > 0}
+          <!-- <SourceToolbar
         selectedRowCount={selectedRows.size}
         onSelectAll={handleSelectAll}
         onClearSelection={handleClearSelection}
         onDeleteSelected={handleDeleteSelected}
       /> -->
-    {/if}
+        {/if}
 
-    <table class="w-100 table m-0">
-      <thead>
-        <tr>
-          <th class="file-column">Source</th>
-          <th class="file-column text-center">Samples</th>
-          <th class="file-column text-center">Actions</th>
-        </tr>
-      </thead>
-      <tbody bind:this={container}>
-        {#each $appState.sections as item, sectionIndex}
-          <SourceRow
-            {item}
-            {sectionIndex}
-            {inputsUnderMouse}
-            isSelected={selectedRows.has(sectionIndex)}
-            onRowSelect={selectRow}
-            onRowToggle={toggleRowSelection}
-          />
-        {/each}
-      </tbody>
-    </table>
+        <table class="w-100 table m-0">
+          <thead>
+            <tr>
+              <th class="file-column">Source</th>
+              <th class="file-column text-center">Samples</th>
+              <th class="file-column text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody bind:this={container}>
+            {#each $appState.sections as item, sectionIndex}
+              <SourceRow
+                {item}
+                {sectionIndex}
+                {inputsUnderMouse}
+                isSelected={selectedRows.has(sectionIndex)}
+                onRowSelect={selectRow}
+                onRowToggle={toggleRowSelection}
+              />
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-    <div>
-      <!-- Tab navigation -->
-      <div class="tab-navigation">
+    <!-- Tab panel section -->
+    <section class="tab-panel-section">
+      <div class="tab-panel-container">
+        <!-- Tab navigation -->
+        <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
+          <button
+            class="tab"
+            class:active={$appState.uiSettings?.activeTab === 'Global'}
+            onclick={() => setActiveTab('Global')}
+            role="tab"
+            aria-selected={$appState.uiSettings?.activeTab === 'Global'}
+            aria-controls="global-tab-panel"
+          >
+            Global
+          </button>
+          <button
+            class="tab"
+            class:active={$appState.uiSettings?.activeTab === 'Group'}
+            onclick={() => setActiveTab('Group')}
+            role="tab"
+            aria-selected={$appState.uiSettings?.activeTab === 'Group'}
+            aria-controls="group-tab-panel"
+          >
+            Group
+          </button>
+          <button
+            class="tab"
+            class:active={$appState.uiSettings?.activeTab === 'Favorites'}
+            onclick={() => setActiveTab('Favorites')}
+            role="tab"
+            aria-selected={$appState.uiSettings?.activeTab === 'Favorites'}
+            aria-controls="favorites-tab-panel"
+          >
+            Favorites
+          </button>
+        </nav>
+
+        <!-- Tab content -->
+        <div class="tab-content" style="height: {$appState.uiSettings?.tabContentHeight || 120}px;">
+          {#if $appState.uiSettings?.activeTab === 'Global'}
+            <div
+              class="tab-panel"
+              id="global-tab-panel"
+              role="tabpanel"
+              aria-labelledby="global-tab"
+              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
+                'rgb(15 21 27)'};"
+            >
+              <p>Global content goes here</p>
+              <!-- Add your global content here -->
+            </div>
+          {/if}
+          {#if $appState.uiSettings?.activeTab === 'Group'}
+            <div
+              class="tab-panel"
+              id="group-tab-panel"
+              role="tabpanel"
+              aria-labelledby="group-tab"
+              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
+                'rgb(15 21 27)'};"
+            >
+              <Groups />
+            </div>
+          {/if}
+          {#if $appState.uiSettings?.activeTab === 'Favorites'}
+            <div
+              class="tab-panel"
+              id="favorites-tab-panel"
+              role="tabpanel"
+              aria-labelledby="favorites-tab"
+              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
+                'rgb(15 21 27)'};"
+            >
+              <Favorites />
+            </div>
+          {/if}
+        </div>
+
+        <!-- Resize handle -->
         <div
-          class="tab"
-          class:active={activeTab === 'Global'}
-          onclick={() => setActiveTab('Global')}
+          class="resize-handle"
+          class:resizing={isResizing}
+          onmousedown={handleResizeStart}
+          role="separator"
+          aria-label="Resize tab content"
         >
-          Global
-        </div>
-        <div class="tab" class:active={activeTab === 'Group'} onclick={() => setActiveTab('Group')}>
-          Group
-        </div>
-        <div
-          class="tab"
-          class:active={activeTab === 'Favorites'}
-          onclick={() => setActiveTab('Favorites')}
-        >
-          Favorites
+          <div class="resize-indicator"></div>
         </div>
       </div>
-      <!-- Tab content - add your content here based on the active tab -->
-      <div class="tab-content" style="height: {tabContentHeight}px;">
-        {#if activeTab === 'Global'}
-          <div class="tab-panel">
-            <p>Global content goes here</p>
-            <!-- Add your global content here -->
-          </div>
-        {/if}
-        {#if activeTab === 'Group'}
-          <div class="tab-panel">
-            <p>Group content goes here</p>
-            <!-- Add your group content here -->
-          </div>
-        {/if}
-        {#if activeTab === 'Favorites'}
-          <div class="tab-panel">
-            <Favorites />
-          </div>
-        {/if}
-      </div>
-      <!-- Resize handle -->
-      <div
-        class="resize-handle"
-        class:resizing={isResizing}
-        onmousedown={handleResizeStart}
-        role="separator"
-        aria-label="Resize tab content"
-      >
-        <div class="resize-indicator"></div>
-      </div>
-    </div>
+    </section>
   </div>
 </div>
 
@@ -505,6 +578,27 @@
   }
   .drop-add {
     border: 2px solid green;
+  }
+
+  /* Main layout containers */
+  .sources-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .table-section {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .tab-panel-section {
+    flex-shrink: 0;
+  }
+
+  .tab-panel-container {
+    display: flex;
+    flex-direction: column;
   }
 
   th {
@@ -519,7 +613,7 @@
 
   .no-inputs-warning {
     position: absolute;
-    top: 80%;
+    top: 100%;
     left: 50%;
     transform: translate(-50%, -150%);
     font-size: 12px;
@@ -586,7 +680,7 @@
     overflow-y: auto;
     resize: vertical;
     min-height: 80px;
-    max-height: 400px;
+    max-height: 800px;
   }
 
   .tab-panel {

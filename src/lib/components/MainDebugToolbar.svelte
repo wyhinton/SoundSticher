@@ -3,6 +3,7 @@
   import { appState } from '../state/state.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
   import { audioFileStateManager } from '../state/stateSynchronization';
+  import { loggingState } from '../state/logging';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
   import { debugState, timelineDebugMode, customContextMenu } from '../state/debug.svelte';
@@ -282,6 +283,62 @@ Project: Sound Stitch (Tauri + SvelteKit)
       console.error('Debug: Failed to simulate release prep:', error);
     }
   }
+
+  // Logging toggle functions
+  // Dynamic logging categories configuration
+  const loggingCategories = [
+    {
+      key: 'groupsLog' as keyof typeof $loggingState,
+      label: 'Groups Log',
+      icon: 'fa-layer-group',
+      title: 'Toggle Groups system logging',
+    },
+    {
+      key: 'selectionLog' as keyof typeof $loggingState,
+      label: 'Selection Log',
+      icon: 'fa-mouse-pointer',
+      title: 'Toggle Selection system logging',
+    },
+    {
+      key: 'dragdropLog' as keyof typeof $loggingState,
+      label: 'DragDrop Log',
+      icon: 'fa-arrows-alt',
+      title: 'Toggle Drag & Drop logging',
+    },
+    // Add future categories here:
+    // {
+    //   key: 'performanceLog' as keyof typeof $loggingState,
+    //   label: 'Perf Log',
+    //   icon: 'fa-tachometer-alt',
+    //   title: 'Toggle Performance logging'
+    // },
+    // {
+    //   key: 'audioLog' as keyof typeof $loggingState,
+    //   label: 'Audio Log',
+    //   icon: 'fa-volume-up',
+    //   title: 'Toggle Audio logging'
+    // },
+    // {
+    //   key: 'uiLog' as keyof typeof $loggingState,
+    //   label: 'UI Log',
+    //   icon: 'fa-mouse-pointer',
+    //   title: 'Toggle UI logging'
+    // }
+  ];
+
+  function toggleLogging(categoryKey: keyof typeof $loggingState) {
+    loggingState.update(state => ({
+      ...state,
+      [categoryKey]: !state[categoryKey],
+    }));
+    const newState = get(loggingState);
+    console.log(`🔧 Debug: ${categoryKey} toggled to:`, newState[categoryKey]);
+  }
+
+  // Keep the specific function for backward compatibility, but use the generic one
+  function toggleGroupsLogging() {
+    toggleLogging('groupsLog');
+  }
 </script>
 
 {#if isVisible}
@@ -382,6 +439,22 @@ Project: Sound Stitch (Tauri + SvelteKit)
       </div>
 
       <div class="button-group">
+        <span class="group-title">Logging</span>
+        {#each loggingCategories as category}
+          <button
+            class="btn btn-xs"
+            class:btn-outline-info={!$loggingState[category.key]}
+            class:btn-info={$loggingState[category.key]}
+            on:click={() => toggleLogging(category.key)}
+            title={category.title}
+          >
+            <i class="fa {category.icon}"></i>
+            {category.label}
+          </button>
+        {/each}
+      </div>
+
+      <div class="button-group">
         <span class="group-title">Release</span>
         <button class="btn btn-xs btn-outline-success" on:click={openReleaseGuide}>
           <i class="fa fa-rocket"></i>
@@ -403,8 +476,11 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <i class="fa fa-info-circle"></i>
         DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
           ? 'ON'
-          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Ctrl+Shift+Space
-        to toggle
+          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} |
+        {#each loggingCategories as category}
+          {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
+        {/each}
+        Ctrl+Shift+Space to toggle
       </small>
     </div>
   </div>

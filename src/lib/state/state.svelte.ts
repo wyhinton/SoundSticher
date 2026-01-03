@@ -1,11 +1,10 @@
 export const files = $state<string[]>([]);
 import { persisted } from 'svelte-persisted-store';
 import { derived, get, writable } from 'svelte/store';
-import { ABLETON_COLORS, type AbletonColor, getDefaultColor } from '$lib/utils/colors';
+import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
-import { Channel, invoke } from '@tauri-apps/api/core';
-import { generateProgressChannel, type SortAudioEvent } from './events';
+import { GroupsState } from './groups';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -26,6 +25,7 @@ interface VisualSample {
   path?: string;
   svgPath: string;
 }
+
 export interface AppState {
   sections: Section[];
   playingSong?: string;
@@ -42,10 +42,29 @@ export interface AppState {
   isLoopingTimelineAudio: boolean;
   hasNoActiveSamples: boolean;
   favorites: Favorite[];
+  uiSettings?: {
+    activeTab?: string;
+    tabContentHeight?: number;
+    theme?: {
+      tabPanelBackgroundColor?: string;
+      previewBackgroundColor?: string;
+      previewBorderColor?: string;
+      previewHoverBackgroundColor?: string;
+      previewPulseColor?: string;
+      waveformStrokeColor?: string;
+      zIndexes?: {
+        dropdown?: number;
+        menu?: number;
+      };
+    };
+    // Add other UI settings here in the future
+  };
   _version?: number; // Internal version tracking for migrations
+  groups?: GroupsState;
+  _rev?: number; // content revision (groups + geometry)
 }
 
-interface AudioFileItem {
+export interface AudioFileItem {
   index: number;
   path: string;
   color: AbletonColor;
@@ -119,6 +138,23 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     sortKey: undefined,
     sortDirection: undefined,
     favorites: [],
+    uiSettings: {
+      activeTab: 'Global',
+      tabContentHeight: 120,
+      theme: {
+        tabPanelBackgroundColor: 'rgb(15 21 27)',
+        previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
+        previewBorderColor: 'rgba(255, 165, 0, 0.5)',
+        previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
+        previewPulseColor: 'rgba(255, 165, 0, 0.3)',
+        waveformStrokeColor: '#3091f1',
+        zIndexes: {
+          dropdown: 100000,
+          menu: 1000,
+        },
+      },
+    },
+    _rev: 0, // content revision (groups + geometry)
     _version: CURRENT_STATE_VERSION,
   };
 
@@ -130,7 +166,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
 
   // Check if migration is needed
   const needsMigration = !loadedState._version || loadedState._version < CURRENT_STATE_VERSION;
-  
+
   if (!needsMigration) {
     // State is current, just ensure it has all required properties
     return {
@@ -140,7 +176,9 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     };
   }
 
-  console.log(`Migrating appState from version ${loadedState._version || 0} to ${CURRENT_STATE_VERSION}`);
+  console.log(
+    `Migrating appState from version ${loadedState._version || 0} to ${CURRENT_STATE_VERSION}`
+  );
 
   // Perform migration - merge loaded state with defaults to ensure all properties exist
   const migratedState: AppState = {
@@ -152,6 +190,30 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     sections: Array.isArray(loadedState.sections) ? loadedState.sections : [],
     // Ensure timelineItems array exists and is valid
     timelineItems: Array.isArray(loadedState.timelineItems) ? loadedState.timelineItems : [],
+    // Migrate old activeTab to new uiSettings structure
+    uiSettings: {
+      activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Global',
+      tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
+      theme: {
+        tabPanelBackgroundColor:
+          loadedState.uiSettings?.theme?.tabPanelBackgroundColor || 'rgb(15 21 27)',
+        previewBackgroundColor:
+          loadedState.uiSettings?.theme?.previewBackgroundColor || 'rgba(255, 165, 0, 0.25)',
+        previewBorderColor:
+          loadedState.uiSettings?.theme?.previewBorderColor || 'rgba(255, 165, 0, 0.5)',
+        previewHoverBackgroundColor:
+          loadedState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)',
+        previewPulseColor:
+          loadedState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)',
+        waveformStrokeColor: loadedState.uiSettings?.theme?.waveformStrokeColor || '#3091f1',
+        zIndexes: {
+          dropdown: loadedState.uiSettings?.theme?.zIndexes?.dropdown || 100000,
+          menu: loadedState.uiSettings?.theme?.zIndexes?.menu || 1000,
+        },
+        ...loadedState.uiSettings?.theme,
+      },
+      ...loadedState.uiSettings,
+    },
     // Update version to current
     _version: CURRENT_STATE_VERSION,
   };
@@ -181,6 +243,22 @@ export const appState = persisted<AppState>(
     sortKey: undefined,
     sortDirection: undefined,
     favorites: [],
+    uiSettings: {
+      activeTab: 'Global',
+      tabContentHeight: 120,
+      theme: {
+        tabPanelBackgroundColor: 'rgb(15 21 27)',
+        previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
+        previewBorderColor: 'rgba(255, 165, 0, 0.5)',
+        previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
+        previewPulseColor: 'rgba(255, 165, 0, 0.3)',
+        waveformStrokeColor: '#3091f1',
+        zIndexes: {
+          dropdown: 100000,
+          menu: 1000,
+        },
+      },
+    },
     _version: CURRENT_STATE_VERSION,
   },
   {
@@ -702,4 +780,108 @@ export function isFavorite(folderPath: string): boolean {
     return false;
   }
   return currentState.favorites.some(fav => fav && fav.path === folderPath);
+}
+
+export function setActiveTab(tab: string) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.activeTab = tab;
+    return state;
+  });
+}
+
+export function setTabContentHeight(height: number) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.tabContentHeight = height;
+    return state;
+  });
+}
+
+export function setThemeColor(property: string, color: string) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+    (state.uiSettings.theme as any)[property] = color;
+    return state;
+  });
+}
+
+export function setPreviewThemeColors(colors: {
+  backgroundColor?: string;
+  borderColor?: string;
+  hoverBackgroundColor?: string;
+  pulseColor?: string;
+  waveformStrokeColor?: string;
+}) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+
+    if (colors.backgroundColor) {
+      state.uiSettings.theme.previewBackgroundColor = colors.backgroundColor;
+    }
+    if (colors.borderColor) {
+      state.uiSettings.theme.previewBorderColor = colors.borderColor;
+    }
+    if (colors.hoverBackgroundColor) {
+      state.uiSettings.theme.previewHoverBackgroundColor = colors.hoverBackgroundColor;
+    }
+    if (colors.pulseColor) {
+      state.uiSettings.theme.previewPulseColor = colors.pulseColor;
+    }
+    if (colors.waveformStrokeColor) {
+      state.uiSettings.theme.waveformStrokeColor = colors.waveformStrokeColor;
+    }
+
+    return state;
+  });
+}
+
+export function setWaveformStrokeColor(color: string) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+    state.uiSettings.theme.waveformStrokeColor = color;
+    return state;
+  });
+}
+
+export function setZIndex(component: string, value: number) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+    if (!state.uiSettings.theme.zIndexes) {
+      state.uiSettings.theme.zIndexes = {};
+    }
+    (state.uiSettings.theme.zIndexes as any)[component] = value;
+    return state;
+  });
+}
+
+export function bumpRevision() {
+  appState.update(state => {
+    state._rev = (state._rev || 0) + 1;
+    return state;
+  });
 }

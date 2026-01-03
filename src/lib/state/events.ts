@@ -116,3 +116,13 @@ export function generateProgressChannel<E extends { event: string; data: any }>(
 
   return channel;
 }
+
+type ListenerEvents =
+  | 'buffering-progress'
+  | 'timeline-progress'
+  | 'song-progress'
+  | 'combined-cached'
+  | 'processed-segment'
+  | 'total-length'
+  | 'combine-audio-progress'
+  | 'audio_file_state_changed';
