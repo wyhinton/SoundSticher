@@ -167,3 +167,88 @@ flowchart TD
   V --> K
 
 ```
+
+---
+
+## Cache Invalidation & Stale Selector Problem
+
+The GroupRegistry uses two levels of caching for performance:
+
+1. **Result Cache** (`this.cache`) - Stores evaluated group results by revision number
+2. **Compiled Selector Cache** (`this.compiled`) - Stores pre-compiled selector functions
+
+### The Critical Fix: Clearing Both Caches
+
+When group definitions change (e.g., user updates a `sectionPercent` from 0.5 to 0.8), **both** caches must be cleared:
+
+```typescript
+invalidateAll() {
+  this.cache.clear();        // ✅ Clear cached results
+  this.compiled.clear();     // ✅ CRUCIAL: Clear compiled selectors too!
+}
+```
+
+### Why Compiled Selectors Must Be Cleared
+
+The compiled selectors capture query parameters at compile time through **closure capture**:
+
+```typescript
+// When compiled, parameters get "baked in":
+const selector = (state) => runQuery(state, { 
+  kind: 'sectionPercent', 
+  percent: 0.5  // ❌ This was captured and wouldn't change
+});
+```
+
+### The Bug That Was Fixed
+
+**BEFORE (broken flow):**
+1. User changes percent 0.5 → 0.8 in GroupParams UI
+2. `patchGroupQuery()` updates `appState.groups.defs` and bumps `_rev`
+3. Revision change triggers `invalidateAll()`
+4. ❌ Only `this.cache.clear()` - compiled selector with 0.5 remains
+5. Next evaluation uses stale compiled selector with 0.5
+6. **Wrong results** - UI shows 0.8 but evaluation uses 0.5
+
+**AFTER (fixed flow):**
+1. User changes percent 0.5 → 0.8 in GroupParams UI
+2. `patchGroupQuery()` updates `appState.groups.defs` and bumps `_rev`
+3. Revision change triggers `invalidateAll()`
+4. ✅ Both `this.cache.clear()` AND `this.compiled.clear()`
+5. Next evaluation calls `getOrCompile()` - no compiled selector exists
+6. Fresh selector compiled with new 0.8 value from current appState
+7. **Correct results** - evaluation matches UI parameters
+
+### Parameter Update Workflow
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   User Changes  │───▶│  patchGroupQuery │───▶│  State Updated  │
+│  Param in UI    │    │     Called       │    │   _rev Bumped   │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                                        │
+                                                        ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ Fresh Selector  │◀───│  getOrCompile    │◀───│ invalidateAll() │
+│   Compiled      │    │   (cache miss)   │    │  Clears BOTH    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+        │                                               │
+        ▼                                               ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ runQuery with   │───▶│   Correct        │    │   Cache Miss    │
+│ NEW Parameters  │    │   Results        │    │  (as expected)  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+### Key Insight: Stale Closures in Caching Systems
+
+This was a classic **stale closure** problem. The compiled selectors were capturing query parameters at compile time, creating closures that wouldn't see parameter updates. The solution is to invalidate compiled selectors whenever the underlying definitions change, forcing fresh compilation with updated parameters.
+
+### Performance Notes
+
+- **Result caching** is still effective for unchanged groups
+- **Compiled selector caching** is still beneficial for repeated evaluations
+- The fix ensures **correctness** without sacrificing performance for the common case
+- Only groups with changed definitions get recompiled
+
+---
