@@ -1,8 +1,13 @@
 <script lang="ts">
+  import { appState } from '../state/state.svelte';
+  
   export let isOpen = false;
   export let onClose: () => void;
   export let maxHeight = '300px';
   export let minWidth = '200px';
+
+  // Get menu z-index from theme
+  $: menuZIndex = $appState.uiSettings?.theme?.zIndexes?.menu || 1000;
 
   function handleClickOutside(event: MouseEvent) {
     if (isOpen && event.target instanceof Element) {
@@ -26,7 +31,7 @@
   {#if isOpen}
     <div
       class="dropdown-menu"
-      style="max-height: {maxHeight}; min-width: {minWidth}"
+      style="max-height: {maxHeight}; min-width: {minWidth}; z-index: {menuZIndex};"
       role="menu"
       aria-label="Dropdown menu"
       tabindex="-1"
@@ -45,7 +50,6 @@
     position: absolute;
     top: 100%;
     left: 0;
-    z-index: 1000;
     background: #2a2a2a;
     border: 1px solid #444;
     border-radius: 6px;

@@ -1,5 +1,9 @@
 <script lang="ts">
   import { openDropdown, openDropdownExclusive, closeDropdown } from '../state/dropdown.svelte';
+  import { appState } from '../state/state.svelte';
+  import { createFloatingActions } from 'svelte-floating-ui';
+  import { flip, offset, shift } from '@floating-ui/dom';
+  import Portal from './Shared/Portal.svelte';
 
   // Props for customization
   export let dropdownId: string;
@@ -17,6 +21,18 @@
 
   // Check if this dropdown should be shown
   $: showDropdown = $openDropdown === dropdownId;
+  // Get z-index from theme
+  $: dropdownZIndex = $appState.uiSettings?.theme?.zIndexes?.dropdown || 100000;
+  let dropdownElement: HTMLElement;
+  // Floating UI actions
+  const [floatingRef, floatingContent] = createFloatingActions({
+    strategy: 'fixed',
+    placement: 'bottom-end',
+
+    middleware: [offset(4), flip(), shift({ padding: 8 })],
+  });
+
+  let buttonElement: HTMLElement;
 
   function toggleDropdown(event: MouseEvent) {
     event.stopPropagation();
@@ -43,7 +59,12 @@
   function handleWindowClick(event: Event) {
     if (!showDropdown) return;
     const target = event.target as HTMLElement;
-    if (!target.closest('.dropdown-container')) {
+
+    // Check if click is outside both button and dropdown
+    const isClickOnButton = buttonElement?.contains(target);
+    const isClickOnDropdown = target.closest('.my-dropdown');
+
+    if (!isClickOnButton && !isClickOnDropdown) {
       closeThisDropdown();
     }
   }
@@ -53,6 +74,8 @@
 
 <div class="dropdown-container">
   <button
+    bind:this={buttonElement}
+    use:floatingRef
     class="action-button actions-dropdown-icon"
     onclick={toggleDropdown}
     title={buttonTitle}
@@ -60,14 +83,26 @@
   >
     <i class="fas fa-ellipsis-v"></i>
   </button>
-  {#if showDropdown}
-    <div class="my-dropdown">
+</div>
+
+{#if showDropdown}
+  <Portal target="body">
+    <div
+      bind:this={dropdownElement}
+      use:floatingContent
+      class="my-dropdown"
+      style="position: fixed; z-index: {dropdownZIndex};"
+    >
       {#each actions as action}
         <button
           class="dropdown-item"
           class:delete-item={action.variant === 'danger'}
           class:disabled={action.disabled}
-          onclick={event => handleActionClick(action, event)}
+          onclick={event => {
+            event.stopPropagation();
+            if (!action.disabled) action.onClick(event);
+            closeDropdown(dropdownId);
+          }}
           disabled={action.disabled}
         >
           <i class="fas {action.icon} me-2 {action.iconClasses || ''}"></i>
@@ -75,8 +110,8 @@
         </button>
       {/each}
     </div>
-  {/if}
-</div>
+  </Portal>
+{/if}
 
 <style>
   .action-button {
@@ -109,17 +144,12 @@
   }
 
   .my-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
     background: #2a2a2a;
     border: 1px solid #555;
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
     min-width: 150px;
     padding: 4px 0;
-    margin-top: 2px;
   }
 
   .dropdown-item {

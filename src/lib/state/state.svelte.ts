@@ -52,6 +52,10 @@ export interface AppState {
       previewHoverBackgroundColor?: string;
       previewPulseColor?: string;
       waveformStrokeColor?: string;
+      zIndexes?: {
+        dropdown?: number;
+        menu?: number;
+      };
     };
     // Add other UI settings here in the future
   };
@@ -144,6 +148,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
         previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
         previewPulseColor: 'rgba(255, 165, 0, 0.3)',
         waveformStrokeColor: '#3091f1',
+        zIndexes: {
+          dropdown: 100000,
+          menu: 1000,
+        },
       },
     },
     _rev: 0, // content revision (groups + geometry)
@@ -198,6 +206,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
         previewPulseColor:
           loadedState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)',
         waveformStrokeColor: loadedState.uiSettings?.theme?.waveformStrokeColor || '#3091f1',
+        zIndexes: {
+          dropdown: loadedState.uiSettings?.theme?.zIndexes?.dropdown || 100000,
+          menu: loadedState.uiSettings?.theme?.zIndexes?.menu || 1000,
+        },
         ...loadedState.uiSettings?.theme,
       },
       ...loadedState.uiSettings,
@@ -241,6 +253,10 @@ export const appState = persisted<AppState>(
         previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
         previewPulseColor: 'rgba(255, 165, 0, 0.3)',
         waveformStrokeColor: '#3091f1',
+        zIndexes: {
+          dropdown: 100000,
+          menu: 1000,
+        },
       },
     },
     _version: CURRENT_STATE_VERSION,
@@ -843,6 +859,22 @@ export function setWaveformStrokeColor(color: string) {
       state.uiSettings.theme = {};
     }
     state.uiSettings.theme.waveformStrokeColor = color;
+    return state;
+  });
+}
+
+export function setZIndex(component: string, value: number) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+    if (!state.uiSettings.theme.zIndexes) {
+      state.uiSettings.theme.zIndexes = {};
+    }
+    (state.uiSettings.theme.zIndexes as any)[component] = value;
     return state;
   });
 }

@@ -23,6 +23,7 @@
     "version:sync": "node -e \"const pkg=require('./package.json'); const fs=require('fs'); const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json')); tauri.version=pkg.version; fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauri,null,2)); const cargo=fs.readFileSync('src-tauri/Cargo.toml','utf8').replace(/version\\s*=\\s*\\\"[^\\\"]*\\\"/,'version = \\\"'+pkg.version+'\\\"'); fs.writeFileSync('src-tauri/Cargo.toml',cargo);\""
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.4",
     "@fortawesome/fontawesome-free": "^6.7.2",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
@@ -44,6 +45,7 @@
     "plain-draggable": "^2.5.15",
     "prismjs": "^1.30.0",
     "svelte-fa": "^4.0.4",
+    "svelte-floating-ui": "^1.6.2",
     "svelte-persisted-store": "^0.12.0",
     "svelte-tauri-filedrop": "^2.0.2",
     "svelte-tree-view": "^1.4.2",
