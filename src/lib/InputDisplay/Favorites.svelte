@@ -1,6 +1,5 @@
 <script lang="ts">
   import { appState, removeFromFavorites, addSource } from '../state/state.svelte';
-  import type { Favorite } from '../state/state.svelte';
 
   function handleRemoveFromFavorites(path: string) {
     removeFromFavorites(path);

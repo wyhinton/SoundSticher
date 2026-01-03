@@ -1,19 +1,17 @@
 <script lang="ts">
-  import {
-    GroupRegistry,
-    type GroupDef,
-    type GroupsState,
-    type ItemQuery,
-    testGroups,
-    patchGroupQuery,
-    ItemQueryDetailsDictionary,
-  } from '../state/groups';
-  import { appState } from '../state/state.svelte';
-  import { selectionService, previewService } from '../state/selection.svelte';
   import GroupItem from './GroupItem.svelte';
   import GroupDebugPanel from './GroupDebugPanel.svelte';
   import GroupDetailsPanel from './GroupDetailsPanel.svelte';
-  import ButtonPill from '../components/ButtonPill.svelte';
+  import ButtonPill from '$lib/components/ButtonPill.svelte';
+  import {
+    testGroups,
+    GroupRegistry,
+    type ItemQuery,
+    patchGroupQuery,
+    type ItemQueryDetailsDictionary,
+  } from '$lib/state/groups';
+  import { selectionService, previewService } from '$lib/state/selection.svelte';
+  import { appState } from '$lib/state/state.svelte';
 
   // Initialize groups state - use appState groups if available, otherwise fall back to test data
   $: groupsState = $appState.groups || {

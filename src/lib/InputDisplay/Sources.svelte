@@ -25,13 +25,9 @@
     setInputsUnderMouse,
     setIsOverTableContainer,
   } from '../state/position';
-  import SineWaveShader from '../Examples/SineWaveShader.svelte';
-  import EditableInput from './EditableInput.svelte';
   import SourceRow from './SourceRow.svelte';
-  import SourceToolbar from './SourceToolbar.svelte';
   import Favorites from './Favorites.svelte';
-  import Groups from './Groups.svelte';
-  import { get } from 'svelte/store';
+  import Groups from './Groups/Groups.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';

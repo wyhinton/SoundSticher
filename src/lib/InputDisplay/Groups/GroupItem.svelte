@@ -1,7 +1,6 @@
 <script lang="ts">
-  import type { GroupDef } from '../state/groups';
-  import { ItemQueryDetailsDictionary } from '../state/groups';
-  import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
+  import DropDownActionsButton from '$lib/components/DropDownActionsButton.svelte';
+  import { type GroupDef, ItemQueryDetailsDictionary } from '$lib/state/groups';
 
   export let groupName: string;
   export let definition: GroupDef;

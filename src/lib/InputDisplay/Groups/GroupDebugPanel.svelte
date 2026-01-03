@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { appState } from '../state/state.svelte';
-  import { testGroups } from '../state/groups';
+  import { testGroups } from '$lib/state/groups';
+  import { appState } from '$lib/state/state.svelte';
 
   export let onClose: () => void;
 

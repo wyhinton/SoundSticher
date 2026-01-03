@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GroupDef, ItemQuery } from '../state/groups';
+  import { type GroupDef, type ItemQuery } from '$lib/state/groups';
   import GroupParams from './GroupParams.svelte';
 
   export let groupName: string;

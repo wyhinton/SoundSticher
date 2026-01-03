@@ -1,7 +1,6 @@
 <script lang="ts">
-  import type { GroupDef, ItemQuery, WhereClause } from '../state/groups';
-  import type { AbletonColor } from '../utils/colors';
-  import { ABLETON_COLORS } from '../utils/colors';
+  import { type GroupDef, type ItemQuery, type WhereClause } from '$lib/state/groups';
+  import { ABLETON_COLORS } from '$lib/utils/colors';
 
   export let groupName: string;
   export let definition: GroupDef;
