@@ -53,6 +53,7 @@ export interface AppState {
       previewBorderColor?: string;
       previewHoverBackgroundColor?: string;
       previewPulseColor?: string;
+      waveformStrokeColor?: string;
     };
     // Add other UI settings here in the future
   };
@@ -144,6 +145,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
         previewBorderColor: 'rgba(255, 165, 0, 0.5)',
         previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
         previewPulseColor: 'rgba(255, 165, 0, 0.3)',
+        waveformStrokeColor: '#3091f1',
       },
     },
     _rev: 0, // content revision (groups + geometry)
@@ -197,6 +199,8 @@ function validateAndMigrateAppState(loadedState: any): AppState {
           loadedState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)',
         previewPulseColor:
           loadedState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)',
+        waveformStrokeColor:
+          loadedState.uiSettings?.theme?.waveformStrokeColor || '#3091f1',
         ...loadedState.uiSettings?.theme,
       },
       ...loadedState.uiSettings,
@@ -239,6 +243,7 @@ export const appState = persisted<AppState>(
         previewBorderColor: 'rgba(255, 165, 0, 0.5)',
         previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
         previewPulseColor: 'rgba(255, 165, 0, 0.3)',
+        waveformStrokeColor: '#3091f1',
       },
     },
     _version: CURRENT_STATE_VERSION,
@@ -802,6 +807,7 @@ export function setPreviewThemeColors(colors: {
   borderColor?: string;
   hoverBackgroundColor?: string;
   pulseColor?: string;
+  waveformStrokeColor?: string;
 }) {
   appState.update(state => {
     if (!state.uiSettings) {
@@ -823,7 +829,23 @@ export function setPreviewThemeColors(colors: {
     if (colors.pulseColor) {
       state.uiSettings.theme.previewPulseColor = colors.pulseColor;
     }
+    if (colors.waveformStrokeColor) {
+      state.uiSettings.theme.waveformStrokeColor = colors.waveformStrokeColor;
+    }
     
+    return state;
+  });
+}
+
+export function setWaveformStrokeColor(color: string) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+    state.uiSettings.theme.waveformStrokeColor = color;
     return state;
   });
 }

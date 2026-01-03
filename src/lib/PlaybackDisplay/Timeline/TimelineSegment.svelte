@@ -1,11 +1,6 @@
 <script lang="ts">
   import * as d3 from 'd3';
-  import {
-    hoveredSourceItem,
-    hoveredTimelineItem,
-    appState,
-    type TimelineItemType,
-  } from '../../state/state.svelte';
+  import { hoveredSourceItem, appState } from '../../state/state.svelte';
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
   export let index: number;
@@ -30,10 +25,14 @@
   export let onSegmentToggle: ((index: number) => void) | undefined = undefined;
 
   // Theme colors from app state
-  $: previewBackgroundColor = $appState.uiSettings?.theme?.previewBackgroundColor || 'rgba(255, 165, 0, 0.25)';
-  $: previewBorderColor = $appState.uiSettings?.theme?.previewBorderColor || 'rgba(255, 165, 0, 0.5)';
-  $: previewHoverBackgroundColor = $appState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)';
+  $: previewBackgroundColor =
+    $appState.uiSettings?.theme?.previewBackgroundColor || 'rgba(255, 165, 0, 0.25)';
+  $: previewBorderColor =
+    $appState.uiSettings?.theme?.previewBorderColor || 'rgba(255, 165, 0, 0.5)';
+  $: previewHoverBackgroundColor =
+    $appState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)';
   $: previewPulseColor = $appState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)';
+  $: waveformStrokeColor = $appState.uiSettings?.theme?.waveformStrokeColor || '#3091f1';
 
   const dispatch = createEventDispatcher();
 
@@ -145,7 +144,7 @@
     <path
       d={svgPath}
       fill="none"
-      stroke="#3091f1"
+      stroke={waveformStrokeColor}
       stroke-width="1"
       transform={`translate(${rectX}, 0)`}
       class="waveform-path"
@@ -178,15 +177,18 @@
         height: 150px;
         background-color: {itemColor
         .replace('rgb(', 'rgba(')
-        .replace(')', `, ${
-          isSelected 
-            ? 0.3 
-            : isInPreview && isPreviewActive 
-              ? 0.25 
-              : $hoveredSourceItem == index 
-                ? 0.4 
-                : $fillAlpha
-        })`)};
+        .replace(
+          ')',
+          `, ${
+            isSelected
+              ? 0.3
+              : isInPreview && isPreviewActive
+                ? 0.25
+                : $hoveredSourceItem == index
+                  ? 0.4
+                  : $fillAlpha
+          })`
+        )};
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
@@ -302,7 +304,8 @@
 
   /* Preview pulse animation */
   @keyframes preview-pulse {
-    0%, 100% {
+    0%,
+    100% {
       border-color: var(--preview-pulse-color-light);
       box-shadow: 0 0 0 0 var(--preview-pulse-color-light);
     }
