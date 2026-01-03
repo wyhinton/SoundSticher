@@ -203,6 +203,7 @@ const selector = (state) => runQuery(state, {
 ### The Bug That Was Fixed
 
 **BEFORE (broken flow):**
+
 1. User changes percent 0.5 → 0.8 in GroupParams UI
 2. `patchGroupQuery()` updates `appState.groups.defs` and bumps `_rev`
 3. Revision change triggers `invalidateAll()`
@@ -211,6 +212,7 @@ const selector = (state) => runQuery(state, {
 6. **Wrong results** - UI shows 0.8 but evaluation uses 0.5
 
 **AFTER (fixed flow):**
+
 1. User changes percent 0.5 → 0.8 in GroupParams UI
 2. `patchGroupQuery()` updates `appState.groups.defs` and bumps `_rev`
 3. Revision change triggers `invalidateAll()`
@@ -221,7 +223,7 @@ const selector = (state) => runQuery(state, {
 
 ### Parameter Update Workflow
 
-```
+```mermaid
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   User Changes  │───▶│  patchGroupQuery │───▶│  State Updated  │
 │  Param in UI    │    │     Called       │    │   _rev Bumped   │
