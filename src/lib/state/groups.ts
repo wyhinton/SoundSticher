@@ -36,6 +36,40 @@ export type WhereClause =
 export type GroupResult = Set<string>;
 export type GroupSelector = (state: AppState) => GroupResult;
 
+export interface ItemQueryInfo {
+  props: string[];
+  icon: string;
+  helpText: string;
+}
+
+export const ItemQueryDetailsDictionary: Record<ItemQuery['kind'], ItemQueryInfo> = {
+  sectionPercent: {
+    props: ['sectionIndex', 'percent', 'orderBy', 'take'],
+    icon: '📊',
+    helpText: 'Select a percentage of files from a specific section, ordered by index or duration',
+  },
+  randomSectionPercent: {
+    props: ['sectionIndex', 'percent', 'seed'],
+    icon: '🎲',
+    helpText: 'Randomly select a percentage of files from a specific section using a seed for deterministic results',
+  },
+  lastOfEachSection: {
+    props: [],
+    icon: '🔚',
+    helpText: 'Select the last file from each section based on index',
+  },
+  lastOfAllSections: {
+    props: [],
+    icon: '🏁',
+    helpText: 'Select the very last file across all sections based on highest index',
+  },
+  where: {
+    props: ['clause'],
+    icon: '🔍',
+    helpText: 'Filter files based on specific criteria like active state, color, duration, or path',
+  },
+};
+
 export class GroupRegistry {
   private compiled = new Map<string, GroupSelector>();
   private cache = new Map<string, { version: number; value: GroupResult }>();
@@ -354,15 +388,33 @@ export function patchGroupQuery(
   // optional: assert query kind to avoid patching wrong shapes
   expectedKind?: ItemQuery['kind']
 ) {
+  logger.groups.info(`Patching group query "${groupName}"`, { patch, expectedKind });
+
   appState.update(s => {
     const def = s.groups?.defs?.[groupName];
-    if (!def || def.kind !== 'query') return s;
+    if (!def || def.kind !== 'query') {
+      logger.groups.warning(`Cannot patch group "${groupName}" - not found or not a query group`);
+      return s;
+    }
 
-    if (expectedKind && def.query.kind !== expectedKind) return s;
+    if (expectedKind && def.query.kind !== expectedKind) {
+      logger.groups.warning(
+        `Cannot patch group "${groupName}" - expected kind "${expectedKind}" but got "${def.query.kind}"`
+      );
+      return s;
+    }
 
+    const oldQuery = def.query;
     def.query = { ...def.query, ...patch } as ItemQuery;
 
     s._rev = (s._rev ?? 0) + 1;
+
+    logger.groups.success(`Successfully patched group "${groupName}"`, {
+      oldQuery,
+      newQuery: def.query,
+      revision: s._rev,
+    });
+
     return s;
   });
 }

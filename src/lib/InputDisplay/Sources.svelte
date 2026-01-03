@@ -93,7 +93,7 @@
 
   let lottieContainer: HTMLDivElement;
   let lottieSize: number;
-  
+
   // Reactive Lottie size based on available panel space
   $: {
     const tabContentHeight = $appState.uiSettings?.tabContentHeight || 120;
@@ -102,22 +102,26 @@
     const tabNavHeight = 35;
     const padding = 40;
     const availableHeight = 400 - tabContentHeight - tableHeaderHeight - tabNavHeight - padding; // 400px is max panel height
-    
+
     // Scale the lottie between 80px (minimum) and 150px (maximum) based on available space
     const minSize = 80;
     const maxSize = 150;
     const minAvailableHeight = 100;
     const maxAvailableHeight = 250;
-    
-    const clampedHeight = Math.max(minAvailableHeight, Math.min(maxAvailableHeight, availableHeight));
-    const sizeRatio = (clampedHeight - minAvailableHeight) / (maxAvailableHeight - minAvailableHeight);
+
+    const clampedHeight = Math.max(
+      minAvailableHeight,
+      Math.min(maxAvailableHeight, availableHeight)
+    );
+    const sizeRatio =
+      (clampedHeight - minAvailableHeight) / (maxAvailableHeight - minAvailableHeight);
     lottieSize = Math.round(minSize + (maxSize - minSize) * sizeRatio);
   }
 
   // Local selection state
   let selectedRows: Set<number> = new Set();
   let lastSelectedIndex: number | null = null;
-
+  const MAX_PANEL_HEIGHT = 800;
   function handleRowSelection(
     sectionIndex: number,
     isMultiSelect: boolean = false,
@@ -377,7 +381,7 @@
       if (!isResizing) return;
 
       const deltaY = e.clientY - startY;
-      const newHeight = Math.max(80, Math.min(400, startHeight + deltaY)); // Min 80px, Max 400px
+      const newHeight = Math.max(80, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY)); // Min 80px, Max 400px
       setTabContentHeight(newHeight);
     }
 
@@ -676,7 +680,7 @@
     overflow-y: auto;
     resize: vertical;
     min-height: 80px;
-    max-height: 400px;
+    max-height: 800px;
   }
 
   .tab-panel {

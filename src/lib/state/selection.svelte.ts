@@ -15,6 +15,13 @@ export interface SelectionState {
   timestamp: number;
 }
 
+export interface PreviewState {
+  ids: Set<number>;
+  source: string | null;
+  timestamp: number;
+  active: boolean; // Whether preview is currently active
+}
+
 // Internal store state
 const createSelectionStore = () => {
   const { subscribe, set, update } = writable<SelectionState>({
@@ -264,19 +271,110 @@ const createSelectionStore = () => {
   };
 };
 
-// Export the selection service
+// Create preview selection store
+const createPreviewStore = () => {
+  const { subscribe, set, update } = writable<PreviewState>({
+    ids: new Set<number>(),
+    source: null,
+    timestamp: Date.now(),
+    active: false,
+  });
+
+  return {
+    subscribe,
+
+    // Set preview selection (for hover events)
+    setPreview: (ids: Iterable<number>, source: string = 'groups') => {
+      const newIds = new Set(ids);
+      logger.selection.action(`Preview ${newIds.size} items from ${source}`, {
+        ids: Array.from(newIds),
+        source,
+        type: 'preview',
+      });
+      set({
+        ids: newIds,
+        source,
+        timestamp: Date.now(),
+        active: true,
+      });
+    },
+
+    // Clear preview selection (for hover leave events)
+    clearPreview: (source: string = 'groups') => {
+      logger.selection.action(`Clear preview from ${source}`, {
+        source,
+        type: 'preview-clear',
+      });
+      set({
+        ids: new Set<number>(),
+        source,
+        timestamp: Date.now(),
+        active: false,
+      });
+    },
+
+    // Update preview with new IDs without full reset
+    updatePreview: (ids: Iterable<number>, source: string = 'groups') => {
+      const newIds = new Set(ids);
+      update(state => ({
+        ...state,
+        ids: newIds,
+        source,
+        timestamp: Date.now(),
+        active: newIds.size > 0,
+      }));
+    },
+  };
+};
+
+// Export the services
 export const selectionService = createSelectionStore();
+export const previewService = createPreviewStore();
 
 // Derived stores for convenience
 export const selectedIds = derived(selectionService, $selection => $selection.ids);
 export const selectedCount = derived(selectedIds, $ids => $ids.size);
 export const selectionSource = derived(selectionService, $selection => $selection.source);
 
+// Preview derived stores
+export const previewIds = derived(previewService, $preview => $preview.ids);
+export const previewCount = derived(previewIds, $ids => $ids.size);
+export const previewActive = derived(previewService, $preview => $preview.active);
+export const previewSource = derived(previewService, $preview => $preview.source);
+
+// Combined derived store for UI convenience (actual selection + preview overlay)
+export const visualIds = derived(
+  [selectedIds, previewIds, previewActive],
+  ([$selectedIds, $previewIds, $previewActive]) => {
+    if ($previewActive && $previewIds.size > 0) {
+      // When preview is active, show preview instead of selection
+      return $previewIds;
+    }
+    return $selectedIds;
+  }
+);
+
 // Helper functions
 export const isSelected = (id: number) => {
   return get(selectedIds).has(id);
 };
 
+export const isInPreview = (id: number) => {
+  return get(previewIds).has(id);
+};
+
+export const isVisuallySelected = (id: number) => {
+  return get(visualIds).has(id);
+};
+
 export const getSelectedArray = () => {
   return Array.from(get(selectedIds));
+};
+
+export const getPreviewArray = () => {
+  return Array.from(get(previewIds));
+};
+
+export const getVisualArray = () => {
+  return Array.from(get(visualIds));
 };

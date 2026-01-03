@@ -4,15 +4,10 @@
   import { createEventDispatcher } from 'svelte';
   import {
     appState,
-    getAllFiles,
-    triggerFileAnimation,
-    applySyncIndexes,
     durationSeconds,
   } from '../state/state.svelte';
   import { listen, TauriEvent } from '@tauri-apps/api/event';
-  import { formatFileName } from '../utils/format';
   import {
-    getDisplayName,
     getItemSize,
     isItemActive,
     canItemBeDragged,
@@ -25,11 +20,8 @@
   import Playhead from './Timeline/Playhead.svelte';
   import DropIndicator from './Timeline/DropIndicator.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
-  import { generateProgressChannel, type SortAudioEvent } from '../state/events';
-  import { Channel } from '@tauri-apps/api/core';
-  import { get } from 'svelte/store';
   import { audioFileStateManager } from '../state/stateSynchronization';
-  import { selectionService, selectedIds } from '../state/selection.svelte';
+  import { selectionService, selectedIds, previewIds, previewActive } from '../state/selection.svelte';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
   import { debugState, timelineDebugMode } from '../state/debug.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
@@ -102,6 +94,8 @@
 
   // Selection state - now derived from the selection service
   $: selectedSegments = $selectedIds;
+  $: previewSegments = $previewIds;
+  $: isPreviewActive = $previewActive;
   let lastSelectedIndex: number | null = null;
 
   function handleSegmentSelection(
@@ -399,6 +393,8 @@
                   id={timelineItem.id}
                   active={isItemActive(timelineItem)}
                   isSelected={selectedSegments.has(i)}
+                  isInPreview={previewSegments.has(i)}
+                  isPreviewActive={isPreviewActive}
                   isBeingDragged={isDragging && draggedSegmentIndex === i}
                   onSegmentSelect={selectSegment}
                   onSegmentToggle={toggleSegmentSelection}

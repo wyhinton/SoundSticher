@@ -49,6 +49,10 @@ export interface AppState {
     tabContentHeight?: number;
     theme?: {
       tabPanelBackgroundColor?: string;
+      previewBackgroundColor?: string;
+      previewBorderColor?: string;
+      previewHoverBackgroundColor?: string;
+      previewPulseColor?: string;
     };
     // Add other UI settings here in the future
   };
@@ -136,6 +140,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       tabContentHeight: 120,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
+        previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
+        previewBorderColor: 'rgba(255, 165, 0, 0.5)',
+        previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
+        previewPulseColor: 'rgba(255, 165, 0, 0.3)',
       },
     },
     _rev: 0, // content revision (groups + geometry)
@@ -181,6 +189,14 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       theme: {
         tabPanelBackgroundColor:
           loadedState.uiSettings?.theme?.tabPanelBackgroundColor || 'rgb(15 21 27)',
+        previewBackgroundColor:
+          loadedState.uiSettings?.theme?.previewBackgroundColor || 'rgba(255, 165, 0, 0.25)',
+        previewBorderColor:
+          loadedState.uiSettings?.theme?.previewBorderColor || 'rgba(255, 165, 0, 0.5)',
+        previewHoverBackgroundColor:
+          loadedState.uiSettings?.theme?.previewHoverBackgroundColor || 'rgba(255, 165, 0, 0.35)',
+        previewPulseColor:
+          loadedState.uiSettings?.theme?.previewPulseColor || 'rgba(255, 165, 0, 0.3)',
         ...loadedState.uiSettings?.theme,
       },
       ...loadedState.uiSettings,
@@ -219,6 +235,10 @@ export const appState = persisted<AppState>(
       tabContentHeight: 120,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
+        previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
+        previewBorderColor: 'rgba(255, 165, 0, 0.5)',
+        previewHoverBackgroundColor: 'rgba(255, 165, 0, 0.35)',
+        previewPulseColor: 'rgba(255, 165, 0, 0.3)',
       },
     },
     _version: CURRENT_STATE_VERSION,
@@ -773,6 +793,37 @@ export function setThemeColor(property: string, color: string) {
       state.uiSettings.theme = {};
     }
     (state.uiSettings.theme as any)[property] = color;
+    return state;
+  });
+}
+
+export function setPreviewThemeColors(colors: {
+  backgroundColor?: string;
+  borderColor?: string;
+  hoverBackgroundColor?: string;
+  pulseColor?: string;
+}) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    if (!state.uiSettings.theme) {
+      state.uiSettings.theme = {};
+    }
+    
+    if (colors.backgroundColor) {
+      state.uiSettings.theme.previewBackgroundColor = colors.backgroundColor;
+    }
+    if (colors.borderColor) {
+      state.uiSettings.theme.previewBorderColor = colors.borderColor;
+    }
+    if (colors.hoverBackgroundColor) {
+      state.uiSettings.theme.previewHoverBackgroundColor = colors.hoverBackgroundColor;
+    }
+    if (colors.pulseColor) {
+      state.uiSettings.theme.previewPulseColor = colors.pulseColor;
+    }
+    
     return state;
   });
 }
