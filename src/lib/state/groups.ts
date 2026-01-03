@@ -82,6 +82,22 @@ export class GroupRegistry {
     const version = state._version ?? 0;
     const isLogging = get(loggingState).groupsLog;
 
+    // DEBUG: Compare query parameters in compiled vs app state
+    // const defs = this.getDefs();
+    // const currentDef = defs?.[name];
+    // if (currentDef?.kind === 'query' && isLogging) {
+    //   console.log(`🔍 DEBUG eval("${name}"):`);
+    //   console.log('  Current appState definition:', currentDef.query);
+
+    //   // Check if we have a compiled version that might be stale
+    //   const compiledSelector = this.compiled.get(name);
+    //   if (compiledSelector) {
+    //     console.log('  ⚠️  Using compiled selector (might be stale)');
+    //   } else {
+    //     console.log('  ✅ Will compile fresh selector');
+    //   }
+    // }
+
     const cached = this.cache.get(name);
     if (cached && cached.version === version) {
       if (isLogging) {
@@ -111,17 +127,26 @@ export class GroupRegistry {
   invalidateAll() {
     const isLogging = get(loggingState).groupsLog;
     const cacheSize = this.cache.size;
+    const compiledSize = this.compiled.size;
 
     this.cache.clear();
+    this.compiled.clear(); // ✅ This is crucial - clear compiled selectors too!
 
     if (isLogging) {
       logger.groups.cache(`Invalidated all cached groups (${cacheSize} entries cleared)`);
+      console.log(`🗑️ Cleared ${compiledSize} compiled selectors - fresh compilation on next eval`);
     }
   }
 
   private getOrCompile(name: string): GroupSelector {
     const existing = this.compiled.get(name);
-    if (existing) return existing;
+    if (existing) {
+      const isLogging = get(loggingState).groupsLog;
+      if (isLogging) {
+        console.log(`🔄 Using existing compiled selector for "${name}"`);
+      }
+      return existing;
+    }
 
     const isLogging = get(loggingState).groupsLog;
     const defs = this.getDefs();
@@ -136,6 +161,7 @@ export class GroupRegistry {
 
     if (isLogging) {
       logger.groups.info(`Compiling group "${name}"`, def);
+      console.log(`🔨 COMPILING fresh selector for "${name}" with definition:`, def);
     }
 
     const selector = this.compile(def);
@@ -184,6 +210,12 @@ export class GroupRegistry {
 }
 
 function runQuery(state: AppState, q: ItemQuery): Set<string> {
+  const isLogging = get(loggingState).groupsLog;
+
+  if (isLogging) {
+    console.log(`📊 runQuery called with:`, q);
+  }
+
   switch (q.kind) {
     case 'lastOfAllSections': {
       // “last item in all of appState.sections”
@@ -208,6 +240,15 @@ function runQuery(state: AppState, q: ItemQuery): Set<string> {
     }
 
     case 'sectionPercent': {
+      if (isLogging) {
+        console.log(`📈 sectionPercent query executing with parameters:`, {
+          sectionIndex: q.sectionIndex,
+          percent: q.percent,
+          orderBy: q.orderBy,
+          take: q.take,
+        });
+      }
+
       const sec = state.sections[q.sectionIndex];
       if (!sec) return new Set();
 
@@ -216,6 +257,10 @@ function runQuery(state: AppState, q: ItemQuery): Set<string> {
       files.sort((a, b) => (a[orderBy] ?? 0) - (b[orderBy] ?? 0));
 
       const count = Math.max(0, Math.floor(files.length * clamp01(q.percent)));
+      console.log(
+        `📊 sectionPercent: ${files.length} files * ${q.percent} = ${count} files selected`
+      );
+
       const take = q.take ?? 'first';
       const picked = take === 'first' ? files.slice(0, count) : files.slice(-count);
 
@@ -244,6 +289,7 @@ function runQuery(state: AppState, q: ItemQuery): Set<string> {
       shuffleInPlace(files, rand);
 
       const picked = files.slice(0, count);
+
       return new Set(picked.map(f => f.id));
     }
   }
