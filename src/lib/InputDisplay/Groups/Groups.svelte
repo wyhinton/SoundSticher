@@ -8,7 +8,7 @@
     GroupRegistry,
     type ItemQuery,
     patchGroupQuery,
-    type ItemQueryDetailsDictionary,
+    ItemQueryDetailsDictionary,
   } from '$lib/state/groups';
   import { selectionService, previewService } from '$lib/state/selection.svelte';
   import { appState } from '$lib/state/state.svelte';
