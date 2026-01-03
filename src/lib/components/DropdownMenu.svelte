@@ -1,6 +1,6 @@
 <script lang="ts">
   import { appState } from '../state/state.svelte';
-  
+
   export let isOpen = false;
   export let onClose: () => void;
   export let maxHeight = '300px';
