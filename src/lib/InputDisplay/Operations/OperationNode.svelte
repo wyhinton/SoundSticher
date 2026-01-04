@@ -1,0 +1,120 @@
+<script lang="ts">
+  import { Handle, Position } from '@xyflow/svelte';
+  import type { OperationDef } from '$lib/state/operation';
+
+  interface OperationNodeData {
+    name: string;
+    kind: OperationDef['kind'];
+    icon: string;
+    label: string;
+    category: 'render' | 'edit' | 'meta';
+    def: OperationDef;
+  }
+
+  export let data: OperationNodeData;
+  export let selected: boolean = false;
+
+  function getCategoryColor(category: string): string {
+    switch (category) {
+      case 'render':
+        return '#f59e0b';
+      case 'edit':
+        return '#8b5cf6';
+      case 'meta':
+        return '#22c55e';
+      default:
+        return '#64748b';
+    }
+  }
+
+  $: categoryColor = getCategoryColor(data.category);
+</script>
+
+<div class="operation-node" class:selected style="--category-color: {categoryColor}">
+  <Handle type="target" position={Position.Left} />
+
+  <div class="node-header">
+    <span class="node-icon">{data.icon}</span>
+    <span class="node-label">{data.label}</span>
+  </div>
+
+  <div class="node-name">{data.name}</div>
+
+  <div class="node-category">
+    <span class="category-badge" style="background: {categoryColor}20; color: {categoryColor}">
+      {data.category}
+    </span>
+  </div>
+
+  <Handle type="source" position={Position.Right} />
+</div>
+
+<style>
+  .operation-node {
+    background: #1e1e2e;
+    border: 2px solid #313244;
+    border-radius: 8px;
+    padding: 12px;
+    min-width: 160px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+  }
+
+  .operation-node:hover {
+    border-color: var(--category-color);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--category-color) 30%, transparent);
+  }
+
+  .operation-node.selected {
+    border-color: var(--category-color);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--category-color) 50%, transparent);
+  }
+
+  .node-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .node-icon {
+    font-size: 1.2rem;
+  }
+
+  .node-label {
+    font-weight: 600;
+    color: #cdd6f4;
+    font-size: 0.9rem;
+  }
+
+  .node-name {
+    color: #a6adc8;
+    font-size: 0.75rem;
+    font-family: 'Fira Code', monospace;
+    background: #11111b;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+
+  .node-category {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .category-badge {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  :global(.operation-node .svelte-flow__handle) {
+    width: 10px;
+    height: 10px;
+    background: #45475a;
+    border: 2px solid var(--category-color, #64748b);
+  }
+</style>

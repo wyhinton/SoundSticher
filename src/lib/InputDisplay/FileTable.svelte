@@ -104,7 +104,7 @@
   }
 </script>
 
-<div style:width="-webkit-fill-available" class="card d-flex flex-column position-relative">
+<div class="h-fill-available w-fill-available card d-flex flex-column position-relative">
   <div class="d-flex flex-column h-fill-available" style:background-color="#080808">
     <div class="d-flex flex-column"></div>
     {#if sections.length === 0}

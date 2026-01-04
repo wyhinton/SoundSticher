@@ -5,6 +5,7 @@ export interface LoggingState {
   groupsLog: boolean;
   selectionLog: boolean;
   dragdropLog: boolean;
+  operationsLog: boolean;
   // Add future logging categories here
   // performanceLog?: boolean;
   // audioLog?: boolean;
@@ -15,6 +16,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   groupsLog: false,
   selectionLog: false,
   dragdropLog: false,
+  operationsLog: false,
 });
 
 // Helper function to check if logging is enabled for a category
@@ -195,6 +197,68 @@ export const logger = {
           `%c❌ DragDrop %c${message}`,
           'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
           'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
+  operations: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('operationsLog')) {
+        console.log(
+          `%c⚙️ Operations %c${message}`,
+          'background: #FF6B35; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF6B35; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    success: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('operationsLog')) {
+        console.log(
+          `%c✅ Operations %c${message}`,
+          'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #4CAF50; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    warning: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('operationsLog')) {
+        console.warn(
+          `%c⚠️ Operations %c${message}`,
+          'background: #FF9800; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF9800; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('operationsLog')) {
+        console.error(
+          `%c❌ Operations %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    execute: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('operationsLog')) {
+        console.log(
+          `%c▶️ Operations-Execute %c${message}`,
+          'background: #673AB7; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #673AB7; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    cache: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('operationsLog')) {
+        console.log(
+          `%c💾 Operations-Cache %c${message}`,
+          'background: #607D8B; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #607D8B; font-weight: normal;',
           ...args
         );
       }

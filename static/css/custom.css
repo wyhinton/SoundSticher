@@ -32,12 +32,24 @@
   font-display: swap;
 }
 
-.fira{
+.fira {
   font-family: 'Fira Code';
+}
+
+.font-size-12px{
+  font-size: 12px;
+}
+
+.font-size-14px{
+  font-size: 14px;
 }
 
 
 .h-fill-available{
+  height: -webkit-fill-available;
+}
+
+.w-fill-available{
   height: -webkit-fill-available;
 }
 

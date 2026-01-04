@@ -5,6 +5,7 @@ import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
 import { GroupsState } from './groups';
+import type { OperationsState } from './operation';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -25,6 +26,8 @@ interface VisualSample {
   path?: string;
   svgPath: string;
 }
+
+interface Operation {}
 
 export interface AppState {
   sections: Section[];
@@ -61,7 +64,8 @@ export interface AppState {
   };
   _version?: number; // Internal version tracking for migrations
   groups?: GroupsState;
-  _rev?: number; // content revision (groups + geometry)
+  operations?: OperationsState;
+  _rev?: number; // content revision (groups + geometry + operations)
 }
 
 export interface AudioFileItem {

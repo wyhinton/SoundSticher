@@ -2,7 +2,7 @@
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
   import { appState } from './state/state.svelte';
-  import Section from './InputDisplay/FileTable.svelte';
+  import FileTable from './InputDisplay/FileTable.svelte';
   import Plotted from './PlaybackDisplay/Timeline.svelte';
   import Sources from './InputDisplay/Sources.svelte';
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
@@ -17,6 +17,7 @@
   import { initializeStateSynchronization } from './state/stateSynchronization';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
+  import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -87,7 +88,11 @@
     <div class="px-0 d-flex h-fill-available">
       <Sources></Sources>
       <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
-      <Section sections={$appState.sections}></Section>
+
+      <div class="d-flex flex-column w-100">
+        <FileTable sections={$appState.sections}></FileTable>
+        <OperationsFlowPanel></OperationsFlowPanel>
+      </div>
     </div>
     <!-- <Waveform></Waveform> -->
     <div>
