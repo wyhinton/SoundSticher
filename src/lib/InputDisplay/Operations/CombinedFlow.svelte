@@ -159,7 +159,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-right: 2px solid #374151;
+    border-right: 1px solid #374151;
   }
 
   .flow-header {
@@ -181,7 +181,6 @@
   }
 
   .operation-name {
-    font-weight: 600;
     color: #ffffff;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
     white-space: nowrap;

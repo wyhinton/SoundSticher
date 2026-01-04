@@ -51,6 +51,7 @@ export interface AppState {
     tabContentHeight?: number;
     theme?: {
       tabPanelBackgroundColor?: string;
+      panelHeaderBackgroundColor?: string;
       previewBackgroundColor?: string;
       previewBorderColor?: string;
       previewHoverBackgroundColor?: string;
@@ -148,6 +149,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
       theme: {
+        panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
         previewBorderColor: 'rgba(255, 165, 0, 0.5)',
@@ -202,6 +204,8 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       debugActiveTab: loadedState.uiSettings?.debugActiveTab || 'frontend',
       tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
       theme: {
+        panelHeaderBackgroundColor:
+          loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
         tabPanelBackgroundColor:
           loadedState.uiSettings?.theme?.tabPanelBackgroundColor || 'rgb(15 21 27)',
         previewBackgroundColor:

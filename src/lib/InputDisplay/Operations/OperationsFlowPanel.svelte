@@ -351,7 +351,10 @@
 </script>
 
 <div class="operations-flow-panel" class:collapsed={!isExpanded}>
-  <div class="panel-header">
+  <div
+    class="panel-header"
+    style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
+  >
     <div class="header-left">
       <button
         class="toggle-btn"
@@ -363,9 +366,9 @@
       </button>
       <span class="panel-title">
         <i class="fa fa-project-diagram"></i>
-        Operations Flow
+        Operations
       </span>
-      <div class="stats-badges">
+      <!-- <div class="stats-badges">
         <span class="badge badge-total" title="Total operations">{stats.total}</span>
         {#if stats.render > 0}
           <span class="badge badge-render" title="Render operations">🔗 {stats.render}</span>
@@ -376,7 +379,7 @@
         {#if stats.meta > 0}
           <span class="badge badge-meta" title="Meta operations">🔀 {stats.meta}</span>
         {/if}
-      </div>
+      </div> -->
     </div>
     <div class="header-actions">
       <button
@@ -441,7 +444,10 @@
       </div>
 
       <div class="operation-creation-panel">
-        <div class="creation-header">
+        <div
+          class="creation-header"
+          style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
+        >
           <h4>Add Operations</h4>
         </div>
         <div class="operation-buttons">
@@ -492,15 +498,16 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 12px;
-    background: var(--header-bg, #181825);
+    padding: 4px 8px;
+    /* background: var(--header-bg); */
+    background-color: #161616;
     border-bottom: 1px solid var(--border-color, #313244);
   }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
   }
 
   .toggle-btn {
@@ -508,9 +515,10 @@
     border: none;
     color: var(--text-muted, #a6adc8);
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
     transition: background 0.2s;
+    font-size: 0.75rem;
   }
 
   .toggle-btn:hover {
@@ -522,20 +530,22 @@
     color: var(--text-primary, #cdd6f4);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    font-size: 0.8rem;
   }
 
   .stats-badges {
     display: flex;
-    gap: 4px;
-    margin-left: 8px;
+    gap: 3px;
+    margin-left: 6px;
   }
 
   .badge {
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    border-radius: 4px;
+    font-size: 0.65rem;
+    padding: 1px 4px;
+    border-radius: 3px;
     font-weight: 500;
+    line-height: 1.2;
   }
 
   .badge-total {
@@ -560,12 +570,13 @@
 
   .header-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
   }
 
   .btn-xs {
-    font-size: 0.75rem;
-    padding: 2px 6px;
+    font-size: 0.65rem;
+    padding: 2px 4px;
+    line-height: 1.2;
   }
 
   .panel-content {
@@ -634,7 +645,6 @@
   .creation-header h4 {
     margin: 0;
     font-size: 0.8rem;
-    font-weight: 600;
     color: var(--text-primary, #cdd6f4);
   }
 
