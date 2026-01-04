@@ -42,14 +42,10 @@
 </script>
 
 <div class="prism-wrapper {className}">
-  <pre 
-    class="language-{language}" 
-    style="max-height: {maxHeight}; font-size: {fontSize}; line-height: {lineHeight};"
-  >
-    <code 
-      class="language-{language}" 
-      bind:this={codeContainer}
-    ></code>
+  <pre
+    class="language-{language}"
+    style="max-height: {maxHeight}; font-size: {fontSize}; line-height: {lineHeight};">
+    <code class="language-{language}" bind:this={codeContainer}></code>
   </pre>
 </div>
 
@@ -101,7 +97,7 @@
       font-size: 0.6rem !important;
       line-height: 1.3 !important;
     }
-    
+
     code {
       padding: 12px;
     }

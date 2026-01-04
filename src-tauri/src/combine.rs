@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::logging::{LogSystem, LoggingService};
 use crate::state::{AppState, AudioFile};
 use hound::{SampleFormat, WavSpec, WavWriter};
 use rodio::buffer::SamplesBuffer;
@@ -8,7 +9,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, sleep};
 use std::time::{Duration, Instant};
 use symphonia::core::audio::SampleBuffer;
@@ -106,12 +107,20 @@ pub enum BufferAudioEvent {
 pub async fn update_inputs(
     sections: Vec<Section>,
     state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     app_handle: tauri::AppHandle,
     on_event: Channel<BufferAudioEvent>,
 ) -> Result<String, Error> {
     let state = state.inner().clone();
+    let logging_service = logging_service.inner().clone();
     let current_token = state.cancel_token.fetch_add(1, Ordering::SeqCst) + 1;
-    println!("RUNNING UPDATES");
+    
+    // Log operation start
+    if let Ok(logger) = logging_service.lock() {
+        logger.info(LogSystem::Combine, "Starting input updates", Some("update_inputs"));
+    } else {
+        println!("RUNNING UPDATES");
+    }
 
     // let count = state.combine_process.clone();
     // *count.lock().unwrap() += 1;
@@ -252,11 +261,13 @@ pub enum CombineAudioEvent {
 #[tauri::command]
 pub async fn combine_all_cached_samples(
     state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     app: AppHandle,
     on_event: Channel<CombineAudioEvent>,
     custom_order: Option<Vec<Uuid>>, // Optional custom order
 ) -> Result<String, Error> {
     let state = Arc::clone(&state); // Clone for thread
+    let logging_service = logging_service.inner().clone();
     let app = app.clone(); // Clone for thread
 
     let count = state.combine_process.clone();
@@ -265,8 +276,23 @@ pub async fn combine_all_cached_samples(
     tauri::async_runtime::spawn_blocking(move || {
         let process_count = count.clone();
         let orig = *process_count.lock().unwrap();
-
-        println!("ORIGIN: {}, COUNT: {}", orig, count.lock().unwrap());
+        
+        // Log operation start
+        if let Ok(logger) = logging_service.lock() {
+            logger.info_with_data(
+                LogSystem::Combine,
+                "Starting cached samples combination",
+                Some("combine"),
+                serde_json::json!({
+                    "origin_count": orig,
+                    "current_count": *count.lock().unwrap(),
+                    "has_custom_order": custom_order.is_some()
+                })
+            );
+        } else {
+            println!("ORIGIN: {}, COUNT: {}", orig, count.lock().unwrap());
+        }
+        
         state.buffering_samples.store(true, Ordering::Relaxed);
         let mut audio_files = state.audio_files.lock().unwrap();
 
@@ -391,16 +417,21 @@ pub async fn combine_all_cached_samples(
 #[tauri::command]
 pub async fn test_async(
     state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     app: AppHandle,
     on_event: Channel<CombineAudioEvent>,
 ) -> Result<String, Error> {
     let state = Arc::clone(&state); // Clone for thread
+    let logging_service = logging_service.inner().clone();
     let app = app.clone(); // Clone for thread
 
     let count = state.combine_process.clone();
     *count.lock().unwrap() += 1;
 
     tauri::async_runtime::spawn_blocking(move || {
+        if let Ok(logger) = logging_service.lock() {
+            logger.debug(LogSystem::Combine, "Test async function called", Some("test"));
+        }
         sleep(Duration::from_millis(5000));
         Ok("⏳Did it".to_string())
     })
@@ -454,6 +485,7 @@ pub fn get_custom_order(state: State<'_, Arc<AppState>>) -> Result<Vec<Uuid>, Er
 #[tauri::command]
 pub async fn combine_all_cached_samples_with_custom_order(
     state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     app: AppHandle,
     on_event: Channel<CombineAudioEvent>,
 ) -> Result<String, Error> {
@@ -468,7 +500,7 @@ pub async fn combine_all_cached_samples_with_custom_order(
     };
 
     // Call the main combine function with the custom order
-    combine_all_cached_samples(state, app, on_event, custom_order).await
+    combine_all_cached_samples(state, logging_service, app, on_event, custom_order).await
 }
 
 #[tauri::command]

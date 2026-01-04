@@ -1,13 +1,16 @@
 use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::epr;
+use crate::logging::{LogSystem, LoggingService};
 use crate::looping_samples_buffer::LoopingSamplesBuffer;
 use crate::state::AppState;
+use crate::{log_debug, log_error, log_info};
 
 // Custom macro for bold red error messages
 
@@ -16,9 +19,26 @@ pub fn play_timeline_audio(
     state: State<'_, Arc<AppState>>,
     app: AppHandle,
     start_seconds: Option<f32>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) {
     let state = state.inner().clone();
-    println!("starting play thread");
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Playback,
+            "play",
+            "Starting timeline audio playback"
+        );
+        if let Some(start_time) = start_seconds {
+            log_debug!(
+                logger,
+                LogSystem::Playback,
+                "play",
+                &format!("Start time: {:.2}s", start_time)
+            );
+        }
+    }
 
     match start_seconds {
         Some(val) => {
@@ -184,7 +204,20 @@ pub fn play_timeline_audio(
 }
 
 #[tauri::command]
-pub fn pause_timeline_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
+pub fn pause_timeline_audio(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Playback,
+            "pause",
+            "Pausing timeline audio"
+        );
+    }
+
     println!("PAUSING");
     let current_song = state.current_song.lock().unwrap();
     if let Some(sink) = &*current_song {
@@ -232,13 +265,37 @@ pub fn pause_timeline_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn get_current_play_progress(state: State<'_, Arc<AppState>>) -> f32 {
+pub fn get_current_play_progress(
+    state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> f32 {
     let progress = state.current_play_progress.lock().unwrap();
+    if let Ok(logger) = logging_service.lock() {
+        log_debug!(
+            logger,
+            LogSystem::Playback,
+            "progress",
+            &format!("Current progress: {:.2}", *progress)
+        );
+    }
     *progress
 }
 
 #[tauri::command]
-pub fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
+pub fn set_volume(
+    vol: f32,
+    state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Playback,
+            "volume",
+            &format!("Setting volume to: {:.2}", vol)
+        );
+    }
+
     let mut current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
         sink.set_volume(vol);
@@ -246,7 +303,21 @@ pub fn set_volume(vol: f32, state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
-pub fn set_timeline_play_position(position: f32, state: State<'_, Arc<AppState>>, app: AppHandle) {
+pub fn set_timeline_play_position(
+    position: f32,
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Playback,
+            "seek",
+            &format!("Setting timeline position to: {:.2}s", position)
+        );
+    }
+
     println!("SETTING PLAY POSITINO");
     let current_song = state.current_song.lock().unwrap();
 
@@ -441,7 +512,19 @@ fn set_timeline_play_position_fallback(
 }
 
 #[tauri::command]
-pub fn stop_timeline_audio(state: State<'_, Arc<AppState>>, app: AppHandle) {
+pub fn stop_timeline_audio(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Playback,
+            "stop",
+            "Stopping timeline audio"
+        );
+    }
     println!("STOPPING");
     let current_song = state.current_song.lock().unwrap();
     if let Some(sink) = &*current_song {

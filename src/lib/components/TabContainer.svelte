@@ -86,6 +86,8 @@
         <slot name="export" />
       {:else if activeTab === 'debug'}
         <slot name="debug" />
+      {:else if activeTab === 'logging'}
+        <slot name="logging" />
       {:else}
         <slot {activeTab} />
       {/if}
