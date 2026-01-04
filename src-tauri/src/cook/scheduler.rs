@@ -4,6 +4,7 @@ use crate::artifacts::{Artifact, ArtifactStorage};
 use crate::cook::{CookTask, CookTaskPriority, TaskStatus};
 use crate::graph::{InvalidationManager, OpId, OperationNodeManager};
 use crate::ops::{Operation, OperationContext, OperationRegistry, OperationResult};
+use crate::util::id_utils;
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -225,7 +226,7 @@ impl CookScheduler {
     /// Check if task dependencies are satisfied
     fn are_dependencies_satisfied(&self, task: &CookTask) -> bool {
         let invalidation_manager = self.invalidation_manager.lock().unwrap();
-        let dependencies = invalidation_manager.graph.get_dependencies(task.op_id);
+        let dependencies = invalidation_manager.get_dependencies(task.op_id);
 
         let completed = self.completed_tasks.lock().unwrap();
         dependencies.iter().all(|dep| completed.contains_key(dep))
@@ -282,7 +283,7 @@ impl CookScheduler {
         let mut inputs = HashMap::new();
         let dependencies = {
             let invalidation_manager = self.invalidation_manager.lock().unwrap();
-            invalidation_manager.graph.get_dependencies(task.op_id)
+            invalidation_manager.get_dependencies(task.op_id)
         };
 
         for dep_id in dependencies {
@@ -290,7 +291,10 @@ impl CookScheduler {
             if let Some(task_result) = completed.get(&dep_id) {
                 match &task_result.result {
                     Ok(artifact) => {
-                        inputs.insert(format!("dep_{}", dep_id.data().as_ffi()), artifact.clone());
+                        inputs.insert(
+                            format!("dep_{}", id_utils::friendly_id(dep_id, "dep")),
+                            artifact.clone(),
+                        );
                     }
                     Err(_) => return Err(SchedulerError::DependencyFailed(dep_id)),
                 }
@@ -299,10 +303,10 @@ impl CookScheduler {
             }
         }
 
-        let work_dir = self
-            .config
-            .work_directory
-            .join(format!("task_{}", task.op_id.data().as_ffi()));
+        let work_dir = self.config.work_directory.join(format!(
+            "task_{}",
+            id_utils::friendly_id(task.op_id, "task")
+        ));
         std::fs::create_dir_all(&work_dir)?;
 
         Ok(OperationContext {
@@ -315,13 +319,15 @@ impl CookScheduler {
     }
 
     /// Start a worker thread
-    fn start_worker_thread(&self, worker_id: usize) -> thread::JoinHandle<()> {
+    fn start_worker_thread(&self, _worker_id: usize) -> thread::JoinHandle<()> {
         let task_queue = self.task_queue.clone();
         let executing_tasks = self.executing_tasks.clone();
         let completed_tasks = self.completed_tasks.clone();
         let task_receiver = self.task_receiver.clone();
         let state = self.state.clone();
-        let scheduler = self as *const CookScheduler;
+        let operation_registry = self.operation_registry.clone();
+        let invalidation_manager = self.invalidation_manager.clone();
+        let config = self.config.clone();
 
         thread::spawn(move || {
             loop {
@@ -336,13 +342,21 @@ impl CookScheduler {
                         }
                         SchedulerMessage::TaskFailed(task_id, error) => {
                             // Handle task failure
-                            println!("Task {} failed: {}", task_id.data().as_ffi(), error);
+                            println!(
+                                "Task {} failed: {}",
+                                id_utils::friendly_id(task_id, "task"),
+                                error
+                            );
                         }
                     }
                 }
 
                 // Get next task
-                if let Some(task) = unsafe { &*scheduler }.get_next_task() {
+                if let Some(task) = CookScheduler::get_next_task_static(
+                    &task_queue,
+                    &invalidation_manager,
+                    &completed_tasks,
+                ) {
                     // Add to executing tasks
                     {
                         let mut executing = executing_tasks.lock().unwrap();
@@ -357,7 +371,13 @@ impl CookScheduler {
                     }
 
                     // Execute task
-                    let result = unsafe { &*scheduler }.execute_task(task.clone());
+                    let result = CookScheduler::execute_task_static(
+                        task.clone(),
+                        &operation_registry,
+                        &invalidation_manager,
+                        &completed_tasks,
+                        &config,
+                    );
 
                     // Remove from executing and add to completed
                     {
@@ -400,6 +420,145 @@ impl CookScheduler {
             current_memory_usage: state.current_memory_usage,
             max_concurrent_tasks: self.config.max_concurrent_tasks,
         }
+    }
+
+    /// Static version of get_next_task for use in worker threads
+    fn get_next_task_static(
+        task_queue: &Arc<Mutex<BinaryHeap<CookTask>>>,
+        invalidation_manager: &Arc<Mutex<InvalidationManager>>,
+        completed_tasks: &Arc<Mutex<HashMap<OpId, TaskResult>>>,
+    ) -> Option<CookTask> {
+        let mut queue = task_queue.lock().unwrap();
+
+        while let Some(task) = queue.pop() {
+            // Check if all dependencies are satisfied
+            if CookScheduler::are_dependencies_satisfied_static(
+                &task,
+                invalidation_manager,
+                completed_tasks,
+            ) {
+                return Some(task);
+            } else {
+                // Put task back in queue with lower priority
+                // TODO: Implement proper dependency waiting
+                queue.push(task);
+                break;
+            }
+        }
+
+        None
+    }
+
+    /// Static version of are_dependencies_satisfied for use in worker threads
+    fn are_dependencies_satisfied_static(
+        task: &CookTask,
+        invalidation_manager: &Arc<Mutex<InvalidationManager>>,
+        completed_tasks: &Arc<Mutex<HashMap<OpId, TaskResult>>>,
+    ) -> bool {
+        let invalidation_manager = invalidation_manager.lock().unwrap();
+        let dependencies = invalidation_manager.get_dependencies(task.op_id);
+
+        let completed = completed_tasks.lock().unwrap();
+        dependencies.iter().all(|dep| completed.contains_key(dep))
+    }
+
+    /// Static version of execute_task for use in worker threads
+    fn execute_task_static(
+        mut task: CookTask,
+        operation_registry: &Arc<OperationRegistry>,
+        invalidation_manager: &Arc<Mutex<InvalidationManager>>,
+        completed_tasks: &Arc<Mutex<HashMap<OpId, TaskResult>>>,
+        config: &SchedulerConfig,
+    ) -> TaskResult {
+        let start_time = Instant::now();
+
+        // Get operation from registry
+        let operation = match operation_registry.get(&task.operation_type) {
+            Some(op) => op,
+            None => {
+                return TaskResult {
+                    task_id: task.op_id,
+                    result: Err(format!("Unknown operation type: {}", task.operation_type)),
+                    execution_time: start_time.elapsed(),
+                    memory_used: 0,
+                }
+            }
+        };
+
+        // Prepare operation context
+        let context = match CookScheduler::prepare_operation_context_static(
+            &task,
+            invalidation_manager,
+            completed_tasks,
+            config,
+        ) {
+            Ok(ctx) => ctx,
+            Err(e) => {
+                return TaskResult {
+                    task_id: task.op_id,
+                    result: Err(format!("Failed to prepare context: {}", e)),
+                    execution_time: start_time.elapsed(),
+                    memory_used: 0,
+                }
+            }
+        };
+
+        // Execute operation
+        task.status = TaskStatus::Running;
+        let result = operation.execute(context);
+
+        TaskResult {
+            task_id: task.op_id,
+            result: result.map_err(|e| e.to_string()),
+            execution_time: start_time.elapsed(),
+            memory_used: 0, // TODO: Implement memory tracking
+        }
+    }
+
+    /// Static version of prepare_operation_context for use in worker threads
+    fn prepare_operation_context_static(
+        task: &CookTask,
+        invalidation_manager: &Arc<Mutex<InvalidationManager>>,
+        completed_tasks: &Arc<Mutex<HashMap<OpId, TaskResult>>>,
+        config: &SchedulerConfig,
+    ) -> Result<OperationContext, SchedulerError> {
+        // Get input artifacts from dependencies
+        let mut inputs = HashMap::new();
+        let dependencies = {
+            let invalidation_manager = invalidation_manager.lock().unwrap();
+            invalidation_manager.get_dependencies(task.op_id)
+        };
+
+        for dep_id in dependencies {
+            let completed = completed_tasks.lock().unwrap();
+            if let Some(task_result) = completed.get(&dep_id) {
+                match &task_result.result {
+                    Ok(artifact) => {
+                        inputs.insert(
+                            format!("dep_{}", id_utils::friendly_id(dep_id, "dep")),
+                            artifact.clone(),
+                        );
+                    }
+                    Err(_) => return Err(SchedulerError::DependencyFailed(dep_id)),
+                }
+            } else {
+                return Err(SchedulerError::DependencyNotReady(dep_id));
+            }
+        }
+
+        let work_dir = config.work_directory.join(format!(
+            "task_{}",
+            id_utils::friendly_id(task.op_id, "task")
+        ));
+        std::fs::create_dir_all(&work_dir)?;
+
+        Ok(OperationContext {
+            op_id: task.op_id,
+            inputs,
+            parameters: task.parameters.clone(),
+            work_dir,
+            progress_callback: None, // TODO: Implement progress reporting
+        })
     }
 }
 

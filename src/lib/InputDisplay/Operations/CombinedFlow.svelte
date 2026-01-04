@@ -122,7 +122,7 @@
     if (event.ctrlKey && event.shiftKey && event.code === 'Space') {
       event.preventDefault();
       showDebugInfo = !showDebugInfo;
-      
+
       if (showDebugInfo) {
         updateDebugInfo();
         // Start periodic updates when debug is shown

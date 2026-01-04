@@ -1,7 +1,8 @@
 // DAG (Directed Acyclic Graph) and dependencies management
 
-use crate::ops::OpId;
 use std::collections::{HashMap, HashSet, VecDeque};
+
+use crate::util::OpId;
 
 #[derive(Debug, Clone)]
 pub struct OperationGraph {
@@ -194,5 +195,10 @@ impl OperationGraph {
         }
 
         invalidated
+    }
+
+    /// Get the total number of nodes in the graph
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
     }
 }

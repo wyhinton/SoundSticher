@@ -1,6 +1,7 @@
 // Cook task definition and management
 
 use crate::graph::OpId;
+use crate::util::id_utils;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime};
@@ -288,7 +289,7 @@ impl CookTask {
         format!(
             "{} ({}): {:?} - {}",
             self.operation_type,
-            self.op_id.data().as_ffi(),
+            id_utils::friendly_id(self.op_id, "task"),
             self.status,
             if let Some(label) = self.metadata.get("label") {
                 label.clone()

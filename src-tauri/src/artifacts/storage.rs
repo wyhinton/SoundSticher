@@ -3,7 +3,7 @@
 use crate::artifacts::{Artifact, CompressionType, StorableArtifact, StorageHints};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 /// Storage manager for artifacts with caching and compression
@@ -397,6 +397,9 @@ pub enum StorageError {
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
+
+    #[error("Artifact serialization error: {0}")]
+    ArtifactSerializationError(#[from] Box<dyn std::error::Error>),
 
     #[error("Compression error: {0}")]
     CompressionError(String),

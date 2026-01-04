@@ -253,7 +253,7 @@ impl RegionsArtifact {
     /// Merge overlapping regions
     pub fn merge_overlapping_regions(&mut self) {
         self.sort_by_start_time();
-        let mut merged = Vec::new();
+        let mut merged: Vec<AudioRegion> = Vec::new();
 
         for region in self.regions.drain(..) {
             if let Some(last) = merged.last_mut() {

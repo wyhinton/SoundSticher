@@ -13,6 +13,7 @@ use crate::error::Error;
 use crate::logging::{LogSystem, LoggingConfig, LoggingService};
 use crate::metadata::get_metadata;
 use crate::state::AppState;
+
 mod audio_manager;
 mod combine;
 mod encoder;
@@ -25,6 +26,11 @@ mod sample_playback;
 mod sorting;
 mod state;
 mod timeline_playback;
+mod artifacts;
+mod cook;
+mod graph;
+mod ops;
+mod util;
 
 pub struct Song {
     pub title: String,
@@ -141,6 +147,132 @@ fn open_in_explorer(state: State<'_, Arc<AppState>>, file_to_open: String) {
     showfile::show_path_in_file_manager(file_to_open);
 }
 
+#[tauri::command]
+async fn test_operation(
+    operation_name: String,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<String, Error> {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!("Testing operation: {}", operation_name)
+        );
+    }
+
+    // For basic testing, we'll simulate operations
+    match operation_name.as_str() {
+        "combine_active" | "combine" | "merge" => {
+            use crate::artifacts::{Artifact, AudioArtifact};
+            use crate::ops::{MergeOperation, Operation, OperationContext};
+            use crate::graph::OpId;
+            use std::collections::HashMap;
+
+            // Create a test merge operation
+            let operation = MergeOperation::new();
+            
+            // Create dummy audio artifacts for testing
+            let audio1 = AudioArtifact {
+                path: std::path::PathBuf::from("test1.wav"),
+                format: "wav".to_string(),
+                sample_rate: 44100,
+                channels: 2,
+                duration: 5.0,
+                metadata: HashMap::new(),
+            };
+            
+            let audio2 = AudioArtifact {
+                path: std::path::PathBuf::from("test2.wav"),
+                format: "wav".to_string(),
+                sample_rate: 44100,
+                channels: 2,
+                duration: 3.0,
+                metadata: HashMap::new(),
+            };
+
+            // Create inputs
+            let mut inputs = HashMap::new();
+            inputs.insert(
+                "inputs".to_string(),
+                Artifact::AudioList(vec![audio1, audio2])
+            );
+
+            // Create parameters
+            let parameters = serde_json::json!({
+                "crossfade_ms": 100.0,
+                "normalize": false
+            });
+
+            // Create operation context
+            let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
+            let op_id = op_map.insert(());
+            
+            let context = OperationContext {
+                op_id,
+                work_dir: std::env::temp_dir(),
+                inputs,
+                parameters,
+                progress_callback: None,
+            };
+
+            // Execute the operation
+            match operation.execute(context) {
+                Ok(result) => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            "Operation executed successfully"
+                        );
+                    }
+                    
+                    // Return a more user-friendly message
+                    Ok(format!(
+                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⏱️ Estimated Duration: 8.0 seconds",
+                        operation_name,
+                        match result {
+                            Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
+                            _ => "Processed successfully".to_string()
+                        }
+                    ))
+                }
+                Err(e) => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("Operation failed: {:?}", e)
+                        );
+                    }
+                    Err(Error::Io(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Operation failed: {:?}", e)
+                    )))
+                }
+            }
+        }
+        "master_pipeline" => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    "Simulating pipeline operation"
+                );
+            }
+            Ok(format!(
+                "✅ Pipeline operation '{}' simulated successfully!\n\n🔗 This would run a sequence of operations:\n  1. combine_active\n  2. normalize\n  3. export\n\n⚠️ Note: This is a simulation - actual pipeline execution not yet implemented.",
+                operation_name
+            ))
+        }
+        _ => {
+            Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("❌ Unknown operation: {}\n\n💡 Available operations:\n  • combine_active\n  • master_pipeline", operation_name)
+            )))
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -209,6 +341,7 @@ pub fn run() {
             sorting::update_sorting,
             update_logging_config,
             get_logging_config,
+            test_operation,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

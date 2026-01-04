@@ -16,8 +16,6 @@ pub enum SplitType {
     SilenceDetection,
     /// Split into equal duration chunks
     EqualChunks,
-    /// Split by channel
-    Channels,
 }
 
 impl SplitOperation {
@@ -133,12 +131,11 @@ impl Operation for SplitOperation {
                 let chunk_duration: f64 = context.get_parameter("segment_duration").unwrap_or(10.0);
                 self.split_into_equal_chunks(input_audio, chunk_duration, &context)?
             }
-            "channels" => self.split_by_channels(input_audio, &context)?,
             _ => {
                 return Err(OperationError::InvalidInput(format!(
                     "Unsupported split type: {}",
                     split_type
-                )))
+                )));
             }
         };
 
@@ -158,7 +155,6 @@ impl Operation for SplitOperation {
         match self.split_type {
             SplitType::TimeSegments | SplitType::EqualChunks => std::time::Duration::from_secs(1),
             SplitType::SilenceDetection => std::time::Duration::from_secs(5), // Requires analysis
-            SplitType::Channels => std::time::Duration::from_secs(2),
         }
     }
 
@@ -257,46 +253,6 @@ impl SplitOperation {
             context.report_progress(0.2 + (0.7 * (i as f32 / num_chunks as f32)));
 
             let segment = self.create_segment(input, i, start_time, end_time, &context.work_dir)?;
-
-            segments.push(segment);
-        }
-
-        Ok(segments)
-    }
-
-    fn split_by_channels(
-        &self,
-        input: &AudioArtifact,
-        context: &OperationContext,
-    ) -> Result<Vec<AudioArtifact>, OperationError> {
-        let mut segments = Vec::new();
-
-        for channel in 0..input.channels {
-            context.report_progress(0.2 + (0.7 * (channel as f32 / input.channels as f32)));
-
-            // TODO: Extract individual channel
-            let output_path = context.work_dir.join(format!(
-                "split_{}_{}_ch{}.wav",
-                context.op_id.data().as_ffi(),
-                input.path.file_stem().unwrap_or_default().to_string_lossy(),
-                channel
-            ));
-
-            // Placeholder - create single-channel audio file
-            std::fs::write(&output_path, b"placeholder_channel_audio")?;
-
-            let segment = AudioArtifact {
-                path: output_path,
-                format: input.format.clone(),
-                sample_rate: input.sample_rate,
-                channels: 1, // Single channel
-                duration: input.duration,
-                metadata: {
-                    let mut meta = input.metadata.clone();
-                    meta.insert("source_channel".to_string(), channel.to_string());
-                    meta
-                },
-            };
 
             segments.push(segment);
         }

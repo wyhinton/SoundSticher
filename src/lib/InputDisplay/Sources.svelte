@@ -366,9 +366,8 @@
 
   // Add tab state at the end of script section
   let isResizing: boolean = false;
-  
-  // Selected operation state (bound from parent)
 
+  // Selected operation state (bound from parent)
 
   function handleResizeStart(event: MouseEvent) {
     event.preventDefault();

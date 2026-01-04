@@ -82,6 +82,11 @@ impl InvalidationManager {
         self.dirty_nodes.iter().cloned().collect()
     }
 
+    /// Get dependencies for a node
+    pub fn get_dependencies(&self, node_id: OpId) -> Vec<OpId> {
+        self.graph.get_dependencies(node_id)
+    }
+
     /// Get the current cook queue
     pub fn get_cook_queue(&self) -> Vec<OpId> {
         self.cook_queue.iter().cloned().collect()
@@ -157,7 +162,7 @@ impl InvalidationManager {
     /// Get invalidation statistics
     pub fn get_stats(&self) -> InvalidationStats {
         InvalidationStats {
-            total_nodes: self.graph.nodes.len(),
+            total_nodes: self.graph.node_count(),
             dirty_nodes: self.dirty_nodes.len(),
             cook_queue_length: self.cook_queue.len(),
         }

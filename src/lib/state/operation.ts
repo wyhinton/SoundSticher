@@ -428,11 +428,9 @@ export const testOperations: NamedOperationDef[] = [
   {
     name: 'combine_active',
     def: {
+      sources: [],
       kind: 'combine',
       source: { type: 'active' },
-      outputPath: 'output/combined_{date}.wav',
-      gapSeconds: 0,
-      format: 'wav',
     },
   },
   {

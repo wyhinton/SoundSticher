@@ -418,8 +418,8 @@
           <!-- Show individual CombinedFlow components for each combine operation -->
           <div class="combined-flows-row h-100 d-flex">
             {#each combineOperations as combineOp (combineOp.name)}
-              <CombinedFlow 
-                operation={combineOp.operation} 
+              <CombinedFlow
+                operation={combineOp.operation}
                 operationName={combineOp.name}
                 isSelected={selectedOperationName === combineOp.name}
                 on:operationSelect={handleOperationSelect}
