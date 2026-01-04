@@ -9,18 +9,22 @@
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
-  import OutputNode from './OutputNode.svelte';
 
   export let operation: CombineOperation;
   export let operationName: string;
 
   $: opInfo = OperationInfoDictionary[operation.kind];
 
+  // Debug state
+  let showDebugInfo = false;
+  let debugInfo = { x: 0, y: 0, zoom: 1 };
+  let flowInstance: any = null;
+  let debugUpdateInterval: any = null;
+
   // Custom node types
   const nodeTypes: NodeTypes = {
     operation: OperationNode,
     source: SourceNode,
-    output: OutputNode,
   };
 
   // Generate flow for this specific combine operation
@@ -30,8 +34,8 @@
 
     // Layout configuration
     const HORIZONTAL_SPACING = 200;
-    const START_X = 20;
-    const START_Y = 60;
+    const START_X = 50;
+    const START_Y = 50;
 
     // Create source node
     const sourceNodeId = `combine-source-${operationName}`;
@@ -56,27 +60,23 @@
       data: {
         name: operationName,
         kind: operation.kind,
-        icon: opInfo.icon,
-        label: opInfo.label,
-        category: opInfo.category,
+        icon: opInfo?.icon || '🔗',
+        label: opInfo?.label || 'Combine',
+        category: opInfo?.category || 'render',
         def: operation,
+        // Custom styling for combine operation
+        customStyle: {
+          background: '#3b82f6',
+          borderRadius: '50%',
+          width: '80px',
+          height: '80px',
+          border: '3px solid #1d4ed8',
+          color: 'white',
+          fontSize: '24px',
+        },
       },
       draggable: false,
       selectable: true,
-    });
-
-    // Create output node
-    const outputNodeId = `combine-output-${operationName}`;
-    nodes.push({
-      id: outputNodeId,
-      type: 'output',
-      position: { x: START_X + HORIZONTAL_SPACING * 2, y: START_Y },
-      data: {
-        operationName: operationName,
-        format: operation.format || 'wav',
-      },
-      draggable: false,
-      selectable: false,
     });
 
     // Create edges
@@ -84,18 +84,9 @@
       id: `combine-edge-1-${operationName}`,
       source: sourceNodeId,
       target: opNodeId,
-      type: 'smoothstep',
+      type: 'bezier',
       animated: false,
       style: 'stroke: #64748b; stroke-width: 2px;',
-    });
-
-    edges.push({
-      id: `combine-edge-2-${operationName}`,
-      source: opNodeId,
-      target: outputNodeId,
-      type: 'smoothstep',
-      animated: false,
-      style: 'stroke: #22c55e; stroke-width: 2px;',
     });
 
     return { nodes, edges };
@@ -120,17 +111,67 @@
     }
   }
 
+  // Handle keyboard events for debug toggle
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.ctrlKey && event.shiftKey && event.code === 'Space') {
+      event.preventDefault();
+      showDebugInfo = !showDebugInfo;
+      
+      if (showDebugInfo) {
+        updateDebugInfo();
+        // Start periodic updates when debug is shown
+        debugUpdateInterval = setInterval(updateDebugInfo, 100);
+      } else {
+        // Clear interval when debug is hidden
+        if (debugUpdateInterval) {
+          clearInterval(debugUpdateInterval);
+          debugUpdateInterval = null;
+        }
+      }
+    }
+  }
+
+  // Update debug information from flow instance
+  function updateDebugInfo() {
+    if (flowInstance) {
+      try {
+        const viewport = flowInstance.getViewport();
+        debugInfo = {
+          x: Math.round(viewport.x * 100) / 100,
+          y: Math.round(viewport.y * 100) / 100,
+          zoom: Math.round(viewport.zoom * 100) / 100,
+        };
+      } catch (error) {
+        // Fallback if getViewport is not available
+        console.warn('Could not get viewport info:', error);
+      }
+    }
+  }
+
+  // Handle viewport changes to update debug info
+  function onViewportChange(viewport: { x: number; y: number; zoom: number }) {
+    if (showDebugInfo) {
+      debugInfo = {
+        x: Math.round(viewport.x * 100) / 100,
+        y: Math.round(viewport.y * 100) / 100,
+        zoom: Math.round(viewport.zoom * 100) / 100,
+      };
+    }
+  }
+
   $: flowData = generateCombineFlow();
 </script>
 
 <div class="combined-flow">
   <div class="flow-content">
     <SvelteFlow
+      bind:this={flowInstance}
       nodes={flowData.nodes}
       edges={flowData.edges}
       {nodeTypes}
       fitView
-      minZoom={0.5}
+      fitViewOptions={{ padding: 1, includeHiddenNodes: false }}
+      minZoom={0.2}
       maxZoom={1.5}
       panOnScroll={false}
       zoomOnScroll={false}
@@ -144,9 +185,24 @@
     </SvelteFlow>
 
     <!-- Overlaid header -->
-    <div class="flow-header">
-      <span class="operation-icon">{opInfo.icon}</span>
+    <div
+      class="flow-header"
+      tabindex="0"
+      on:keydown={handleKeydown}
+      role="button"
+      aria-label="Flow header - Press Ctrl+Shift+Space to toggle debug info"
+    >
+      <span class="operation-icon">{opInfo?.icon || '🔗'}</span>
       <span class="operation-name fira font-size-12px">{operationName}</span>
+
+      {#if showDebugInfo}
+        <div class="debug-info">
+          <span class="debug-label">Debug:</span>
+          <span class="debug-value">x: {debugInfo.x}</span>
+          <span class="debug-value">y: {debugInfo.y}</span>
+          <span class="debug-value">zoom: {debugInfo.zoom}</span>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -174,6 +230,33 @@
     align-items: center;
     gap: 2px;
     z-index: 10;
+    outline: none;
+  }
+
+  .flow-header:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+  }
+
+  .debug-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding: 2px 4px;
+    background: rgba(59, 130, 246, 0.2);
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-size: 10px;
+  }
+
+  .debug-label {
+    color: #60a5fa;
+    font-weight: bold;
+  }
+
+  .debug-value {
+    color: #e5e7eb;
+    font-weight: normal;
   }
 
   .operation-icon {

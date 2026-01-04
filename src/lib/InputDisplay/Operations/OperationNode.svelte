@@ -9,6 +9,15 @@
     label: string;
     category: 'render' | 'edit' | 'meta';
     def: OperationDef;
+    customStyle?: {
+      background?: string;
+      borderRadius?: string;
+      width?: string;
+      height?: string;
+      border?: string;
+      color?: string;
+      fontSize?: string;
+    };
   }
 
   export let data: OperationNodeData;
@@ -28,23 +37,43 @@
   }
 
   $: categoryColor = getCategoryColor(data.category);
+
+  // Create style object for custom styling
+  $: customStyleString = data.customStyle
+    ? Object.entries(data.customStyle)
+        .map(([key, value]) => `${key.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${value}`)
+        .join('; ')
+    : '';
 </script>
 
-<div class="operation-node" class:selected style="--category-color: {categoryColor}">
+<div
+  class="operation-node"
+  class:selected
+  class:custom-styled={!!data.customStyle}
+  style="--category-color: {categoryColor}; {customStyleString}"
+>
   <Handle type="target" position={Position.Left} />
 
-  <div class="node-header">
-    <span class="node-icon">{data.icon}</span>
-    <span class="node-label">{data.label}</span>
-  </div>
+  {#if data.customStyle}
+    <!-- Simple circular node for custom styled nodes -->
+    <div class="custom-content">
+      <span class="custom-icon">{data.icon}</span>
+    </div>
+  {:else}
+    <!-- Default node layout -->
+    <div class="node-header">
+      <span class="node-icon">{data.icon}</span>
+      <span class="node-label">{data.label}</span>
+    </div>
 
-  <div class="node-name">{data.name}</div>
+    <div class="node-name">{data.name}</div>
 
-  <div class="node-category">
-    <span class="category-badge" style="background: {categoryColor}20; color: {categoryColor}">
-      {data.category}
-    </span>
-  </div>
+    <div class="node-category">
+      <span class="category-badge" style="background: {categoryColor}20; color: {categoryColor}">
+        {data.category}
+      </span>
+    </div>
+  {/if}
 
   <Handle type="source" position={Position.Right} />
 </div>
@@ -58,6 +87,27 @@
     min-width: 160px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     transition: all 0.2s ease;
+  }
+
+  .operation-node.custom-styled {
+    padding: 0;
+    min-width: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .custom-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .custom-icon {
+    font-size: inherit;
+    color: inherit;
   }
 
   .operation-node:hover {
