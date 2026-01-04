@@ -8,11 +8,7 @@
   } from '$lib/state/performance';
   import { addNewFolderOnDrop, positionStore } from '$lib/state/position';
   import { addSource, appState, hoveredSourceItem, resetAppState } from '$lib/state/state.svelte';
-  import Prism from 'prismjs';
-  import 'prismjs/components/prism-json';
   import clipboard from 'tauri-plugin-clipboard-api';
-
-  import 'prismjs/themes/prism-okaidia.css';
   import { derived, get } from 'svelte/store';
   import { toSource } from '$lib/utils/format';
   import { examples } from '$lib/utils/examples';
@@ -22,12 +18,8 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import type { CombineAudioEvent, ExportAudioEvent } from '$lib/state/events';
   import { exportState } from '$lib/state/export';
-  let highlighted = '';
-  let appStateContainer: HTMLElement;
-  let appBackendState: HTMLElement;
-  let appExportState: HTMLElement;
-  let exportStateJSON = '';
-  let exportStateHighlighted = '';
+  import TabContainer from '$lib/components/TabContainer.svelte';
+  import PrismWrapper from '$lib/components/PrismWrapper.svelte';
 
   // Reactive derived state for simplified display
   $: forPrint = {
@@ -39,23 +31,12 @@
     })),
   };
 
-  // FRONTEND JSON VISUALIZER
-  $: {
-    // Include _rev in the reactive dependencies to force updates when content revision changes
-    const currentRev = $appState._rev;
-    const frontendStateJSON = JSON.stringify(forPrint, null, 2);
-    highlighted = Prism.highlight(frontendStateJSON, Prism.languages.json, 'json');
-    if (appStateContainer) {
-      appStateContainer.innerHTML = highlighted;
-    }
-  }
-
   $: t = {
     x: JSON.stringify($positionStore),
   };
 
   let seconds = 0;
-  let interval;
+  let interval: number;
 
   onMount(() => {
     interval = setInterval(() => {
@@ -73,7 +54,10 @@
   }
 
   const applyExampleState = (k: string) => {
-    appState.set(examples[k]);
+    const exampleState = examples[k];
+    if (exampleState) {
+      appState.set(exampleState);
+    }
   };
 
   function test_async() {
@@ -88,10 +72,12 @@
   const testExport = () => {
     const s = get(exportState);
     console.log(s);
-    exportAudio(
-      s.settings,
-      `C:\\Users\\Primary User\\Desktop\\AUDIO\\test_audio2.${s.settings.format.toLowerCase()}`
-    );
+    if (s.settings) {
+      exportAudio(
+        s.settings,
+        `C:\\Users\\Primary User\\Desktop\\AUDIO\\test_audio2.${s.settings.format.toLowerCase()}`
+      );
+    }
   };
   const sortedPerformance = derived(performanceStore, $store => {
     return Object.entries($store).sort((a, b) => {
@@ -111,26 +97,6 @@
   }
 
   let appStateDebug: undefined | AppStateDebug = undefined;
-  let backendHighlighted = '';
-
-  // BACKEND JSON VISUALIZER
-  $: {
-    if (appStateDebug) {
-      const backendStateJSON = JSON.stringify(appStateDebug, null, 2);
-      backendHighlighted = Prism.highlight(backendStateJSON, Prism.languages.json, 'json');
-      if (appBackendState) {
-        appBackendState.innerHTML = backendHighlighted;
-      }
-    }
-  }
-
-  $: {
-    exportStateJSON = JSON.stringify($exportState, null, 2);
-    exportStateHighlighted = Prism.highlight(exportStateJSON, Prism.languages.json, 'json');
-    if (appExportState) {
-      appExportState.innerHTML = exportStateHighlighted;
-    }
-  }
 
   const addTwoSections = () => {
     addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley');
@@ -217,6 +183,20 @@
   });
 
   let selectedKey = Object.keys(examples)[0]; // default selection
+  let activeTab = 'frontend'; // Tab state
+
+  // Tab configuration
+  const tabs = [
+    { id: 'frontend', label: 'Frontend State', icon: 'fa-code' },
+    { id: 'backend', label: 'Backend State', icon: 'fa-server' },
+    { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
+    { id: 'export', label: 'Export State', icon: 'fa-download' },
+    { id: 'debug', label: 'Debug Info', icon: 'fa-bug' },
+  ];
+
+  function handleTabChange(tabId: string) {
+    activeTab = tabId;
+  }
 
   const resetMainWindow = async () => {
     try {
@@ -250,167 +230,414 @@
   };
 </script>
 
+{#snippet actionButton(
+  onClick: () => void,
+  icon: string,
+  text: string,
+  disabled: boolean = false,
+  variant:
+    | 'default'
+    | 'primary'
+    | 'secondary'
+    | 'danger'
+    | 'warning'
+    | 'success'
+    | 'info' = 'default'
+)}
+  <button on:click={onClick} class="btn btn-sm btn-{variant}" {disabled}>
+    <i class="me-1 fa {icon}"></i>{text}
+  </button>
+{/snippet}
+
 <div>
-  <button
-    on:click={() => {
-      resetAppState();
-    }}
-    class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Reset AppState</button
-  >
-  <button
-    on:click={() => {
-      resetMainWindow();
-    }}
-    class="btn btn-sm"><i class="fa fa-window-restore"></i>Reset Main Window</button
-  >
-  <button
-    on:click={() => {
-      console.log($appState);
-    }}
-    class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Log AppState</button
-  >
-  <button
-    on:click={() => {
-      console.log($appState.sections);
-    }}
-    class="btn btn-sm"><i class="fa fa-arrows-spin"></i>Log Sections</button
-  >
-  <button
-    on:click={() => {
-      copyStateToClipboard();
-    }}
-    class="btn btn-sm"><i class="fa fa-clipboard"></i>Copy state to clipboard</button
-  >
-
-  <!-- Backend State Controls -->
-  <div class="backend-controls">
-    <label class="toggle-label">
-      <input type="checkbox" bind:checked={refreshBackendState} />
-      <i class="fa fa-sync-alt"></i> Refresh Backend State
-    </label>
-    {#if !refreshBackendState}
-      <button on:click={fetchBackendState} class="btn btn-sm" disabled={isFetching}>
-        <i class="fa {isFetching ? 'fa-spinner fa-spin' : 'fa-download'}"></i>
-        {isFetching ? 'Fetching...' : 'Get Backend State'}
-      </button>
-    {/if}
-  </div>
-  <button
-    on:click={() => {
-      test_async();
-    }}
-    class="btn btn-sm">Test async</button
-  >
-  <button
-    on:click={() => {
-      testExport();
-    }}
-    class="btn btn-sm">Test Export</button
-  >
-  <button
-    on:click={() => {
-      openAudioFolder();
-    }}
-    class="btn btn-sm">Open Audio Folder</button
-  >
-  <select bind:value={selectedKey}>
-    {#each Object.keys(examples) as key}
-      <option value={key}>{key}</option>
-    {/each}
-  </select>
-  <button
-    on:click={() => {
-      applyExampleState(selectedKey);
-    }}
-    class="btn btn-sm">Apply example state</button
-  >
-  <button
-    on:click={() => {
-      addTwoSections();
-    }}
-    class="btn btn-sm">Add two sections</button
-  >
-  <button
-    on:click={() => {
-      combineTest();
-    }}
-    class="btn btn-sm">Combine Test</button
-  >
-  <pre class="language-json">
-      <code class="language-json" bind:this={appStateContainer}></code>
-    </pre>
-  <pre class="language-json">
-      <code class="language-json" bind:this={appBackendState}></code>
-    </pre>
-  <pre class="language-json">
-      <code class="language-json" bind:this={appExportState}></code>
-    </pre>
-  <div>{$hoveredSourceItem}</div>
-  <div>
-    HoveredItem: {$hoveredSourceItem === null ? 'None' : $hoveredSourceItem}
-  </div>
-  <div>{seconds}</div>
-  <div>
-    <div class="d-flex bg-black">
-      <button
-        on:click={() => {
-          resetPerformance();
-        }}
-        class="btn btn-sm">Reset Performance</button
-      >
+  <!-- Main Controls -->
+  <div class="controls-section">
+    <div class="button-group">
+      <span class="group-label">State Management</span>
+      {@render actionButton(
+        () => resetAppState(),
+        'fa-arrows-spin',
+        'Reset AppState',
+        false,
+        'danger'
+      )}
+      {@render actionButton(
+        () => resetMainWindow(),
+        'fa-window-restore',
+        'Reset Main Window',
+        false,
+        'warning'
+      )}
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th style:min-width="150px"> Metric </th>
-          <th> Time </th>
-          <th> Count </th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each $sortedPerformance as [key, value]}
-          <tr>
-            <td><b>{key}</b></td>
-            {#if value.length > 0}
-              <td class="text-center">{value[value.length - 1].time.toFixed(2)}</td>
-            {/if}
-            <td class="text-center">{value.length}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
 
-    <b>Is Over Table Container: </b>{$positionStore.isOverTableContainer}
+    <div class="button-group">
+      <span class="group-label">Logging</span>
+      {@render actionButton(
+        () => console.log($appState),
+        'fa-arrows-spin',
+        'Log AppState',
+        false,
+        'info'
+      )}
+      {@render actionButton(
+        () => console.log($appState.sections),
+        'fa-arrows-spin',
+        'Log Sections',
+        false,
+        'info'
+      )}
+      {@render actionButton(
+        () => copyStateToClipboard(),
+        'fa-clipboard',
+        'Copy to Clipboard',
+        false,
+        'secondary'
+      )}
+    </div>
+
+    <div class="button-group">
+      <span class="group-label">Backend</span>
+      <div class="backend-controls">
+        <label class="toggle-label">
+          <input type="checkbox" bind:checked={refreshBackendState} />
+          <i class="fa fa-sync-alt"></i> Auto-refresh
+        </label>
+        {#if !refreshBackendState}
+          {@render actionButton(
+            fetchBackendState,
+            isFetching ? 'fa-spinner fa-spin' : 'fa-download',
+            isFetching ? 'Fetching...' : 'Fetch State',
+            isFetching,
+            'primary'
+          )}
+        {/if}
+      </div>
+    </div>
+
+    <div class="button-group">
+      <span class="group-label">Testing</span>
+      {@render actionButton(() => test_async(), 'fa-play', 'Test Async', false, 'success')}
+      {@render actionButton(() => testExport(), 'fa-download', 'Test Export', false, 'success')}
+      {@render actionButton(
+        () => openAudioFolder(),
+        'fa-folder-open',
+        'Open Audio Folder',
+        false,
+        'secondary'
+      )}
+    </div>
+
+    <div class="button-group">
+      <span class="group-label">Examples</span>
+      <select bind:value={selectedKey} class="example-select">
+        {#each Object.keys(examples) as key}
+          <option value={key}>{key}</option>
+        {/each}
+      </select>
+      {@render actionButton(
+        () => selectedKey && applyExampleState(selectedKey),
+        'fa-cog',
+        'Apply Example',
+        false,
+        'warning'
+      )}
+      {@render actionButton(() => addTwoSections(), 'fa-plus', 'Add Sections', false, 'secondary')}
+      {@render actionButton(() => combineTest(), 'fa-mix', 'Combine Test', false, 'primary')}
+    </div>
   </div>
-  <div><b>Inputs under mouse: </b>{$positionStore.inputsUnderMouse}</div>
-  <div><b>Add new folder on drop: </b>{$addNewFolderOnDrop}</div>
-  <div>{JSON.stringify($positionStore)}</div>
-  <div>{t}</div>
-  <div>{JSON.stringify(appStateDebug)}</div>
+
+  <!-- Tab Container -->
+  <TabContainer {activeTab} {tabs} onTabChange={handleTabChange} contentHeight={600}>
+    <!-- Frontend State Tab -->
+    <div slot="frontend">
+      <h3>Frontend State</h3>
+      <PrismWrapper data={forPrint} />
+    </div>
+
+    <!-- Backend State Tab -->
+    <div slot="backend">
+      <h3>Backend State</h3>
+      <PrismWrapper data={appStateDebug || {}} />
+    </div>
+
+    <!-- Performance Tab -->
+    <div slot="performance">
+      <div class="d-flex justify-content-between">
+        <h3>Performance Metrics</h3>
+        <div class="performance-controls">
+          {@render actionButton(() => resetPerformance(), 'fa-trash', 'Reset Performance')}
+        </div>
+      </div>
+      <table class="performance-table">
+        <thead>
+          <tr>
+            <th style:min-width="150px">Metric</th>
+            <th>Time (ms)</th>
+            <th>Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each $sortedPerformance as [key, value]}
+            <tr>
+              <td><b>{key}</b></td>
+              {#if value.length > 0}
+                <td class="text-center">{value[value.length - 1].time.toFixed(2)}</td>
+              {/if}
+              <td class="text-center">{value.length}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Export State Tab -->
+    <div slot="export">
+      <h3>Export State</h3>
+      <PrismWrapper data={$exportState} />
+    </div>
+
+    <!-- Debug Info Tab -->
+    <div slot="debug">
+      <h3>Debug Information</h3>
+      <div class="debug-info">
+        <div class="debug-item">
+          <strong>Hovered Source Item:</strong>
+          <span>{$hoveredSourceItem === null ? 'None' : $hoveredSourceItem}</span>
+        </div>
+        <div class="debug-item">
+          <strong>Timer:</strong>
+          <span>{seconds}ms</span>
+        </div>
+        <div class="debug-item">
+          <strong>Is Over Table Container:</strong>
+          <span>{$positionStore.isOverTableContainer}</span>
+        </div>
+        <div class="debug-item">
+          <strong>Inputs Under Mouse:</strong>
+          <span>{$positionStore.inputsUnderMouse}</span>
+        </div>
+        <div class="debug-item">
+          <strong>Add New Folder on Drop:</strong>
+          <span>{$addNewFolderOnDrop}</span>
+        </div>
+        <div class="debug-item">
+          <strong>Position Store:</strong>
+          <PrismWrapper data={$positionStore} maxHeight="200px" fontSize="11px" />
+        </div>
+        {#if appStateDebug}
+          <div class="debug-item">
+            <strong>Backend Debug:</strong>
+            <PrismWrapper data={appStateDebug} maxHeight="300px" fontSize="11px" />
+          </div>
+        {/if}
+      </div>
+    </div>
+  </TabContainer>
 </div>
 
 <style>
-  pre.language-json {
-    font-size: 0.7rem;
-    line-height: 1.4;
+  /* Controls Section */
+  .controls-section {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 20px;
+    padding: 16px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: flex-start;
   }
 
-  td,
-  th {
-    font-size: 10px;
-  }
-  .btn {
-    border: 1px solid white !important;
+  .button-group {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
   }
 
-  .backend-controls {
+  .group-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* Performance Section */
+  .performance-controls {
+    margin-bottom: 16px;
+  }
+
+  .performance-table {
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .performance-table th {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    padding: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .performance-table td {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .performance-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Tab Content Styling for TabContainer */
+  .performance-table {
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Override h3 styles for tab content */
+  :global(.tab-panel h3) {
+    margin: 0 0 16px 0;
+    color: #f59e0b;
+    font-size: 18px;
+    font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin: 10px 0;
-    padding: 8px;
+    gap: 8px;
+  }
+
+  /* Debug Info Section */
+  .debug-info {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .debug-item {
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .debug-item strong {
+    color: #f59e0b;
+    margin-right: 8px;
+  }
+
+  .debug-item span {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  /* Button Styles */
+  .btn {
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
     background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+    transition: all 0.2s ease;
+    font-size: 12px;
+    padding: 6px 12px;
     border-radius: 4px;
+    width: min-content;
+    white-space: nowrap;
+  }
+
+  /* Button Color Variants */
+  .btn-primary {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.5) !important;
+    color: #60a5fa;
+  }
+
+  .btn-primary:hover {
+    background-color: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.7) !important;
+  }
+
+  .btn-success {
+    background-color: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.5) !important;
+    color: #4ade80;
+  }
+
+  .btn-success:hover {
+    background-color: rgba(34, 197, 94, 0.3);
+    border-color: rgba(34, 197, 94, 0.7) !important;
+  }
+
+  .btn-warning {
+    background-color: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.5) !important;
+    color: #fbbf24;
+  }
+
+  .btn-warning:hover {
+    background-color: rgba(245, 158, 11, 0.3);
+    border-color: rgba(245, 158, 11, 0.7) !important;
+  }
+
+  .btn-danger {
+    background-color: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    color: #f87171;
+  }
+
+  .btn-danger:hover {
+    background-color: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.7) !important;
+  }
+
+  .btn-info {
+    background-color: rgba(14, 165, 233, 0.2);
+    border-color: rgba(14, 165, 233, 0.5) !important;
+    color: #38bdf8;
+  }
+
+  .btn-info:hover {
+    background-color: rgba(14, 165, 233, 0.3);
+    border-color: rgba(14, 165, 233, 0.7) !important;
+  }
+
+  .btn-secondary {
+    background-color: rgba(107, 114, 128, 0.2);
+    border-color: rgba(107, 114, 128, 0.5) !important;
+    color: #9ca3af;
+  }
+
+  .btn-secondary:hover {
+    background-color: rgba(107, 114, 128, 0.3);
+    border-color: rgba(107, 114, 128, 0.7) !important;
+  }
+
+  .btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5) !important;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Backend Controls */
+  .backend-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
   }
 
   .toggle-label {
@@ -418,12 +645,44 @@
     align-items: center;
     gap: 6px;
     color: white;
-    font-size: 14px;
+    font-size: 12px;
     cursor: pointer;
     user-select: none;
   }
 
   .toggle-label input[type='checkbox'] {
     margin: 0;
+  }
+
+  /* Select Styles */
+  select,
+  .example-select {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    width: min-content;
+    min-width: 120px;
+  }
+
+  select option,
+  .example-select option {
+    background-color: #1a1a1a;
+    color: white;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .controls-section {
+      flex-direction: row;
+      gap: 4px;
+    }
+
+    .button-group {
+      flex-direction: column;
+      gap: 4px;
+    }
   }
 </style>
