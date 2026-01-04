@@ -1,9 +1,9 @@
-pub mod trait_def;
 pub mod merge;
-pub mod split;
 pub mod pitch;
+pub mod split;
+pub mod trait_def;
 
-pub use trait_def::*;
 pub use merge::*;
-pub use split::*;
 pub use pitch::*;
+pub use split::*;
+pub use trait_def::*;

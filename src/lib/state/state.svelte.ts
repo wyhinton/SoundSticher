@@ -47,6 +47,7 @@ export interface AppState {
   favorites: Favorite[];
   uiSettings?: {
     activeTab?: string;
+    debugActiveTab?: string;
     tabContentHeight?: number;
     theme?: {
       tabPanelBackgroundColor?: string;
@@ -144,6 +145,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     favorites: [],
     uiSettings: {
       activeTab: 'Global',
+      debugActiveTab: 'frontend',
       tabContentHeight: 120,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -197,6 +199,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     // Migrate old activeTab to new uiSettings structure
     uiSettings: {
       activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Global',
+      debugActiveTab: loadedState.uiSettings?.debugActiveTab || 'frontend',
       tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
       theme: {
         tabPanelBackgroundColor:
@@ -249,6 +252,7 @@ export const appState = persisted<AppState>(
     favorites: [],
     uiSettings: {
       activeTab: 'Global',
+      debugActiveTab: 'frontend',
       tabContentHeight: 120,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -792,6 +796,16 @@ export function setActiveTab(tab: string) {
       state.uiSettings = {};
     }
     state.uiSettings.activeTab = tab;
+    return state;
+  });
+}
+
+export function setDebugActiveTab(tab: string) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.debugActiveTab = tab;
     return state;
   });
 }

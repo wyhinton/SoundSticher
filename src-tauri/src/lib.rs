@@ -10,12 +10,14 @@ use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::error::Error;
+use crate::logging::{LogSystem, LoggingConfig, LoggingService};
 use crate::metadata::get_metadata;
 use crate::state::AppState;
 mod audio_manager;
 mod combine;
 mod encoder;
 mod error;
+mod logging;
 mod looping_samples_buffer;
 mod macros;
 mod metadata;
@@ -31,7 +33,16 @@ pub struct Song {
 #[tauri::command]
 fn get_file_paths_in_folder(
     folder_paths: Vec<String>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<HashMap<String, Vec<String>>, Error> {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!("Scanning {} folder(s) for audio files", folder_paths.len())
+        );
+    }
+
     let mut all_paths: HashMap<String, Vec<String>> = HashMap::new();
 
     for folder_path in folder_paths {
@@ -63,6 +74,18 @@ fn get_file_paths_in_folder(
             }
         }
 
+        if let Ok(logger) = logging_service.lock() {
+            log_debug!(
+                logger,
+                LogSystem::Combine,
+                &format!(
+                    "Found {} valid audio files in: {}",
+                    valid_files.len(),
+                    folder_path
+                )
+            );
+        }
+
         println!("{}: {} files", folder_path, valid_files.len());
         all_paths.insert(folder_path, valid_files);
     }
@@ -71,7 +94,15 @@ fn get_file_paths_in_folder(
 }
 
 #[tauri::command]
-fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
+fn clear_audio_files(
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(logger, LogSystem::Combine, "Clearing all audio files");
+    }
+
     let mut audio_files = state.audio_files.lock().unwrap();
     audio_files.clear();
     let mut combined_audio = state.combined_audio.lock().unwrap();
@@ -80,6 +111,28 @@ fn clear_audio_files(state: State<'_, Arc<AppState>>, app: AppHandle) {
     custom_order.clear();
     let _ = app.emit("buffering-progress", 0.);
     println!("🗑️  All audio files have been cleared.");
+}
+
+#[tauri::command]
+fn update_logging_config(
+    config: LoggingConfig,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<(), Error> {
+    if let Ok(service) = logging_service.lock() {
+        service.update_config(config);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_logging_config(
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<LoggingConfig, Error> {
+    if let Ok(service) = logging_service.lock() {
+        Ok(service.get_config())
+    } else {
+        Ok(LoggingConfig::default())
+    }
 }
 
 #[tauri::command]
@@ -96,6 +149,26 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard::init())
         .setup(|app| {
+            // Initialize logging service
+            let mut logging_service = LoggingService::new();
+            logging_service.set_app_handle(app.handle().clone());
+            app.manage(Arc::new(Mutex::new(logging_service)));
+
+            // Initialize app state
+            app.manage(Arc::new(AppState {
+                current_song: Mutex::new(None),
+                audio_files: Mutex::new(std::collections::BTreeMap::new()),
+                combined_audio: Mutex::new(None),
+                cancel_playback: AtomicBool::new(false),
+                buffering_samples: AtomicBool::new(false),
+                svg_path: Mutex::new(None),
+                cancel_token: AtomicU64::new(0),
+                combine_process: Arc::new(Mutex::new(0)),
+                custom_order: Mutex::new(Vec::new()),
+                current_play_progress: Mutex::new(0.0),
+                seek_start_time: Mutex::new(0.0),
+            }));
+
             #[cfg(debug_assertions)] // Only include this code on debug builds
             {
                 let window = app.get_webview_window("main").unwrap();
@@ -108,19 +181,6 @@ pub fn run() {
             }
             Ok(())
         })
-        .manage(Arc::new(AppState {
-            current_song: Mutex::new(None),
-            audio_files: Mutex::new(std::collections::BTreeMap::new()),
-            combined_audio: Mutex::new(None),
-            cancel_playback: AtomicBool::new(false),
-            buffering_samples: AtomicBool::new(false),
-            svg_path: Mutex::new(None),
-            cancel_token: AtomicU64::new(0),
-            combine_process: Arc::new(Mutex::new(0)),
-            custom_order: Mutex::new(Vec::new()),
-            current_play_progress: Mutex::new(0.0),
-            seek_start_time: Mutex::new(0.0),
-        }))
         .invoke_handler(tauri::generate_handler![
             get_file_paths_in_folder,
             sample_playback::play_sample_preview,
@@ -147,6 +207,8 @@ pub fn run() {
             encoder::export_audio,
             open_in_explorer,
             sorting::update_sorting,
+            update_logging_config,
+            get_logging_config,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

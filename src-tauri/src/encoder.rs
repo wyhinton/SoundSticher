@@ -1,3 +1,4 @@
+use crate::logging::{LogSystem, LoggingService};
 use crate::state::AppState;
 use crate::Error;
 use flacenc::bitsink::ByteSink;
@@ -11,7 +12,7 @@ use mp3lame_encoder::{
 };
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{collections::HashMap, fs::File, io::BufWriter, path::Path};
 use tauri::ipc::Channel;
 use tauri::State;
@@ -28,6 +29,7 @@ pub trait AudioEncoder {
         samples: &[f32],
         settings: &ExportSettings,
         channel: Channel<ExportAudioEvent>,
+        logger: Option<&LoggingService>,
     ) -> Result<Vec<u8>, Error>;
     fn file_extension(&self) -> &'static str;
     fn mime_type(&self) -> &'static str;
@@ -37,8 +39,9 @@ pub trait AudioEncoder {
         settings: &ExportSettings,
         path: &str,
         channel: Channel<ExportAudioEvent>,
+        logger: Option<&LoggingService>,
     ) -> Result<&'static str, Error> {
-        let data = self.encode(samples, settings, channel.clone())?;
+        let data = self.encode(samples, settings, channel.clone(), logger)?;
         let file = File::create(Path::new(path))?;
         let mut writer = BufWriter::new(file);
         writer.write_all(&data)?;
@@ -62,19 +65,34 @@ impl AudioEncoder for WavEncoder {
         samples: &[f32],
         settings: &ExportSettings,
         channel: Channel<ExportAudioEvent>,
+        logger: Option<&LoggingService>,
     ) -> Result<Vec<u8>, Error> {
         use hound::{SampleFormat, WavSpec, WavWriter};
         use std::io::Cursor;
 
-        println!("=== WAV ENCODER ===");
-        println!("Input samples: {}", samples.len());
-        println!("Target sample rate: {}Hz", settings.sample_rate);
-        println!(
-            "Target bit depth: {}bit (encoding as 16-bit PCM)",
-            settings.bit_depth
-        );
-        println!("Target channels: {} (encoding as mono)", settings.channels);
-        println!("==================");
+        if let Some(logger) = logger {
+            logger.info_with_data(
+                LogSystem::Encoder,
+                "WAV encoder started",
+                Some("wav"),
+                serde_json::json!({
+                    "input_samples": samples.len(),
+                    "sample_rate": settings.sample_rate,
+                    "bit_depth": settings.bit_depth,
+                    "channels": settings.channels
+                }),
+            );
+        } else {
+            println!("=== WAV ENCODER ===");
+            println!("Input samples: {}", samples.len());
+            println!("Target sample rate: {}Hz", settings.sample_rate);
+            println!(
+                "Target bit depth: {}bit (encoding as 16-bit PCM)",
+                settings.bit_depth
+            );
+            println!("Target channels: {} (encoding as mono)", settings.channels);
+            println!("==================");
+        }
 
         let _ = channel.send(ExportAudioEvent::Started {
             output_path: "wav-encoding".into(),
@@ -112,7 +130,16 @@ impl AudioEncoder for WavEncoder {
 
         println!("WAV encoding completed, finalizing file...");
         writer.finalize()?;
-        println!("WAV file finalized successfully");
+
+        if let Some(logger) = logger {
+            logger.info(
+                LogSystem::Encoder,
+                "WAV encoding completed successfully",
+                Some("wav"),
+            );
+        } else {
+            println!("WAV file finalized successfully");
+        }
 
         Ok(buffer.into_inner())
     }
@@ -133,17 +160,33 @@ impl AudioEncoder for FlacEncoder {
         samples: &[f32],
         settings: &ExportSettings,
         channel: Channel<ExportAudioEvent>,
+        logger: Option<&LoggingService>,
     ) -> Result<Vec<u8>, Error> {
         let num_channels = settings.channels as usize;
         let bits_per_sample = settings.bit_depth as usize;
 
-        println!("=== FLAC ENCODER ===");
-        println!("Input samples: {}", samples.len());
-        println!("Target sample rate: {}Hz", settings.sample_rate);
-        println!("Target bit depth: {}bit", settings.bit_depth);
-        println!("Target channels: {}", settings.channels);
-        println!("Estimated PCM frames: {}", samples.len() / num_channels);
-        println!("===================");
+        if let Some(logger) = logger {
+            logger.info_with_data(
+                LogSystem::Encoder,
+                "FLAC encoder started",
+                Some("flac"),
+                serde_json::json!({
+                    "input_samples": samples.len(),
+                    "sample_rate": settings.sample_rate,
+                    "bit_depth": settings.bit_depth,
+                    "channels": settings.channels,
+                    "estimated_pcm_frames": samples.len() / num_channels
+                }),
+            );
+        } else {
+            println!("=== FLAC ENCODER ===");
+            println!("Input samples: {}", samples.len());
+            println!("Target sample rate: {}Hz", settings.sample_rate);
+            println!("Target bit depth: {}bit", settings.bit_depth);
+            println!("Target channels: {}", settings.channels);
+            println!("Estimated PCM frames: {}", samples.len() / num_channels);
+            println!("===================");
+        }
 
         if samples.len() % num_channels != 0 {
             return Err(Error::UnevenNumberOfSamples);
@@ -286,27 +329,44 @@ impl AudioEncoder for Mp3Encoder {
         samples: &[f32],
         settings: &ExportSettings,
         channel: Channel<ExportAudioEvent>,
+        logger: Option<&LoggingService>,
     ) -> Result<Vec<u8>, Error> {
         let num_channels = settings.channels as usize;
 
-        println!("🎧 === MP3 ENCODER ===");
-        println!("🔢 Input samples: {}", samples.len());
-        println!("🔊 Target sample rate: {}Hz", settings.sample_rate);
-        println!(
-            "🎚️  Target bit depth: {}bit (encoding as stereo 16-bit)",
-            settings.bit_depth
-        );
-        println!(
-            "📡 Target channels: {} (encoding as stereo for compatibility)",
-            settings.channels
-        );
-        println!("⚡ Target bitrate: {}kbps", settings.bitrate.unwrap_or(192));
-        println!("⭐ Quality: Best");
-        println!(
-            "🏷️  ID3 Tag: Title='{}', Artist='Sound Stitch'",
-            settings.filename
-        );
-        println!("🎧 ==================");
+        if let Some(logger) = logger {
+            logger.info_with_data(
+                LogSystem::Encoder,
+                "MP3 encoder started",
+                Some("mp3"),
+                serde_json::json!({
+                    "input_samples": samples.len(),
+                    "sample_rate": settings.sample_rate,
+                    "bit_depth": settings.bit_depth,
+                    "channels": settings.channels,
+                    "bitrate": settings.bitrate.unwrap_or(192),
+                    "filename": settings.filename
+                }),
+            );
+        } else {
+            println!("🎧 === MP3 ENCODER ===");
+            println!("🔢 Input samples: {}", samples.len());
+            println!("🔊 Target sample rate: {}Hz", settings.sample_rate);
+            println!(
+                "🎚️  Target bit depth: {}bit (encoding as stereo 16-bit)",
+                settings.bit_depth
+            );
+            println!(
+                "📡 Target channels: {} (encoding as stereo for compatibility)",
+                settings.channels
+            );
+            println!("⚡ Target bitrate: {}kbps", settings.bitrate.unwrap_or(192));
+            println!("⭐ Quality: Best");
+            println!(
+                "🏷️  ID3 Tag: Title='{}', Artist='Sound Stitch'",
+                settings.filename
+            );
+            println!("🎧 ==================");
+        }
 
         if samples.len() % num_channels != 0 {
             return Err(Error::UnevenNumberOfSamples);
@@ -474,17 +534,33 @@ impl AudioEncoder for Mp3Encoder {
         }
 
         // Flush
-        println!("🔄 Flushing MP3 encoder...");
+        if let Some(logger) = logger {
+            logger.debug(LogSystem::Encoder, "Flushing MP3 encoder", Some("mp3"));
+        } else {
+            println!("🔄 Flushing MP3 encoder...");
+        }
         let flushed = encoder
             .flush::<FlushNoGap>(mp3_out.spare_capacity_mut())
             .map_err(|e| Error::MP3EncoderError(e.to_string()))?;
         unsafe { mp3_out.set_len(mp3_out.len() + flushed) };
 
-        println!(
-            "🎉 MP3 encoding completed successfully. Output size: {} bytes ({:.2} KB)",
-            mp3_out.len(),
-            mp3_out.len() as f64 / 1024.0
-        );
+        if let Some(logger) = logger {
+            logger.info_with_data(
+                LogSystem::Encoder,
+                "MP3 encoding completed successfully",
+                Some("mp3"),
+                serde_json::json!({
+                    "output_size_bytes": mp3_out.len(),
+                    "output_size_kb": mp3_out.len() as f64 / 1024.0
+                }),
+            );
+        } else {
+            println!(
+                "🎉 MP3 encoding completed successfully. Output size: {} bytes ({:.2} KB)",
+                mp3_out.len(),
+                mp3_out.len() as f64 / 1024.0
+            );
+        }
 
         Ok(mp3_out)
     }
@@ -584,16 +660,41 @@ pub async fn export_audio(
     settings: ExportSettings,
     output_file: String,
     state: State<'_, Arc<AppState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<ExportAudioEvent>,
 ) -> Result<String, Error> {
     let state = state.inner().clone();
+    let logging_service = logging_service.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
+        // Get the logger
+        let logger = if let Ok(service) = logging_service.lock() {
+            Some(service)
+        } else {
+            None
+        };
+
         // lock audio_files
         let audio_files = state.audio_files.lock().unwrap();
-        println!("🎵 ENCODING STARTED of {} audio files", audio_files.len());
+
+        if let Some(logger) = &logger {
+            logger.info(
+                LogSystem::Encoder,
+                &format!("Export started for {} audio files", audio_files.len()),
+                Some("export"),
+            );
+        } else {
+            println!("🎵 ENCODING STARTED of {} audio files", audio_files.len());
+        }
 
         if audio_files.len() == 0 {
+            if let Some(logger) = &logger {
+                logger.error(
+                    LogSystem::Encoder,
+                    "No audio files to export",
+                    Some("export"),
+                );
+            }
             return Err(Error::UnknownEncoderFormat(
                 "No audio files to export".into(),
             ));
@@ -605,19 +706,38 @@ pub async fn export_audio(
         // allocate combined samples buffer
         let mut combined_samples: Vec<f32> = Vec::with_capacity(total_length);
 
-        // Print comprehensive export settings information
-        println!("🎵 === EXPORT SETTINGS ===");
-        println!("📁 Format: {}", settings.format.to_uppercase());
-        println!("🏷️  Filename: {}", settings.filename);
-        println!("🔊 Sample Rate: {}Hz", settings.sample_rate);
-        println!("🎚️  Bit Depth: {}bit", settings.bit_depth);
-        println!("📡 Channels: {}", settings.channels);
-        if let Some(bitrate) = settings.bitrate {
-            println!("⚡ Bitrate: {}kbps", bitrate);
+        // Log export settings information
+        if let Some(logger) = &logger {
+            logger.info_with_data(
+                LogSystem::Encoder,
+                "Export settings configured",
+                Some("settings"),
+                serde_json::json!({
+                    "format": settings.format,
+                    "filename": settings.filename,
+                    "sample_rate": settings.sample_rate,
+                    "bit_depth": settings.bit_depth,
+                    "channels": settings.channels,
+                    "bitrate": settings.bitrate,
+                    "output_file": output_file,
+                    "input_files_count": audio_files.len()
+                }),
+            );
+        } else {
+            // Fallback to println if logger unavailable
+            println!("🎵 === EXPORT SETTINGS ===");
+            println!("📁 Format: {}", settings.format.to_uppercase());
+            println!("🏷️  Filename: {}", settings.filename);
+            println!("🔊 Sample Rate: {}Hz", settings.sample_rate);
+            println!("🎚️  Bit Depth: {}bit", settings.bit_depth);
+            println!("📡 Channels: {}", settings.channels);
+            if let Some(bitrate) = settings.bitrate {
+                println!("⚡ Bitrate: {}kbps", bitrate);
+            }
+            println!("💾 Output File: {}", output_file);
+            println!("📂 Input Files: {} audio files", audio_files.len());
+            println!("🎵 =======================");
         }
-        println!("💾 Output File: {}", output_file);
-        println!("📂 Input Files: {} audio files", audio_files.len());
-        println!("🎵 =======================");
 
         on_event
             .send(ExportAudioEvent::Started {
@@ -644,11 +764,23 @@ pub async fn export_audio(
             combined_samples.extend(file.samples.iter().map(|&s| s as f32 / i16::MAX as f32));
         }
 
-        println!(
-            "📊 Num Samples: {}, Target format: {}",
-            combined_samples.len(),
-            settings.format
-        );
+        if let Some(logger) = &logger {
+            logger.info_with_data(
+                LogSystem::Encoder,
+                "Samples combined and ready for encoding",
+                Some("processing"),
+                serde_json::json!({
+                    "total_samples": combined_samples.len(),
+                    "target_format": settings.format
+                }),
+            );
+        } else {
+            println!(
+                "📊 Num Samples: {}, Target format: {}",
+                combined_samples.len(),
+                settings.format
+            );
+        }
 
         // set up encoder
         let registry = EncoderRegistry::new();
@@ -657,7 +789,13 @@ pub async fn export_audio(
             .ok_or(Error::UnknownEncoderFormat(settings.format.clone()))?;
 
         // write combined samples to file using settings
-        encoder.write(&combined_samples, &settings, &output_file, on_event)?;
+        encoder.write(
+            &combined_samples,
+            &settings,
+            &output_file,
+            on_event,
+            logger.as_deref(),
+        )?;
 
         Ok(format!(
             "Encoded combined audio to {} with settings: {}Hz, {}bit, {}ch{}",
