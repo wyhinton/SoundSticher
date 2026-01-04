@@ -5,7 +5,9 @@ use tauri::ipc::Channel;
 use tauri::State;
 use uuid::Uuid;
 
+use crate::logging::{LogSystem, LoggingService};
 use crate::state::{get_app_state, AppState, AudioFile};
+use crate::{log_debug, log_info};
 
 #[derive(Clone, Serialize)]
 #[serde(
@@ -37,7 +39,17 @@ pub fn update_sorting(
     updates: Vec<SortUpdate>,
     state: State<'_, Arc<AppState>>,
     on_event: Channel<SortAudioEvent>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<Vec<(Uuid, usize)>, String> {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Sorting,
+            "update",
+            &format!("Starting sort operation with {} updates", updates.len())
+        );
+    }
+
     println!("STARTING SORT");
     let _ = on_event.send(SortAudioEvent::Started {
         content_length: (10),

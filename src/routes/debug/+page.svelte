@@ -7,7 +7,13 @@
     type PerformanceMetric,
   } from '$lib/state/performance';
   import { addNewFolderOnDrop, positionStore } from '$lib/state/position';
-  import { addSource, appState, hoveredSourceItem, resetAppState } from '$lib/state/state.svelte';
+  import {
+    addSource,
+    appState,
+    hoveredSourceItem,
+    resetAppState,
+    setDebugActiveTab,
+  } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
   import { toSource } from '$lib/utils/format';
@@ -20,6 +26,12 @@
   import { exportState } from '$lib/state/export';
   import TabContainer from '$lib/components/TabContainer.svelte';
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
+  import LoggingControls from '$lib/components/LoggingControls.svelte';
+  import {
+    initializeBackendLogListener,
+    updateBackendLoggingConfig,
+    loggingState,
+  } from '$lib/state/logging';
 
   // Reactive derived state for simplified display
   $: forPrint = {
@@ -42,6 +54,12 @@
     interval = setInterval(() => {
       seconds += 50;
     }, 50);
+
+    // Initialize backend log listener
+    initializeBackendLogListener();
+
+    // Update backend logging config based on current settings
+    updateBackendLoggingConfig($loggingState);
 
     // Cleanup when component is destroyed
     onDestroy(() => {
@@ -183,7 +201,6 @@
   });
 
   let selectedKey = Object.keys(examples)[0]; // default selection
-  let activeTab = 'frontend'; // Tab state
 
   // Tab configuration
   const tabs = [
@@ -191,11 +208,12 @@
     { id: 'backend', label: 'Backend State', icon: 'fa-server' },
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
+    { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
     { id: 'debug', label: 'Debug Info', icon: 'fa-bug' },
   ];
 
   function handleTabChange(tabId: string) {
-    activeTab = tabId;
+    setDebugActiveTab(tabId);
   }
 
   const resetMainWindow = async () => {
@@ -347,7 +365,12 @@
   </div>
 
   <!-- Tab Container -->
-  <TabContainer {activeTab} {tabs} onTabChange={handleTabChange} contentHeight={600}>
+  <TabContainer
+    activeTab={$appState.uiSettings?.debugActiveTab || 'frontend'}
+    {tabs}
+    onTabChange={handleTabChange}
+    contentHeight={600}
+  >
     <!-- Frontend State Tab -->
     <div slot="frontend">
       <h3>Frontend State</h3>
@@ -394,6 +417,11 @@
     <div slot="export">
       <h3>Export State</h3>
       <PrismWrapper data={$exportState} />
+    </div>
+
+    <!-- Logging Tab -->
+    <div slot="logging">
+      <LoggingControls />
     </div>
 
     <!-- Debug Info Tab -->
