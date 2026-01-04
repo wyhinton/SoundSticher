@@ -161,10 +161,12 @@
     text-transform: uppercase;
   }
 
-  :global(.operation-node .svelte-flow__handle) {
-    width: 10px;
-    height: 10px;
-    background: #45475a;
-    border: 2px solid var(--category-color, #64748b);
+  :global(.svelte-flow__handle) {
+    width: 0px;
+    height: 0px;
+    border: 0px !important;
+    background: transparent !important;
+    /* background: #45475a; */
+    /* border: 2px solid var(--category-color, #64748b); */
   }
 </style>

@@ -3,7 +3,7 @@
   import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
-  import { appState } from '$lib/state/state.svelte';
+  import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
   import {
     type OperationDef,
     type OperationsState,
@@ -28,6 +28,9 @@
 
   // Panel visibility
   export let isExpanded = true;
+
+  // Use selected operation from global state
+  $: selectedOperationName = $appState.uiSettings?.selectedOperationName || null;
 
   // Panel height management
   let panelHeight = 300; // default height in pixels
@@ -307,6 +310,11 @@
     });
   }
 
+  // Handle operation selection
+  function handleOperationSelect(event: CustomEvent<{ operationName: string }>) {
+    setSelectedOperationName(event.detail.operationName);
+  }
+
   // Resize functionality
   function startResize(event: MouseEvent) {
     isResizing = true;
@@ -410,7 +418,12 @@
           <!-- Show individual CombinedFlow components for each combine operation -->
           <div class="combined-flows-row h-100 d-flex">
             {#each combineOperations as combineOp (combineOp.name)}
-              <CombinedFlow operation={combineOp.operation} operationName={combineOp.name} />
+              <CombinedFlow 
+                operation={combineOp.operation} 
+                operationName={combineOp.name}
+                isSelected={selectedOperationName === combineOp.name}
+                on:operationSelect={handleOperationSelect}
+              />
             {/each}
           </div>
         {:else if nodes.length === 0}

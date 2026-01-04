@@ -9,9 +9,15 @@
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
+  import { createEventDispatcher } from 'svelte';
 
   export let operation: CombineOperation;
   export let operationName: string;
+  export let isSelected: boolean = false;
+
+  const dispatch = createEventDispatcher<{
+    operationSelect: { operationName: string };
+  }>();
 
   $: opInfo = OperationInfoDictionary[operation.kind];
 
@@ -131,6 +137,11 @@
     }
   }
 
+  // Handle flow header click for operation selection
+  function handleFlowHeaderClick() {
+    dispatch('operationSelect', { operationName });
+  }
+
   // Update debug information from flow instance
   function updateDebugInfo() {
     if (flowInstance) {
@@ -187,10 +198,12 @@
     <!-- Overlaid header -->
     <div
       class="flow-header"
+      class:selected={isSelected}
       tabindex="0"
+      on:click={handleFlowHeaderClick}
       on:keydown={handleKeydown}
       role="button"
-      aria-label="Flow header - Press Ctrl+Shift+Space to toggle debug info"
+      aria-label="Operation flow header - Click to select, Press Ctrl+Shift+Space to toggle debug info"
     >
       <span class="operation-icon">{opInfo?.icon || '🔗'}</span>
       <span class="operation-name fira font-size-12px">{operationName}</span>
@@ -231,10 +244,26 @@
     gap: 2px;
     z-index: 10;
     outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .flow-header:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: translateY(-1px);
   }
 
   .flow-header:focus {
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+  }
+
+  .flow-header.selected {
+    background: rgba(59, 130, 246, 0.3);
+    border: 1px solid rgba(59, 130, 246, 0.6);
+  }
+
+  .flow-header.selected:hover {
+    background: rgba(59, 130, 246, 0.4);
   }
 
   .debug-info {

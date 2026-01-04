@@ -28,6 +28,7 @@
   import SourceRow from './SourceRow.svelte';
   import Favorites from './Favorites.svelte';
   import Groups from './Groups/Groups.svelte';
+  import Operations from './Operations/Operations.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
@@ -365,6 +366,9 @@
 
   // Add tab state at the end of script section
   let isResizing: boolean = false;
+  
+  // Selected operation state (bound from parent)
+
 
   function handleResizeStart(event: MouseEvent) {
     event.preventDefault();
@@ -482,13 +486,13 @@
         <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
           <button
             class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Global'}
-            onclick={() => setActiveTab('Global')}
+            class:active={$appState.uiSettings?.activeTab === 'Operations'}
+            onclick={() => setActiveTab('Operations')}
             role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Global'}
-            aria-controls="global-tab-panel"
+            aria-selected={$appState.uiSettings?.activeTab === 'Operations'}
+            aria-controls="operations-tab-panel"
           >
-            Global
+            Operations
           </button>
           <button
             class="tab"
@@ -514,17 +518,16 @@
 
         <!-- Tab content -->
         <div class="tab-content" style="height: {$appState.uiSettings?.tabContentHeight || 120}px;">
-          {#if $appState.uiSettings?.activeTab === 'Global'}
+          {#if $appState.uiSettings?.activeTab === 'Operations'}
             <div
               class="tab-panel"
-              id="global-tab-panel"
+              id="operations-tab-panel"
               role="tabpanel"
-              aria-labelledby="global-tab"
+              aria-labelledby="operations-tab"
               style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
                 'rgb(15 21 27)'};"
             >
-              <p>Global content goes here</p>
-              <!-- Add your global content here -->
+              <Operations />
             </div>
           {/if}
           {#if $appState.uiSettings?.activeTab === 'Group'}

@@ -49,6 +49,7 @@ export interface AppState {
     activeTab?: string;
     debugActiveTab?: string;
     tabContentHeight?: number;
+    selectedOperationName?: string | null;
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -145,9 +146,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     sortDirection: undefined,
     favorites: [],
     uiSettings: {
-      activeTab: 'Global',
+      activeTab: 'Operations',
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
+      selectedOperationName: null,
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -200,9 +202,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     timelineItems: Array.isArray(loadedState.timelineItems) ? loadedState.timelineItems : [],
     // Migrate old activeTab to new uiSettings structure
     uiSettings: {
-      activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Global',
+      activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Operations',
       debugActiveTab: loadedState.uiSettings?.debugActiveTab || 'frontend',
       tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
+      selectedOperationName: loadedState.uiSettings?.selectedOperationName || null,
       theme: {
         panelHeaderBackgroundColor:
           loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
@@ -255,9 +258,10 @@ export const appState = persisted<AppState>(
     sortDirection: undefined,
     favorites: [],
     uiSettings: {
-      activeTab: 'Global',
+      activeTab: 'Operations',
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
+      selectedOperationName: null,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -904,6 +908,16 @@ export function setZIndex(component: string, value: number) {
 export function bumpRevision() {
   appState.update(state => {
     state._rev = (state._rev || 0) + 1;
+    return state;
+  });
+}
+
+export function setSelectedOperationName(operationName: string | null) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.selectedOperationName = operationName;
     return state;
   });
 }
