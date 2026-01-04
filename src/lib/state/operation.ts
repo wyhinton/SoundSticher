@@ -17,17 +17,7 @@ export interface OperationsState {
  * An operation can be either a file rendering operation (produces output files)
  * or a sample editing operation (modifies audio in-place).
  */
-export type OperationDef =
-  | CombineOperation
-  | TrimOperation
-  | NormalizeOperation
-  | FadeOperation
-  | ReverseOperation
-  | PitchShiftOperation
-  | TimeStretchOperation
-  | SilenceOperation
-  | GainOperation
-  | PipelineOperation;
+export type OperationDef = CombineOperation | PipelineOperation;
 
 // ============================================================================
 // FILE RENDERING OPERATIONS (produce new output files)
@@ -90,67 +80,11 @@ export interface OperationInfo {
 
 export const OperationInfoDictionary: Record<OperationDef['kind'], OperationInfo> = {
   combine: {
-    icon: '🔗',
+    icon: '➕',
     label: 'Combine',
     description: 'Concatenate multiple audio files into a single output file',
     category: 'render',
     params: ['source', 'outputPath', 'gapSeconds', 'crossfadeSeconds', 'format'],
-  },
-  trim: {
-    icon: '✂️',
-    label: 'Trim',
-    description: 'Remove audio from the start or end of files',
-    category: 'edit',
-    params: ['source', 'startSeconds', 'endSeconds', 'keepDurationSeconds'],
-  },
-  normalize: {
-    icon: '📊',
-    label: 'Normalize',
-    description: 'Adjust audio levels to a target peak or RMS level',
-    category: 'edit',
-    params: ['source', 'targetPeakDb', 'useRms', 'targetRmsDb'],
-  },
-  fade: {
-    icon: '🌅',
-    label: 'Fade',
-    description: 'Apply fade in/out effects to audio',
-    category: 'edit',
-    params: ['source', 'fadeInSeconds', 'fadeOutSeconds', 'curve'],
-  },
-  reverse: {
-    icon: '🔄',
-    label: 'Reverse',
-    description: 'Reverse the audio playback direction',
-    category: 'edit',
-    params: ['source'],
-  },
-  pitchShift: {
-    icon: '🎵',
-    label: 'Pitch Shift',
-    description: 'Change the pitch of audio by semitones',
-    category: 'edit',
-    params: ['source', 'semitones', 'preserveTempo'],
-  },
-  timeStretch: {
-    icon: '⏱️',
-    label: 'Time Stretch',
-    description: 'Change the speed/duration of audio',
-    category: 'edit',
-    params: ['source', 'factor', 'preservePitch'],
-  },
-  silence: {
-    icon: '🔇',
-    label: 'Silence',
-    description: 'Detect, remove, or trim silence from audio',
-    category: 'edit',
-    params: ['source', 'action', 'thresholdDb', 'minDurationSeconds'],
-  },
-  gain: {
-    icon: '🔊',
-    label: 'Gain',
-    description: 'Adjust the volume level of audio',
-    category: 'edit',
-    params: ['source', 'gainDb'],
   },
   pipeline: {
     icon: '🔀',
