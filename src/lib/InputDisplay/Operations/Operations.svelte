@@ -11,6 +11,10 @@
   let testResult: { type: 'success' | 'error'; message: string } | null = null;
   let isTestingOperation = false;
 
+  // Scheduler test result state
+  let schedulerTestResult: { type: 'success' | 'error'; message: string } | null = null;
+  let isTestingScheduler = false;
+
   // Derived data about the selected operation
   $: selectedOperation =
     selectedOperationName && $appState.operations?.defs
@@ -74,14 +78,14 @@
   }
 
   async function handleTestOperation() {
-    if (!selectedOperationName) return;
+    if (!selectedOperationName || !selectedOperation) return;
 
     isTestingOperation = true;
     testResult = null;
 
     try {
       const result = await invoke<string>('test_operation', {
-        operationName: selectedOperationName,
+        operationName: selectedOperation.kind,
       });
 
       console.log('Operation test result:', result);
@@ -92,6 +96,23 @@
       testResult = { type: 'error', message: JSON.stringify(error) };
     } finally {
       isTestingOperation = false;
+    }
+  }
+
+  async function handleTestScheduler() {
+    isTestingScheduler = true;
+    schedulerTestResult = null;
+
+    try {
+      const result = await invoke<string>('test_scheduler');
+      console.log('Scheduler test result:', result);
+      schedulerTestResult = { type: 'success', message: result };
+    } catch (error) {
+      console.log(error);
+      console.error('Error testing scheduler:', error);
+      schedulerTestResult = { type: 'error', message: JSON.stringify(error) };
+    } finally {
+      isTestingScheduler = false;
     }
   }
 
@@ -153,6 +174,20 @@
         {/if}
       </button>
 
+      <button
+        class="test-scheduler-btn"
+        onclick={handleTestScheduler}
+        disabled={isTestingScheduler}
+        title="Test cook scheduler"
+        aria-label="Test cook scheduler"
+      >
+        {#if isTestingScheduler}
+          <i class="fa fa-spinner fa-spin"></i> Testing Scheduler...
+        {:else}
+          <i class="fa fa-cogs"></i> Test Scheduler
+        {/if}
+      </button>
+
       {#if testResult}
         <div class="test-result {testResult.type}">
           <div class="test-result-header">
@@ -164,6 +199,24 @@
             <span>{testResult.type === 'success' ? 'Test Successful' : 'Test Failed'}</span>
           </div>
           <div class="test-result-message">{testResult.message}</div>
+        </div>
+      {/if}
+
+      {#if schedulerTestResult}
+        <div class="test-result {schedulerTestResult.type}">
+          <div class="test-result-header">
+            <i
+              class="fa {schedulerTestResult.type === 'success'
+                ? 'fa-check-circle'
+                : 'fa-exclamation-circle'}"
+            ></i>
+            <span
+              >Scheduler {schedulerTestResult.type === 'success'
+                ? 'Test Successful'
+                : 'Test Failed'}</span
+            >
+          </div>
+          <div class="test-result-message">{schedulerTestResult.message}</div>
         </div>
       {/if}
     </div>
@@ -326,6 +379,30 @@
   }
 
   .test-btn:disabled {
+    background: #6c7086;
+    cursor: not-allowed;
+  }
+
+  .test-scheduler-btn {
+    background: #ff9800;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.2s;
+    margin-top: 8px;
+  }
+
+  .test-scheduler-btn:hover {
+    background: #f57c00;
+  }
+
+  .test-scheduler-btn:disabled {
     background: #6c7086;
     cursor: not-allowed;
   }

@@ -13,6 +13,8 @@ use crate::error::Error;
 use crate::logging::{LogSystem, LoggingConfig, LoggingService};
 use crate::metadata::get_metadata;
 use crate::state::AppState;
+use crate::cook::CookScheduler;
+use crate::graph::OperationGraph;
 
 mod audio_manager;
 mod combine;
@@ -142,9 +144,129 @@ fn get_logging_config(
 }
 
 #[tauri::command]
-fn open_in_explorer(state: State<'_, Arc<AppState>>, file_to_open: String) {
+fn open_in_explorer(_state: State<'_, Arc<AppState>>, file_to_open: String) {
     println!("SHOWING IN EXP");
     showfile::show_path_in_file_manager(file_to_open);
+}
+
+#[tauri::command]
+async fn test_scheduler(
+    scheduler_state: State<'_, Arc<Mutex<CookScheduler>>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<String, Error> {
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Cook,
+            "Starting scheduler test"
+        );
+    }
+
+    let scheduler = match scheduler_state.lock() {
+        Ok(s) => s,
+        Err(_) => {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to acquire scheduler lock"
+            )));
+        }
+    };
+
+    // Create test tasks
+    use crate::cook::{CookTask, CookTaskPriority, TaskStatus};
+    use crate::graph::OpId;
+    use std::time::{SystemTime, Duration};
+
+    let mut task_results = Vec::new();
+    let start_time = std::time::Instant::now();
+
+    // Create a few test tasks
+    for i in 0..3 {
+        let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
+        let op_id = op_map.insert(());
+        
+        let task = CookTask {
+            op_id,
+            operation_type: "merge".to_string(),
+            parameters: serde_json::json!({
+                "crossfade_ms": 100.0 * (i + 1) as f64,
+                "normalize": i == 2
+            }),
+            priority: CookTaskPriority::Normal,
+            status: TaskStatus::Pending,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+            dependencies: Vec::new(),
+            estimated_duration: Duration::from_millis(500 * (i + 1)),
+            estimated_memory: 1024 * 1024 * (i + 1) as usize,
+            metadata: HashMap::new(),
+            parallelizable: true,
+            timeout: None,
+        };
+
+        // Submit task
+        match scheduler.submit_task(task) {
+            Ok(_) => {
+                task_results.push(format!("✅ Task {} submitted successfully", i + 1));
+            }
+            Err(e) => {
+                task_results.push(format!("❌ Task {} failed to submit: {}", i + 1, e));
+            }
+        }
+    }
+
+    // Wait a moment for tasks to potentially execute
+    drop(scheduler); // Release the lock
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Get final stats
+    let stats = {
+        let scheduler = match scheduler_state.lock() {
+            Ok(s) => s,
+            Err(_) => {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to acquire scheduler lock for stats"
+                )));
+            }
+        };
+        scheduler.get_stats()
+    };
+
+    let elapsed = start_time.elapsed();
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Cook,
+            "Scheduler test completed"
+        );
+    }
+
+    let result = format!(
+        "🚀 Scheduler Test Results\n\n\
+        ⏱️ Test Duration: {:?}\n\
+        📊 Scheduler Stats:\n\
+        • Running: {}\n\
+        • Queued Tasks: {}\n\
+        • Executing Tasks: {}\n\
+        • Completed Tasks: {}\n\
+        • Total Executed: {}\n\
+        • Max Concurrent: {}\n\n\
+        📝 Task Submission Results:\n{}\n\n\
+        💡 Note: Tasks are executed asynchronously in worker threads.\n\
+        Check the console logs for detailed scheduler activity.",
+        elapsed,
+        stats.is_running,
+        stats.queued_tasks,
+        stats.executing_tasks,
+        stats.completed_tasks,
+        stats.total_tasks_executed,
+        stats.max_concurrent_tasks,
+        task_results.join("\n")
+    );
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -284,7 +406,68 @@ pub fn run() {
             // Initialize logging service
             let mut logging_service = LoggingService::new();
             logging_service.set_app_handle(app.handle().clone());
-            app.manage(Arc::new(Mutex::new(logging_service)));
+            let logging_service = Arc::new(Mutex::new(logging_service));
+            app.manage(logging_service.clone());
+
+            // Initialize cook scheduler
+            {
+                use crate::cook::{CookScheduler, SchedulerConfig};
+                use crate::ops::{OperationRegistry, MergeOperation};
+                use crate::graph::{OperationNodeManager, InvalidationManager};
+                use crate::artifacts::ArtifactStorage;
+
+                // Create operation registry and register operations
+                let mut operation_registry = OperationRegistry::new();
+                operation_registry.register(MergeOperation::new());
+                let operation_registry = Arc::new(operation_registry);
+
+                // Create other components
+                let operation_graph = OperationGraph::new();
+                let node_manager = Arc::new(Mutex::new(OperationNodeManager::new()));
+                let invalidation_manager = Arc::new(Mutex::new(InvalidationManager::new(operation_graph)));
+                
+                // Create artifact storage
+                let storage_dir = std::env::temp_dir().join("tauri_artifacts");
+                let artifact_storage = match ArtifactStorage::new(storage_dir, 100 * 1024 * 1024) {
+                    Ok(storage) => Arc::new(storage),
+                    Err(e) => {
+                        eprintln!("Failed to create artifact storage: {}", e);
+                        return Err(Box::new(e));
+                    }
+                };
+
+                // Create scheduler configuration
+                let config = SchedulerConfig::default();
+
+                // Extract logger from mutex for scheduler
+                let logger = {
+                    if let Ok(service) = logging_service.lock() {
+                        // Create a new logging service instance for the scheduler
+                        let mut scheduler_logger = LoggingService::new();
+                        scheduler_logger.set_app_handle(app.handle().clone());
+                        Arc::new(scheduler_logger)
+                    } else {
+                        Arc::new(LoggingService::new())
+                    }
+                };
+
+                // Create and start scheduler
+                let mut scheduler = CookScheduler::new(
+                    operation_registry,
+                    node_manager,
+                    invalidation_manager,
+                    artifact_storage,
+                    config,
+                    logger,
+                );
+
+                if let Err(e) = scheduler.start() {
+                    eprintln!("Failed to start scheduler: {}", e);
+                    return Err(Box::new(e));
+                }
+
+                app.manage(Arc::new(Mutex::new(scheduler)));
+            }
 
             // Initialize app state
             app.manage(Arc::new(AppState {
@@ -342,6 +525,7 @@ pub fn run() {
             update_logging_config,
             get_logging_config,
             test_operation,
+            test_scheduler,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

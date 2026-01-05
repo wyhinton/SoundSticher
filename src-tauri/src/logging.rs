@@ -62,6 +62,7 @@ impl Default for LoggingConfig {
 }
 
 /// Main logging service that can be shared across the app
+#[derive(Debug)]
 pub struct LoggingService {
     config: Arc<Mutex<LoggingConfig>>,
     app_handle: Option<AppHandle>,
