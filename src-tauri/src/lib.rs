@@ -162,16 +162,6 @@ async fn test_scheduler(
         );
     }
 
-    let scheduler = match scheduler_state.lock() {
-        Ok(s) => s,
-        Err(_) => {
-            return Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to acquire scheduler lock"
-            )));
-        }
-    };
-
     // Create test tasks
     use crate::cook::{CookTask, CookTaskPriority, TaskStatus};
     use crate::graph::OpId;
@@ -180,43 +170,55 @@ async fn test_scheduler(
     let mut task_results = Vec::new();
     let start_time = std::time::Instant::now();
 
-    // Create a few test tasks
-    for i in 0..3 {
-        let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
-        let op_id = op_map.insert(());
-        
-        let task = CookTask {
-            op_id,
-            operation_type: "merge".to_string(),
-            parameters: serde_json::json!({
-                "crossfade_ms": 100.0 * (i + 1) as f64,
-                "normalize": i == 2
-            }),
-            priority: CookTaskPriority::Normal,
-            status: TaskStatus::Pending,
-            created_at: SystemTime::now(),
-            updated_at: SystemTime::now(),
-            dependencies: Vec::new(),
-            estimated_duration: Duration::from_millis(500 * (i + 1)),
-            estimated_memory: 1024 * 1024 * (i + 1) as usize,
-            metadata: HashMap::new(),
-            parallelizable: true,
-            timeout: None,
+    // Submit test tasks in a scoped block to ensure lock is released
+    {
+        let scheduler = match scheduler_state.lock() {
+            Ok(s) => s,
+            Err(_) => {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to acquire scheduler lock"
+                )));
+            }
         };
 
-        // Submit task
-        match scheduler.submit_task(task) {
-            Ok(_) => {
-                task_results.push(format!("✅ Task {} submitted successfully", i + 1));
-            }
-            Err(e) => {
-                task_results.push(format!("❌ Task {} failed to submit: {}", i + 1, e));
+        // Create a few test tasks
+        for i in 0..3 {
+            let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
+            let op_id = op_map.insert(());
+            
+            let task = CookTask {
+                op_id,
+                operation_type: "merge".to_string(),
+                parameters: serde_json::json!({
+                    "crossfade_ms": 100.0 * (i + 1) as f64,
+                    "normalize": i == 2
+                }),
+                priority: CookTaskPriority::Normal,
+                status: TaskStatus::Pending,
+                created_at: SystemTime::now(),
+                updated_at: SystemTime::now(),
+                dependencies: Vec::new(),
+                estimated_duration: Duration::from_millis(500 * (i + 1)),
+                estimated_memory: 1024 * 1024 * (i + 1) as usize,
+                metadata: HashMap::new(),
+                parallelizable: true,
+                timeout: None,
+            };
+
+            // Submit task
+            match scheduler.submit_task(task) {
+                Ok(_) => {
+                    task_results.push(format!("✅ Task {} submitted successfully", i + 1));
+                }
+                Err(e) => {
+                    task_results.push(format!("❌ Task {} failed to submit: {}", i + 1, e));
+                }
             }
         }
-    }
-
+    } // Lock is automatically dropped here
+    
     // Wait a moment for tasks to potentially execute
-    drop(scheduler); // Release the lock
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // Get final stats
@@ -329,9 +331,24 @@ async fn test_operation(
             let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
             let op_id = op_map.insert(());
             
+            // Create a unique work directory for this operation
+            let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+            let work_dir = base_artifacts_dir.join(format!("test_op_{:?}", op_id));
+            
+            // Ensure the work directory exists
+            if let Err(e) = std::fs::create_dir_all(&work_dir) {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to create work directory: {}", e)
+                )));
+            }
+            
+            // Store work_dir display string before moving work_dir
+            let work_dir_display = work_dir.display().to_string();
+            
             let context = OperationContext {
                 op_id,
-                work_dir: std::env::temp_dir(),
+                work_dir,
                 inputs,
                 parameters,
                 progress_callback: None,
@@ -350,12 +367,13 @@ async fn test_operation(
                     
                     // Return a more user-friendly message
                     Ok(format!(
-                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⏱️ Estimated Duration: 8.0 seconds",
+                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⏱️ Estimated Duration: 8.0 seconds\n📁 Work Directory: {}",
                         operation_name,
                         match result {
                             Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
                             _ => "Processed successfully".to_string()
-                        }
+                        },
+                        work_dir_display
                     ))
                 }
                 Err(e) => {
@@ -395,6 +413,12 @@ async fn test_operation(
     }
 }
 
+#[tauri::command]
+fn get_artifacts_directory() -> String {
+    let artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+    artifacts_dir.to_string_lossy().to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -427,7 +451,7 @@ pub fn run() {
                 let invalidation_manager = Arc::new(Mutex::new(InvalidationManager::new(operation_graph)));
                 
                 // Create artifact storage
-                let storage_dir = std::env::temp_dir().join("tauri_artifacts");
+                let storage_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
                 let artifact_storage = match ArtifactStorage::new(storage_dir, 100 * 1024 * 1024) {
                     Ok(storage) => Arc::new(storage),
                     Err(e) => {
@@ -526,6 +550,7 @@ pub fn run() {
             get_logging_config,
             test_operation,
             test_scheduler,
+            get_artifacts_directory,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

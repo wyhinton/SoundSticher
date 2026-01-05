@@ -116,6 +116,20 @@
     }
   }
 
+  async function handleOpenArtifactsFolder() {
+    try {
+      const artifactsPath = await invoke<string>('get_artifacts_directory');
+      console.log('Opening artifacts folder:', artifactsPath);
+
+      // Call open_in_explorer with the artifacts directory path
+      await invoke('open_in_explorer', {
+        fileToOpen: artifactsPath,
+      });
+    } catch (error) {
+      console.error('Error opening artifacts folder:', error);
+    }
+  }
+
   // Function to add test operations for demonstration
   function addTestOperations() {
     import('$lib/state/operation').then(({ addTestOperations }) => {
@@ -188,6 +202,15 @@
         {/if}
       </button>
 
+      <button
+        class="open-artifacts-btn"
+        onclick={handleOpenArtifactsFolder}
+        title="Open artifacts folder in explorer"
+        aria-label="Open artifacts folder in explorer"
+      >
+        <i class="fa fa-folder-open"></i> Open Artifacts Folder
+      </button>
+
       {#if testResult}
         <div class="test-result {testResult.type}">
           <div class="test-result-header">
@@ -228,6 +251,14 @@
 
       <button class="add-test-btn" onclick={addTestOperations} title="Add test operations for demo">
         <i class="fa fa-plus"></i> Add Test Operations
+      </button>
+
+      <button
+        class="open-artifacts-btn"
+        onclick={handleOpenArtifactsFolder}
+        title="Open artifacts folder in explorer"
+      >
+        <i class="fa fa-folder-open"></i> Open Artifacts Folder
       </button>
     </div>
   {/if}
@@ -405,6 +436,25 @@
   .test-scheduler-btn:disabled {
     background: #6c7086;
     cursor: not-allowed;
+  }
+
+  .open-artifacts-btn {
+    background: #673ab7;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background 0.2s;
+    margin-top: 8px;
+  }
+
+  .open-artifacts-btn:hover {
+    background: #5e35b1;
   }
 
   .test-result {
