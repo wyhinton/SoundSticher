@@ -19,11 +19,13 @@ pub struct OperationGraph {
 ```
 
 **Key Features:**
+
 - **Cycle Detection**: Prevents circular dependencies that would cause infinite loops
 - **Dependency Resolution**: Ensures operations execute in correct order
 - **Topological Sorting**: Provides execution order that respects all dependencies
 
 **Example Usage:**
+
 ```rust
 let mut graph = OperationGraph::new();
 graph.add_node(normalize_id);
@@ -44,11 +46,13 @@ pub struct InvalidationManager {
 ```
 
 **Key Features:**
+
 - **Dirty Tracking**: Marks nodes that need recomputation
 - **Cascade Invalidation**: When a node changes, all dependent nodes are marked dirty
 - **Cook Queue**: Maintains execution order based on dependencies
 
 **Workflow:**
+
 1. **Mark Dirty**: `invalidate_node(id)` marks a node and all dependents as needing recomputation
 2. **Get Next**: `get_next_cook_node()` returns the next ready-to-execute operation
 3. **Mark Clean**: `validate_node(id)` marks a node as completed and removes from queue
@@ -70,6 +74,7 @@ pub struct OperationNode {
 ```
 
 **Node Lifecycle:**
+
 - **Pending**: Initial state, waiting for dependencies
 - **Ready**: All dependencies satisfied, ready to execute
 - **Running**: Currently executing
@@ -94,6 +99,7 @@ pub struct CookScheduler {
 ### Execution Flow
 
 1. **Task Submission**:
+
    ```rust
    scheduler.submit_task(task)?;
    ```
@@ -126,10 +132,11 @@ pub struct OperationRegistry {
 ```
 
 **Supported Operations:**
+
 - `MergeOperation`: Combines multiple audio files with crossfading
 - `NormalizeOperation`: Applies volume normalization
 - `ExportOperation`: Converts to different audio formats
-- *Extensible*: New operations can be easily added
+- _Extensible_: New operations can be easily added
 
 ### Operation Context
 
@@ -161,12 +168,14 @@ pub enum Artifact {
 ### Storage System
 
 The `ArtifactStorage` provides:
+
 - **Persistent Caching**: Results survive application restarts
 - **LRU Eviction**: Automatically manages disk space
 - **Content Addressing**: Duplicate results are deduplicated
 - **Efficient Retrieval**: Fast access to cached artifacts
 
 **Storage Location:**
+
 ```
 C:\Users\{User}\AppData\Local\Temp\{package-name}\
 ├── artifacts/           # Cached operation results
@@ -178,21 +187,25 @@ C:\Users\{User}\AppData\Local\Temp\{package-name}\
 ## Benefits of the Graph System
 
 ### 1. **Smart Recomputation**
+
 - Only affected operations re-run when inputs change
 - Unchanged results are reused from cache
 - Significant performance improvements for complex pipelines
 
 ### 2. **Parallel Execution**
+
 - Independent operations run simultaneously
 - Automatic load balancing across CPU cores
 - Configurable worker thread pools
 
 ### 3. **Dependency Safety**
+
 - Impossible to create circular dependencies
 - Guaranteed correct execution order
 - Automatic deadlock prevention
 
 ### 4. **Incremental Processing**
+
 - Large pipelines can be paused and resumed
 - Individual operations can be debugged in isolation
 - Partial results are preserved on failure
@@ -212,6 +225,7 @@ pub struct SchedulerConfig {
 ```
 
 ### Default Settings
+
 - **Workers**: Number of CPU cores
 - **Queue Size**: 1000 pending tasks
 - **Parallel Execution**: Enabled
@@ -251,7 +265,7 @@ The system provides built-in testing through Tauri commands:
 ```typescript
 // Test individual operation
 const result = await invoke<string>('test_operation', {
-    operationName: 'merge'
+  operationName: 'merge',
 });
 
 // Test scheduler with multiple tasks
@@ -287,6 +301,7 @@ pub struct SchedulerStats {
 ### UI Integration
 
 The Svelte frontend provides:
+
 - **Test Operations**: Individual operation testing
 - **Scheduler Testing**: End-to-end pipeline testing
 - **Artifacts Browser**: Direct access to generated files
@@ -343,6 +358,7 @@ pub enum OperationError {
 ### Extension Points
 
 The system is designed for extensibility:
+
 - **New Operation Types**: Implement the `Operation` trait
 - **Custom Artifacts**: Add new artifact types
 - **Storage Backends**: Pluggable storage systems

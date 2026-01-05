@@ -287,6 +287,7 @@ pub fn run() {
             get_logging_config,
             graph_tests::test_operation,
             graph_tests::test_scheduler,
+            graph_tests::test_operation_with_params,
             get_artifacts_directory,
         ])
         .plugin(

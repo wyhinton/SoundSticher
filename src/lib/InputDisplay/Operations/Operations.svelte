@@ -2,18 +2,10 @@
   import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
   import { deleteOperation, OperationInfoDictionary } from '$lib/state/operation';
   import type { OperationDef, CombineOperation, PipelineOperation } from '$lib/state/operation';
-  import { invoke } from '@tauri-apps/api/core';
+  import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
 
   // Use selected operation from global state
   $: selectedOperationName = $appState.uiSettings?.selectedOperationName || null;
-
-  // Test result state
-  let testResult: { type: 'success' | 'error'; message: string } | null = null;
-  let isTestingOperation = false;
-
-  // Scheduler test result state
-  let schedulerTestResult: { type: 'success' | 'error'; message: string } | null = null;
-  let isTestingScheduler = false;
 
   // Derived data about the selected operation
   $: selectedOperation =
@@ -76,67 +68,6 @@
 
     return details;
   }
-
-  async function handleTestOperation() {
-    if (!selectedOperationName || !selectedOperation) return;
-
-    isTestingOperation = true;
-    testResult = null;
-
-    try {
-      const result = await invoke<string>('test_operation', {
-        operationName: selectedOperation.kind,
-      });
-
-      console.log('Operation test result:', result);
-      testResult = { type: 'success', message: result };
-    } catch (error) {
-      console.log(error);
-      console.error('Error testing operation:', error);
-      testResult = { type: 'error', message: JSON.stringify(error) };
-    } finally {
-      isTestingOperation = false;
-    }
-  }
-
-  async function handleTestScheduler() {
-    isTestingScheduler = true;
-    schedulerTestResult = null;
-
-    try {
-      const result = await invoke<string>('test_scheduler');
-      console.log('Scheduler test result:', result);
-      schedulerTestResult = { type: 'success', message: result };
-    } catch (error) {
-      console.log(error);
-      console.error('Error testing scheduler:', error);
-      schedulerTestResult = { type: 'error', message: JSON.stringify(error) };
-    } finally {
-      isTestingScheduler = false;
-    }
-  }
-
-  async function handleOpenArtifactsFolder() {
-    try {
-      const artifactsPath = await invoke<string>('get_artifacts_directory');
-      console.log('Opening artifacts folder:', artifactsPath);
-
-      // Call open_in_explorer with the artifacts directory path
-      await invoke('open_in_explorer', {
-        fileToOpen: artifactsPath,
-      });
-    } catch (error) {
-      console.error('Error opening artifacts folder:', error);
-    }
-  }
-
-  // Function to add test operations for demonstration
-  function addTestOperations() {
-    import('$lib/state/operation').then(({ addTestOperations }) => {
-      addTestOperations();
-      console.log('Test operations added!');
-    });
-  }
 </script>
 
 <div class="operations-panel">
@@ -174,92 +105,14 @@
         {/each}
       </div>
 
-      <button
-        class="test-btn"
-        onclick={handleTestOperation}
-        disabled={isTestingOperation}
-        title="Test operation"
-        aria-label="Test operation"
-      >
-        {#if isTestingOperation}
-          <i class="fa fa-spinner fa-spin"></i> Testing...
-        {:else}
-          <i class="fa fa-play"></i> Test Operation
-        {/if}
-      </button>
-
-      <button
-        class="test-scheduler-btn"
-        onclick={handleTestScheduler}
-        disabled={isTestingScheduler}
-        title="Test cook scheduler"
-        aria-label="Test cook scheduler"
-      >
-        {#if isTestingScheduler}
-          <i class="fa fa-spinner fa-spin"></i> Testing Scheduler...
-        {:else}
-          <i class="fa fa-cogs"></i> Test Scheduler
-        {/if}
-      </button>
-
-      <button
-        class="open-artifacts-btn"
-        onclick={handleOpenArtifactsFolder}
-        title="Open artifacts folder in explorer"
-        aria-label="Open artifacts folder in explorer"
-      >
-        <i class="fa fa-folder-open"></i> Open Artifacts Folder
-      </button>
-
-      {#if testResult}
-        <div class="test-result {testResult.type}">
-          <div class="test-result-header">
-            <i
-              class="fa {testResult.type === 'success'
-                ? 'fa-check-circle'
-                : 'fa-exclamation-circle'}"
-            ></i>
-            <span>{testResult.type === 'success' ? 'Test Successful' : 'Test Failed'}</span>
-          </div>
-          <div class="test-result-message">{testResult.message}</div>
-        </div>
-      {/if}
-
-      {#if schedulerTestResult}
-        <div class="test-result {schedulerTestResult.type}">
-          <div class="test-result-header">
-            <i
-              class="fa {schedulerTestResult.type === 'success'
-                ? 'fa-check-circle'
-                : 'fa-exclamation-circle'}"
-            ></i>
-            <span
-              >Scheduler {schedulerTestResult.type === 'success'
-                ? 'Test Successful'
-                : 'Test Failed'}</span
-            >
-          </div>
-          <div class="test-result-message">{schedulerTestResult.message}</div>
-        </div>
-      {/if}
+      <!-- Debug Panel Component -->
+      <OperationParamsDebugPanel {selectedOperation} {selectedOperationName} />
     </div>
   {:else}
     <div class="no-selection">
       <i class="fa fa-project-diagram fa-2x"></i>
       <p>No operation selected</p>
       <span class="hint">Click on an operation flow header to view details</span>
-
-      <button class="add-test-btn" onclick={addTestOperations} title="Add test operations for demo">
-        <i class="fa fa-plus"></i> Add Test Operations
-      </button>
-
-      <button
-        class="open-artifacts-btn"
-        onclick={handleOpenArtifactsFolder}
-        title="Open artifacts folder in explorer"
-      >
-        <i class="fa fa-folder-open"></i> Open Artifacts Folder
-      </button>
     </div>
   {/if}
 </div>
@@ -391,8 +244,17 @@
     font-family: 'Fira Code', monospace;
   }
 
-  .test-btn {
-    background: #4caf50;
+  .test-btn:hover {
+    background: #45a049;
+  }
+
+  .test-btn:disabled {
+    background: #6c7086;
+    cursor: not-allowed;
+  }
+
+  .test-params-btn {
+    background: #2196f3;
     color: white;
     padding: 8px 16px;
     border: none;
@@ -403,15 +265,11 @@
     align-items: center;
     gap: 4px;
     transition: background 0.2s;
+    margin-top: 8px;
   }
 
-  .test-btn:hover {
-    background: #45a049;
-  }
-
-  .test-btn:disabled {
-    background: #6c7086;
-    cursor: not-allowed;
+  .test-params-btn:hover {
+    background: #1976d2;
   }
 
   .test-scheduler-btn {
