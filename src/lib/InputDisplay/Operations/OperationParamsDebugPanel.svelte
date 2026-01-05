@@ -311,8 +311,10 @@
     >
       {#if isTestingOperation}
         <i class="fa fa-spinner fa-spin"></i>
+        Testing...
       {:else}
         <i class="fa fa-play"></i>
+        Test
       {/if}
     </button>
 
@@ -324,6 +326,7 @@
       aria-label="Toggle parameter editor"
     >
       <i class="fa {showParameterEditor ? 'fa-eye-slash' : 'fa-cog'}"></i>
+      {showParameterEditor ? 'Hide' : 'Params'}
     </button>
 
     <button
@@ -334,8 +337,10 @@
     >
       {#if isTestingScheduler}
         <i class="fa fa-spinner fa-spin"></i>
+        Testing...
       {:else}
         <i class="fa fa-cogs"></i>
+        Scheduler
       {/if}
     </button>
 
@@ -346,6 +351,7 @@
       aria-label="Open artifacts folder"
     >
       <i class="fa fa-folder-open"></i>
+      Artifacts
     </button>
   </div>
 
@@ -531,10 +537,11 @@
     border: none;
     border-radius: 3px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 3px;
     transition: all 0.2s;
     min-height: 24px;
   }
