@@ -5,6 +5,8 @@
   // Props
   export let selectedOperation: OperationDef | null = null;
   export let selectedOperationName: string | null = null;
+  export let operationParams: Record<string, any> = {};
+  export let validateParameters: () => boolean;
 
   // Test result state
   let testResult: { type: 'success' | 'error'; message: string } | null = null;
@@ -17,136 +19,6 @@
   // Parameter test state
   let paramTestResult: { type: 'success' | 'error'; message: string } | null = null;
   let isTestingWithParams = false;
-  let showParameterEditor = false;
-
-  // Operation parameters with validation - will be dynamic based on operation type
-  let operationParams: Record<string, any> = {};
-  let paramErrors: Record<string, string> = {};
-
-  // Parameter schemas for different operation types
-  const parameterSchemas: Record<string, any> = {
-    combine: {
-      crossfade_ms: {
-        type: 'number',
-        min: 0,
-        max: 5000,
-        default: 100,
-        label: 'Crossfade (ms)',
-        step: 10,
-      },
-      gap_seconds: {
-        type: 'number',
-        min: 0,
-        max: 60,
-        default: 0,
-        step: 0.1,
-        label: 'Gap (seconds)',
-      },
-      normalize: { type: 'boolean', default: false, label: 'Normalize Audio' },
-      sample_rate: {
-        type: 'select',
-        options: [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],
-        default: 44100,
-        label: 'Sample Rate (Hz)',
-      },
-      bit_depth: {
-        type: 'select',
-        options: [8, 16, 24, 32],
-        default: 16,
-        label: 'Bit Depth',
-      },
-      output_format: {
-        type: 'select',
-        options: ['wav', 'mp3', 'flac', 'ogg', 'm4a'],
-        default: 'wav',
-        label: 'Output Format',
-      },
-    },
-    master_pipeline: {
-      operations: {
-        type: 'multiselect',
-        options: ['combine', 'normalize', 'export', 'merge', 'compress'],
-        default: ['combine', 'normalize'],
-        label: 'Pipeline Steps',
-      },
-      parallel_execution: { type: 'boolean', default: false, label: 'Parallel Execution' },
-      batch_size: { type: 'number', min: 1, max: 100, default: 10, label: 'Batch Size', step: 1 },
-    },
-    normalize: {
-      target_db: { type: 'number', min: -60, max: 0, default: -12, step: 0.1, label: 'Target dB' },
-      preserve_peaks: { type: 'boolean', default: true, label: 'Preserve Peaks' },
-      target_lufs: {
-        type: 'number',
-        min: -40,
-        max: -6,
-        default: -23,
-        step: 0.1,
-        label: 'Target LUFS (optional)',
-      },
-      true_peak_limit: {
-        type: 'number',
-        min: -6,
-        max: 0,
-        default: -1,
-        step: 0.1,
-        label: 'True Peak Limit (dB)',
-      },
-    },
-    export: {
-      format: {
-        type: 'select',
-        options: ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac'],
-        default: 'wav',
-        label: 'Export Format',
-      },
-      quality: {
-        type: 'select',
-        options: ['low', 'medium', 'high', 'lossless'],
-        default: 'high',
-        label: 'Quality',
-      },
-      output_path: { type: 'text', default: './output', label: 'Output Path' },
-      bit_rate: {
-        type: 'number',
-        min: 64,
-        max: 2048,
-        default: 320,
-        step: 32,
-        label: 'Bit Rate (kbps)',
-      },
-      sample_rate: {
-        type: 'select',
-        options: [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],
-        default: 44100,
-        label: 'Sample Rate (Hz)',
-      },
-      normalize_before_export: {
-        type: 'boolean',
-        default: false,
-        label: 'Normalize Before Export',
-      },
-    },
-  };
-
-  // Initialize parameters based on selected operation
-  $: if (selectedOperation) {
-    initializeParameters();
-  }
-
-  function initializeParameters() {
-    if (!selectedOperation) return;
-
-    const operationType = getOperationType(selectedOperation);
-
-    const schema = parameterSchemas[operationType];
-    if (schema) {
-      operationParams = {};
-      Object.entries(schema).forEach(([key, config]) => {
-        operationParams[key] = config.default;
-      });
-    }
-    paramErrors = {};
-  }
 
   function getOperationType(operation: OperationDef): string {
     switch (operation.kind) {
@@ -157,51 +29,6 @@
       default:
         return operation.kind;
     }
-  }
-
-  function validateParameters(): boolean {
-    if (!selectedOperation) return false;
-
-    const operationType = getOperationType(selectedOperation);
-
-    const schema = parameterSchemas[operationType];
-    if (!schema) return true; // No validation for unknown types
-
-    paramErrors = {};
-    let hasErrors = false;
-
-    Object.entries(schema).forEach(([key, config]) => {
-      const value = operationParams[key];
-
-      if (config.type === 'number') {
-        if (value != null) {
-          if (config.min != null && value < config.min) {
-            paramErrors[key] = `Must be at least ${config.min}`;
-            hasErrors = true;
-          }
-          if (config.max != null && value > config.max) {
-            paramErrors[key] = `Must be at most ${config.max}`;
-            hasErrors = true;
-          }
-        }
-      }
-
-      if (config.type === 'select' && config.options) {
-        if (!config.options.includes(value)) {
-          paramErrors[key] = `Invalid option`;
-          hasErrors = true;
-        }
-      }
-
-      if (config.type === 'text') {
-        if (value != null && typeof value === 'string' && value.trim().length === 0) {
-          paramErrors[key] = `This field is required`;
-          hasErrors = true;
-        }
-      }
-    });
-
-    return !hasErrors;
   }
 
   async function handleTestOperation() {
@@ -229,7 +56,7 @@
   async function handleTestWithParams() {
     if (!selectedOperationName || !selectedOperation) return;
 
-    // Validate parameters using schema-based validation
+    // Validate parameters using schema-based validation from parent
     if (!validateParameters()) {
       return;
     }
@@ -256,15 +83,6 @@
       paramTestResult = { type: 'error', message: JSON.stringify(error) };
     } finally {
       isTestingWithParams = false;
-    }
-  }
-
-  function resetParameters() {
-    if (selectedOperation) {
-      initializeParameters();
-    } else {
-      operationParams = {};
-      paramErrors = {};
     }
   }
 
@@ -319,14 +137,18 @@
     </button>
 
     <button
-      class="test-params-btn"
-      onclick={() => (showParameterEditor = !showParameterEditor)}
-      disabled={!selectedOperation}
-      title="Parameters"
-      aria-label="Toggle parameter editor"
+      class="test-with-params-btn"
+      onclick={handleTestWithParams}
+      disabled={isTestingWithParams || !selectedOperation}
+      title="Test with parameters"
     >
-      <i class="fa {showParameterEditor ? 'fa-eye-slash' : 'fa-cog'}"></i>
-      {showParameterEditor ? 'Hide' : 'Params'}
+      {#if isTestingWithParams}
+        <i class="fa fa-spinner fa-spin"></i>
+        Testing...
+      {:else}
+        <i class="fa fa-flask"></i>
+        Params
+      {/if}
     </button>
 
     <button
@@ -354,123 +176,6 @@
       Artifacts
     </button>
   </div>
-
-  <!-- Parameter Editor -->
-  {#if showParameterEditor}
-    <div class="parameter-editor">
-      <div class="parameter-header">
-        <span class="param-title">Parameters</span>
-        <button
-          class="reset-btn"
-          onclick={resetParameters}
-          title="Reset"
-          aria-label="Reset parameters"
-        >
-          <i class="fa fa-undo"></i>
-        </button>
-      </div>
-
-      <div class="parameter-grid">
-        {#if selectedOperation}
-          {@const operationType = getOperationType(selectedOperation)}
-          {@const schema = parameterSchemas[operationType]}
-          {#if schema}
-            {#each Object.entries(schema) as [key, config]}
-              <div class="parameter-group">
-                <label for={key}>{config.label}</label>
-
-                {#if config.type === 'number'}
-                  <input
-                    id={key}
-                    type="number"
-                    bind:value={operationParams[key]}
-                    min={config.min}
-                    max={config.max}
-                    step={config.step || 1}
-                    class:error={paramErrors[key]}
-                  />
-                {:else if config.type === 'text'}
-                  <input
-                    id={key}
-                    type="text"
-                    bind:value={operationParams[key]}
-                    class:error={paramErrors[key]}
-                  />
-                {:else if config.type === 'select'}
-                  <select id={key} bind:value={operationParams[key]} class:error={paramErrors[key]}>
-                    {#each config.options as option}
-                      <option value={option}>
-                        {typeof option === 'string'
-                          ? option.toUpperCase()
-                          : `${option}${config.label.includes('Rate') ? ' Hz' : config.label.includes('Depth') ? '-bit' : ''}`}
-                      </option>
-                    {/each}
-                  </select>
-                {:else if config.type === 'boolean'}
-                  <div class="checkbox-group">
-                    <label class="checkbox-label">
-                      <input type="checkbox" bind:checked={operationParams[key]} />
-                      <span class="checkmark"></span>
-                      {config.label}
-                    </label>
-                  </div>
-                {:else if config.type === 'multiselect'}
-                  <div class="multiselect-group">
-                    {#each config.options as option}
-                      <label class="checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={operationParams[key] && operationParams[key].includes(option)}
-                          onchange={e => {
-                            if (!operationParams[key]) operationParams[key] = [];
-                            if (e.target.checked) {
-                              if (!operationParams[key].includes(option)) {
-                                operationParams[key] = [...operationParams[key], option];
-                              }
-                            } else {
-                              operationParams[key] = operationParams[key].filter(
-                                item => item !== option
-                              );
-                            }
-                          }}
-                        />
-                        <span class="checkmark"></span>
-                        {option}
-                      </label>
-                    {/each}
-                  </div>
-                {/if}
-
-                {#if paramErrors[key]}
-                  <span class="param-error">{paramErrors[key]}</span>
-                {/if}
-              </div>
-            {/each}
-          {:else}
-            <div class="no-schema">
-              <p>
-                No parameter schema available for operation type: <strong>{operationType}</strong>
-              </p>
-              <p>You can still test this operation with generic parameters.</p>
-            </div>
-          {/if}
-        {/if}
-      </div>
-
-      <button
-        class="test-with-params-btn"
-        onclick={handleTestWithParams}
-        disabled={isTestingWithParams || !selectedOperation}
-        title="Test with parameters"
-      >
-        {#if isTestingWithParams}
-          <i class="fa fa-spinner fa-spin"></i>
-        {:else}
-          <i class="fa fa-flask"></i>
-        {/if}
-      </button>
-    </div>
-  {/if}
 
   <!-- Test Results -->
   {#if testResult}
