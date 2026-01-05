@@ -18,6 +18,7 @@
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
+  import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -86,12 +87,16 @@
 
   <div class="content-area flex-grow-1 d-flex justify-content-between flex-column">
     <div class="px-0 d-flex h-fill-available">
-      <Sources></Sources>
       <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
-
+      <MainLeftPanel></MainLeftPanel>
       <div class="d-flex flex-column w-100">
-        <FileTable sections={$appState.sections}></FileTable>
-        <OperationsFlowPanel></OperationsFlowPanel>
+        <div class="d-flex flex-column w-100">
+          <OperationsFlowPanel></OperationsFlowPanel>
+        </div>
+        <div class="d-flex h-fill-available w-100">
+          <Sources></Sources>
+          <FileTable sections={$appState.sections}></FileTable>
+        </div>
       </div>
     </div>
     <!-- <Waveform></Waveform> -->

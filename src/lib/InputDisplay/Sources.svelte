@@ -26,9 +26,7 @@
     setIsOverTableContainer,
   } from '../state/position';
   import SourceRow from './SourceRow.svelte';
-  import Favorites from './Favorites.svelte';
-  import Groups from './Groups/Groups.svelte';
-  import Operations from './Operations/Operations.svelte';
+  import MainLeftPanel from './MainLeftPanel.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
@@ -352,8 +350,6 @@
       invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
         .then(newOrder => {
           updateInputs($appState.sections);
-          console.log(newOrder);
-          console.log(newOrder);
           // Use the reusable index syncing function if newOrder has value
           if (newOrder.ok && newOrder.value) {
             applySyncIndexes(newOrder.value);
@@ -365,34 +361,8 @@
   });
 
   // Add tab state at the end of script section
-  let isResizing: boolean = false;
 
   // Selected operation state (bound from parent)
-
-  function handleResizeStart(event: MouseEvent) {
-    event.preventDefault();
-    isResizing = true;
-
-    const startY = event.clientY;
-    const startHeight = $appState.uiSettings?.tabContentHeight || 120;
-
-    function handleMouseMove(e: MouseEvent) {
-      if (!isResizing) return;
-
-      const deltaY = e.clientY - startY;
-      const newHeight = Math.max(80, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY)); // Min 80px, Max 400px
-      setTabContentHeight(newHeight);
-    }
-
-    function handleMouseUp() {
-      isResizing = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    }
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -477,96 +447,6 @@
         </table>
       </div>
     </section>
-
-    <!-- Tab panel section -->
-    <section class="tab-panel-section">
-      <div class="tab-panel-container">
-        <!-- Tab navigation -->
-        <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
-          <button
-            class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Operations'}
-            onclick={() => setActiveTab('Operations')}
-            role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Operations'}
-            aria-controls="operations-tab-panel"
-          >
-            Operations
-          </button>
-          <button
-            class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Group'}
-            onclick={() => setActiveTab('Group')}
-            role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Group'}
-            aria-controls="group-tab-panel"
-          >
-            Group
-          </button>
-          <button
-            class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Favorites'}
-            onclick={() => setActiveTab('Favorites')}
-            role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Favorites'}
-            aria-controls="favorites-tab-panel"
-          >
-            Favorites
-          </button>
-        </nav>
-
-        <!-- Tab content -->
-        <div class="tab-content" style="height: {$appState.uiSettings?.tabContentHeight || 120}px;">
-          {#if $appState.uiSettings?.activeTab === 'Operations'}
-            <div
-              class="tab-panel"
-              id="operations-tab-panel"
-              role="tabpanel"
-              aria-labelledby="operations-tab"
-              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
-                'rgb(15 21 27)'};"
-            >
-              <Operations />
-            </div>
-          {/if}
-          {#if $appState.uiSettings?.activeTab === 'Group'}
-            <div
-              class="tab-panel"
-              id="group-tab-panel"
-              role="tabpanel"
-              aria-labelledby="group-tab"
-              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
-                'rgb(15 21 27)'};"
-            >
-              <Groups />
-            </div>
-          {/if}
-          {#if $appState.uiSettings?.activeTab === 'Favorites'}
-            <div
-              class="tab-panel"
-              id="favorites-tab-panel"
-              role="tabpanel"
-              aria-labelledby="favorites-tab"
-              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
-                'rgb(15 21 27)'};"
-            >
-              <Favorites />
-            </div>
-          {/if}
-        </div>
-
-        <!-- Resize handle -->
-        <div
-          class="resize-handle"
-          class:resizing={isResizing}
-          onmousedown={handleResizeStart}
-          role="separator"
-          aria-label="Resize tab content"
-        >
-          <div class="resize-indicator"></div>
-        </div>
-      </div>
-    </section>
   </div>
 </div>
 
@@ -590,156 +470,7 @@
     overflow: hidden;
   }
 
-  .tab-panel-section {
-    flex-shrink: 0;
-  }
-
-  .tab-panel-container {
-    display: flex;
-    flex-direction: column;
-  }
-
   th {
-    text-align: left;
-    padding-top: 0px !important;
-    padding-bottom: 0px !important;
-    position: sticky !important;
-    top: 0;
-    font-size: 11px;
-    color: #9d9d9d !important;
-  }
-
-  .no-inputs-warning {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translate(-50%, -150%);
     font-size: 12px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* Tab styles */
-  .tab-navigation {
-    display: flex;
-    background-color: rgb(15 21 27);
-    padding: 0 8px;
-    border-bottom: 1px solid #555;
-    gap: 2px;
-    height: 30px;
-  }
-
-  .tab {
-    padding: 8px 16px;
-    cursor: pointer;
-    position: relative;
-    background: #2a2a2a;
-    border: 1px solid #555;
-    border-bottom: none;
-    color: #9d9d9d;
-    font-size: 11px;
-    transition: all 0.2s ease;
-    border-radius: 6px 6px 0 0;
-    margin-top: 4px;
-    min-width: 70px;
-  }
-
-  .tab:hover {
-    background-color: #3a3a3a;
-    color: #fff;
-    border-color: #666;
-  }
-
-  .tab.active {
-    color: #fff;
-    font-weight: bold;
-    background-color: rgb(15 21 27);
-    border-color: #777;
-    margin-top: 0;
-    padding-top: 8px;
-    z-index: 1;
-    position: relative;
-  }
-
-  .tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: rgb(15 21 27);
-  }
-
-  .tab-content {
-    background-color: rgb(15 21 27);
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    overflow-y: auto;
-    resize: vertical;
-    min-height: 80px;
-    max-height: 800px;
-  }
-
-  .tab-panel {
-    color: #9d9d9d;
-    font-size: 12px;
-    line-height: 1.4;
-    height: 100%;
-  }
-
-  .tab-panel p {
-    margin: 0 0 12px 0;
-    color: #ccc;
-  }
-
-  .resize-handle {
-    height: 8px;
-    background-color: rgb(15 21 27);
-    cursor: ns-resize;
-    border-top: 1px solid #555;
-    border-bottom: 1px solid #555;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s ease;
-  }
-
-  .resize-handle:hover {
-    background-color: #2a2a2a;
-  }
-
-  .resize-handle.resizing {
-    background-color: #3a3a3a;
-  }
-
-  .resize-indicator {
-    width: 40px;
-    height: 2px;
-    background-color: #666;
-    border-radius: 1px;
-    position: relative;
-  }
-
-  .resize-indicator::before {
-    content: '';
-    position: absolute;
-    top: -2px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: #666;
-    border-radius: 1px;
-  }
-
-  .resize-indicator::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: #666;
-    border-radius: 1px;
   }
 </style>

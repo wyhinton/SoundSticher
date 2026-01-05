@@ -50,7 +50,7 @@
 }
 
 .w-fill-available{
-  height: -webkit-fill-available;
+  width: -webkit-fill-available;
 }
 
 /* Add this to your global stylesheet */
