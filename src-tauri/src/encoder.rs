@@ -482,14 +482,16 @@ impl AudioEncoder for Mp3Encoder {
 
         // Set ID3 tag with filename if available
         let title = settings.filename.as_bytes();
-        builder.set_id3_tag(Id3Tag {
-            title,
-            artist: b"Sound Stitch",
-            album: b"Exported Audio",
-            year: b"2025",
-            comment: b"Exported from Sound Stitch",
-            album_art: &[],
-        });
+        builder
+            .set_id3_tag(Id3Tag {
+                title,
+                artist: b"Sound Stitch",
+                album: b"Exported Audio",
+                year: b"2025",
+                comment: b"Exported from Sound Stitch",
+                album_art: &[],
+            })
+            .map_err(|e| Error::MP3EncoderError(format!("{:?}", e)))?;
         println!(
             "  ✅ ID3 tags: Title='{}', Artist='Sound Stitch'",
             settings.filename
@@ -619,8 +621,8 @@ impl EncoderRegistry {
         Self { encoders }
     }
 
-    pub fn get(&self, format: &str) -> Option<&Box<dyn AudioEncoder>> {
-        self.encoders.get(format)
+    pub fn get(&self, format: &str) -> Option<&dyn AudioEncoder> {
+        self.encoders.get(format).map(|b| b.as_ref())
     }
 }
 
