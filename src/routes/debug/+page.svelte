@@ -13,6 +13,7 @@
     hoveredSourceItem,
     resetAppState,
     setDebugActiveTab,
+    currentOperationSections,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
@@ -40,6 +41,10 @@
       folderPath: s.folderPath,
       files: s.files.length,
       // files: s.files.length,
+    })),
+    currentOperationSections: $currentOperationSections.map(s => ({
+      folderPath: s.folderPath,
+      files: s.files.length,
     })),
   };
 

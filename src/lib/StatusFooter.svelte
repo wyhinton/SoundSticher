@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-  import { appState } from './state/state.svelte';
+  import { appState, currentOperationSections } from './state/state.svelte';
   import { exportState } from './state/export';
   import { formatBytes } from './utils/format';
   import { invokeWithPerf } from './state/performance';
@@ -35,7 +35,7 @@
       statusMessage = 'Playing';
     } else if ($appState.isCombiningFile) {
       statusMessage = 'Processing audio...';
-    } else if ($appState.sections.length === 0) {
+    } else if ($currentOperationSections.length === 0) {
       statusMessage = 'No files loaded';
     } else if (!$appState.playingCombined && statusMessage === 'Playing') {
       statusMessage = 'Paused';
@@ -43,8 +43,8 @@
   }
 
   // Calculate total files and size
-  $: totalFiles = $appState.sections.length;
-  $: totalSize = $appState.sections.reduce((sum, section) => sum + (section.size || 0), 0);
+  $: totalFiles = $currentOperationSections.length;
+  $: totalSize = $currentOperationSections.reduce((sum, section) => sum + (section.size || 0), 0);
 
   // Export progress calculations
   $: isExporting = $exportState && $exportState.progress > 0 && $exportState.progress < 1;

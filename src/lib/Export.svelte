@@ -10,7 +10,7 @@
     type ExportState,
   } from './state/export';
   import { formatPercent } from './utils/format';
-  import { appState, getAllFiles } from './state/state.svelte';
+  import { appState, getAllFiles, currentOperationSections } from './state/state.svelte';
   import { createTypedEventChannelWithLogging } from './utils/channelMaker';
   import type { ExportAudioEvent } from './state/events';
 
@@ -206,7 +206,7 @@
       <div class="d-flex g-2">
         <button
           class="btn btn-sm btn-success"
-          class:disabled={getAllFiles($appState.sections).length === 0}
+          class:disabled={getAllFiles($currentOperationSections).length === 0}
           on:click={e => {
             saveAudio();
           }}

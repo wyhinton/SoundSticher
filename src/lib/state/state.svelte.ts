@@ -921,3 +921,236 @@ export function setSelectedOperationName(operationName: string | null) {
     return state;
   });
 }
+
+// ============================================================================
+// CURRENT OPERATION SECTIONS - Derived store and helpers
+// ============================================================================
+
+/**
+ * Derived store that provides the sections for the currently selected operation.
+ * Falls back to an empty array if no operation is selected or if the operation has no sections.
+ */
+export const currentOperationSections = derived(appState, $appState => {
+  const selectedName = $appState.uiSettings?.selectedOperationName;
+  if (!selectedName || !$appState.operations?.defs) {
+    return [];
+  }
+  const operation = $appState.operations.defs[selectedName];
+  return operation?.sections ?? [];
+});
+
+/**
+ * Get the sections for a specific operation by name
+ */
+export function getOperationSections(operationName: string): Section[] {
+  const state = get(appState);
+  if (!state.operations?.defs?.[operationName]) {
+    return [];
+  }
+  return state.operations.defs[operationName].sections ?? [];
+}
+
+/**
+ * Get the sections for the currently selected operation
+ */
+export function getCurrentOperationSections(): Section[] {
+  const state = get(appState);
+  const selectedName = state.uiSettings?.selectedOperationName;
+  if (!selectedName) {
+    return [];
+  }
+  return getOperationSections(selectedName);
+}
+
+/**
+ * Update the sections for a specific operation
+ */
+export function updateOperationSections(operationName: string, sections: Section[]): void {
+  appState.update(state => {
+    if (!state.operations?.defs?.[operationName]) {
+      console.warn(`Cannot update sections for operation "${operationName}" - not found`);
+      return state;
+    }
+    state.operations.defs[operationName].sections = sections;
+    state.operations._version = (state.operations._version ?? 0) + 1;
+    state._rev = (state._rev ?? 0) + 1;
+    return state;
+  });
+}
+
+/**
+ * Update the sections for the currently selected operation
+ */
+export function updateCurrentOperationSections(sections: Section[]): void {
+  const state = get(appState);
+  const selectedName = state.uiSettings?.selectedOperationName;
+  if (!selectedName) {
+    console.warn('Cannot update sections - no operation selected');
+    return;
+  }
+  updateOperationSections(selectedName, sections);
+}
+
+/**
+ * Helper to update sections using an updater function (similar to store.update())
+ */
+export function updateCurrentOperationSectionsWithFn(
+  updater: (sections: Section[]) => Section[]
+): void {
+  const state = get(appState);
+  const selectedName = state.uiSettings?.selectedOperationName;
+  if (!selectedName) {
+    console.warn('Cannot update sections - no operation selected');
+    return;
+  }
+
+  appState.update(s => {
+    if (!s.operations?.defs?.[selectedName]) {
+      console.warn(`Cannot update sections for operation "${selectedName}" - not found`);
+      return s;
+    }
+    const currentSections = s.operations.defs[selectedName].sections ?? [];
+    s.operations.defs[selectedName].sections = updater(currentSections);
+    s.operations._version = (s.operations._version ?? 0) + 1;
+    s._rev = (s._rev ?? 0) + 1;
+    return s;
+  });
+}
+
+/**
+ * Add a source (folder) to the currently selected operation
+ * This is the operation-scoped version of addSource()
+ */
+export async function addSourceToCurrentOperation(paths?: string | string[]) {
+  const state = get(appState);
+  const selectedName = state.uiSettings?.selectedOperationName;
+
+  if (!selectedName) {
+    console.warn('Cannot add source - no operation selected');
+    return;
+  }
+
+  const defaultSectionColor = getDefaultColor();
+  const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
+
+  try {
+    // Get file paths for each folder
+    const folderFilesResult = await invokeWithPerf<Record<string, string[]>>(
+      'get_file_paths_in_folder',
+      {
+        folderPaths: selectedFolderPaths,
+      }
+    );
+
+    if (folderFilesResult.ok === true) {
+      // Flatten all file paths to request metadata at once
+      const allDiscoveredFilePaths: string[] = Object.values(folderFilesResult.value).flat();
+
+      // Get metadata for all discovered files
+      const fileMetadataResult = await invokeWithPerf<FileMetadata[]>('get_metadata', {
+        titles: allDiscoveredFilePaths,
+      });
+
+      if (fileMetadataResult.ok === true) {
+        appState.update(currentState => {
+          if (!currentState.operations?.defs?.[selectedName]) {
+            return currentState;
+          }
+
+          const operation = currentState.operations.defs[selectedName];
+          const currentSections = operation.sections ?? [];
+
+          // Calculate starting index for new files
+          let nextIndex = 0;
+          const allExistingFiles = getAllFiles(currentSections);
+          if (allExistingFiles.length > 0) {
+            nextIndex = Math.max(...allExistingFiles.map(f => f.index)) + 1;
+          }
+
+          const newSourceSections: Section[] = Object.entries(folderFilesResult.value).map(
+            ([folderPath, discoveredFiles]) => {
+              const filesWithMetadata: AudioFileItem[] = discoveredFiles
+                .map(filePath => {
+                  const fileMetadata = fileMetadataResult.value.find(
+                    metadata => metadata.path === filePath
+                  );
+
+                  const properIndex = nextIndex++;
+
+                  return fileMetadata
+                    ? {
+                        ...fileMetadata,
+                        color: defaultSectionColor,
+                        index: properIndex,
+                        active: true,
+                      }
+                    : null;
+                })
+                .filter(Boolean) as AudioFileItem[];
+
+              return {
+                folderPath,
+                files: filesWithMetadata,
+                errors: [],
+                metaData: [],
+                color: defaultSectionColor,
+              };
+            }
+          );
+
+          // Update the operation's sections
+          currentState.operations!.defs[selectedName].sections = [
+            ...newSourceSections,
+            ...currentSections,
+          ];
+          currentState.operations!._version = (currentState.operations!._version ?? 0) + 1;
+          currentState._rev = (currentState._rev ?? 0) + 1;
+
+          return currentState;
+        });
+
+        // Send updated sections to backend/input processor
+        const updatedState = get(appState);
+        const updatedSections = updatedState.operations?.defs?.[selectedName]?.sections ?? [];
+        updateInputs(updatedSections);
+      }
+    }
+  } catch (error) {
+    console.error('Error in addSourceToCurrentOperation:', error);
+  }
+}
+
+/**
+ * Delete a section from the currently selected operation
+ */
+export function deleteSectionFromCurrentOperation(index: number) {
+  const state = get(appState);
+  const selectedName = state.uiSettings?.selectedOperationName;
+
+  if (!selectedName) {
+    console.warn('Cannot delete section - no operation selected');
+    return;
+  }
+
+  appState.update(s => {
+    if (!s.operations?.defs?.[selectedName]) {
+      return s;
+    }
+
+    const sections = s.operations.defs[selectedName].sections ?? [];
+    sections.splice(index, 1);
+
+    if (sections.length === 0) {
+      invokeWithPerf('clear_audio_files');
+      s.operations.defs[selectedName].sections = [];
+    } else {
+      s.operations.defs[selectedName].sections = sections;
+      updateInputs(sections);
+    }
+
+    s.operations._version = (s.operations._version ?? 0) + 1;
+    s._rev = (s._rev ?? 0) + 1;
+
+    return s;
+  });
+}

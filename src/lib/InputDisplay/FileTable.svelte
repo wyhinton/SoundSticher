@@ -10,6 +10,7 @@
     play_sample_preview,
     setHoveredItem,
     applySyncIndexes,
+    currentOperationSections,
     type Section,
   } from '../state/state.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
@@ -20,7 +21,7 @@
 
   // Local sorting function - moved from store
   function getSortedFiles(state: typeof $appState) {
-    let files = getAllFiles(state.sections);
+    let files = getAllFiles($currentOperationSections);
 
     // Always sort by index since index syncing updates the actual indices
     return files.sort((a, b) => a.index - b.index);
@@ -42,7 +43,7 @@
     // After updating sort, sync the indexes with the new sorted order
     setTimeout(() => {
       // Compute the sorted order based on the current sort key and direction
-      let files = getAllFiles($appState.sections);
+      let files = getAllFiles($currentOperationSections);
 
       // If no sort key is set, sort by index
       if (!$appState.sortKey) {
@@ -89,7 +90,7 @@
 
       invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
         .then(newOrder => {
-          updateInputs($appState.sections);
+          updateInputs($currentOperationSections);
           console.log('FileTable sort - received new order from backend:', newOrder);
 
           // Use the reusable index syncing function if newOrder has value

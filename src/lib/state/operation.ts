@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { appState, AppState, AudioFileItem } from './state.svelte';
+import { appState, AppState, AudioFileItem, Section } from './state.svelte';
 import { loggingState, logger } from './logging';
 import { groupRegistry, GroupResult } from './groups';
 
@@ -33,6 +33,8 @@ export interface CombineOperation {
   source: OperationSource;
   /** Output file path (can use templates like {date}, {name}) */
   sources: SourceItem[];
+  /** Sections belonging to this operation */
+  sections: Section[];
 }
 
 export interface PipelineOperation {
@@ -41,6 +43,8 @@ export interface PipelineOperation {
   operations: string[];
   /** Source for the first operation in the pipeline */
   source: OperationSource;
+  /** Sections belonging to this operation */
+  sections: Section[];
 }
 
 export type OperationSource =
@@ -140,7 +144,8 @@ export class OperationRegistry {
       console.log(`🔍 Operations: Resolving source for "${name}"`, def);
     }
 
-    const fileIds = this.resolveOperationSource(def.source, state);
+    // Pass the operation name to resolve from operation's own sections
+    const fileIds = this.resolveOperationSource(def.source, state, name);
 
     this.cache.set(name, { version, fileIds });
 
@@ -156,8 +161,19 @@ export class OperationRegistry {
 
   /**
    * Resolve an OperationSource to a set of file IDs
+   * Now uses the operation's own sections instead of global state.sections
    */
-  private resolveOperationSource(source: OperationSource, state: AppState): Set<string> {
+  private resolveOperationSource(
+    source: OperationSource,
+    state: AppState,
+    operationName?: string
+  ): Set<string> {
+    // Get the operation's sections, or fall back to global sections for backward compatibility
+    const operationSections =
+      operationName && state.operations?.defs?.[operationName]?.sections
+        ? state.operations.defs[operationName].sections
+        : state.sections;
+
     switch (source.type) {
       case 'group':
         return groupRegistry.eval(source.groupRef, state);
@@ -166,13 +182,15 @@ export class OperationRegistry {
         return new Set(source.fileIds);
 
       case 'all':
-        return new Set(state.sections.flatMap(s => s.files.map(f => f.id)));
+        return new Set(operationSections.flatMap(s => s.files.map(f => f.id)));
 
       case 'active':
-        return new Set(state.sections.flatMap(s => s.files.filter(f => f.active).map(f => f.id)));
+        return new Set(
+          operationSections.flatMap(s => s.files.filter(f => f.active).map(f => f.id))
+        );
 
       case 'section':
-        const section = state.sections[source.sectionIndex];
+        const section = operationSections[source.sectionIndex];
         if (!section) return new Set();
         return new Set(section.files.map(f => f.id));
 
@@ -260,7 +278,13 @@ export function addOperation(name: string, def: OperationDef): void {
       s.operations = { defs: {}, _version: 1 };
     }
 
-    s.operations.defs[name] = def;
+    // Ensure sections array is initialized
+    const defWithSections = {
+      ...def,
+      sections: def.sections ?? [],
+    };
+
+    s.operations.defs[name] = defWithSections;
     s.operations._version = (s.operations._version ?? 0) + 1;
     s._rev = (s._rev ?? 0) + 1;
 
@@ -431,6 +455,7 @@ export const testOperations: NamedOperationDef[] = [
       sources: [],
       kind: 'combine',
       source: { type: 'active' },
+      sections: [],
     },
   },
   {
@@ -439,6 +464,7 @@ export const testOperations: NamedOperationDef[] = [
       kind: 'pipeline',
       source: { type: 'active' },
       operations: ['combine_active'],
+      sections: [],
     },
   },
 ];

@@ -12,6 +12,9 @@
     applySyncIndexes,
     setActiveTab,
     setTabContentHeight,
+    currentOperationSections,
+    addSourceToCurrentOperation,
+    deleteSectionFromCurrentOperation,
   } from '../state/state.svelte';
   import { onMount, tick } from 'svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -33,7 +36,7 @@
 
   // Local sorting function - moved from store
   function getSortedFiles(state: typeof $appState) {
-    let files = getAllFiles(state.sections);
+    let files = getAllFiles($currentOperationSections);
 
     // If no sort key is set, return files sorted by index
     if (!state.sortKey) {
@@ -162,7 +165,7 @@
   // Toolbar functions
   function handleSelectAll() {
     selectedRows.clear();
-    for (let i = 0; i < $appState.sections.length; i++) {
+    for (let i = 0; i < $currentOperationSections.length; i++) {
       selectedRows.add(i);
     }
     selectedRows = new Set(selectedRows);
@@ -180,9 +183,9 @@
     // Convert to array and sort in descending order to delete from end to start
     const indicesToDelete = Array.from(selectedRows).sort((a, b) => b - a);
 
-    // Delete sections
+    // Delete sections from current operation
     indicesToDelete.forEach(index => {
-      deleteSection(index);
+      deleteSectionFromCurrentOperation(index);
     });
 
     // Clear selection
@@ -349,7 +352,7 @@
 
       invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
         .then(newOrder => {
-          updateInputs($appState.sections);
+          updateInputs($currentOperationSections);
           // Use the reusable index syncing function if newOrder has value
           if (newOrder.ok && newOrder.value) {
             applySyncIndexes(newOrder.value);
@@ -388,19 +391,19 @@
         bind:this={tableContainer}
         class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
       >
-        {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
+        {#if $currentOperationSections.length === 0 && !$addNewFolderOnDrop}
           <!-- <SineWaveShader></SineWaveShader> -->
-          <div class="position-absolute no-inputs-warning">
+          <div class="position-absolute no-inputs-warning d-flex flex-column">
             <div
               id="lottie-container"
               class="m-auto"
               style={`width: ${lottieSize}px; height: ${lottieSize}px;`}
               bind:this={lottieContainer}
             ></div>
-            <div class="text-center">
+            <div class="text-center font-size-12px">
               No inputs! Drag and Drop a folder of samples or add a section
             </div>
-            <button class="btn btn-sm m-auto mt-2" onclick={() => addSource()}
+            <button class="btn btn-sm m-auto mt-2" onclick={() => addSourceToCurrentOperation()}
               ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
             >
           </div>
@@ -415,7 +418,7 @@
           </div>
         {/if}
 
-        {#if $appState.sections.length > 0}
+        {#if $currentOperationSections.length > 0}
           <!-- <SourceToolbar
         selectedRowCount={selectedRows.size}
         onSelectAll={handleSelectAll}
@@ -433,7 +436,7 @@
             </tr>
           </thead>
           <tbody bind:this={container}>
-            {#each $appState.sections as item, sectionIndex}
+            {#each $currentOperationSections as item, sectionIndex}
               <SourceRow
                 {item}
                 {sectionIndex}
@@ -451,6 +454,11 @@
 </div>
 
 <style>
+  .no-inputs-warning {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
   #lottie-container {
     opacity: 0.8;
   }

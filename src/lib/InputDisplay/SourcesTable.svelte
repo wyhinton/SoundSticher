@@ -1,6 +1,11 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { appState, addSource } from '../state/state.svelte';
+  import {
+    appState,
+    addSource,
+    currentOperationSections,
+    addSourceToCurrentOperation,
+  } from '../state/state.svelte';
   import { addNewFolderOnDrop } from '../state/position';
   import SourceRow from './SourceRow.svelte';
   import lottie from 'lottie-web';
@@ -65,7 +70,7 @@
   bind:this={tableContainer}
   class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
 >
-  {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
+  {#if $currentOperationSections.length === 0 && !$addNewFolderOnDrop}
     <!-- <SineWaveShader></SineWaveShader> -->
     <div class="position-absolute no-inputs-warning">
       <div
@@ -75,7 +80,7 @@
         bind:this={lottieContainer}
       ></div>
       <div class="text-center">No inputs! Drag and Drop a folder of samples or add a section</div>
-      <button class="btn btn-sm m-auto mt-2" onclick={() => addSource()}
+      <button class="btn btn-sm m-auto mt-2" onclick={() => addSourceToCurrentOperation()}
         ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
       >
     </div>
@@ -90,7 +95,7 @@
     </div>
   {/if}
 
-  {#if $appState.sections.length > 0}
+  {#if $currentOperationSections.length > 0}
     <!-- <SourceToolbar
     selectedRowCount={selectedRows.size}
     onSelectAll={handleSelectAll}
@@ -108,7 +113,7 @@
       </tr>
     </thead>
     <tbody bind:this={container}>
-      {#each $appState.sections as item, sectionIndex}
+      {#each $currentOperationSections as item, sectionIndex}
         <SourceRow
           {item}
           {sectionIndex}

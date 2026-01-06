@@ -5,7 +5,7 @@
 
   import type { CombineOperation } from '$lib/state/operation';
   import { OperationInfoDictionary } from '$lib/state/operation';
-  import { appState } from '$lib/state/state.svelte';
+  import { type Section, type AudioFileItem } from '$lib/state/state.svelte';
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
@@ -20,7 +20,7 @@
   }>();
 
   $: opInfo = OperationInfoDictionary[operation.kind];
-
+  operation.source;
   // Debug state
   let showDebugInfo = false;
   let debugInfo = { x: 0, y: 0, zoom: 1 };
@@ -40,29 +40,56 @@
 
     // Layout configuration
     const HORIZONTAL_SPACING = 200;
+    const VERTICAL_SPACING = 80;
+    const GRID_COLUMNS = 3; // Number of columns in the grid
     const START_X = 50;
     const START_Y = 50;
 
-    // Create source node
-    const sourceNodeId = `combine-source-${operationName}`;
-    nodes.push({
-      id: sourceNodeId,
-      type: 'source',
-      position: { x: START_X, y: START_Y },
-      data: {
-        source: operation.source,
-        label: getSourceLabel(operation.source),
-      },
-      draggable: false,
-      selectable: false,
+    // Create source nodes for each file in each section
+    const sections = operation.sections || [];
+    const sourceNodeIds: string[] = [];
+    let nodeIndex = 0;
+
+    sections.forEach((section, sectionIndex) => {
+      section.files.forEach((file, fileIndex) => {
+        const sourceNodeId = `combine-source-${operationName}-${sectionIndex}-${fileIndex}`;
+        sourceNodeIds.push(sourceNodeId);
+
+        // Calculate grid position
+        const column = nodeIndex % GRID_COLUMNS;
+        const row = Math.floor(nodeIndex / GRID_COLUMNS);
+        const xPosition = START_X + (column * 150); // Reduced spacing for grid
+        const yPosition = START_Y + (row * VERTICAL_SPACING);
+
+        nodes.push({
+          id: sourceNodeId,
+          type: 'source',
+          position: { x: xPosition, y: yPosition },
+          data: {
+            source: { type: 'files', fileIds: [file.id] },
+            label: getFileLabel(file, section),
+            file: file,
+            section: section,
+          },
+          draggable: false,
+          selectable: false,
+        });
+
+        nodeIndex++;
+      });
     });
 
-    // Create operation node
+    // Create operation node - position it to the right of the grid
+    const totalFiles = sections.reduce((total, section) => total + section.files.length, 0);
+    const gridRows = Math.ceil(totalFiles / GRID_COLUMNS);
+    const gridCenterY = START_Y + ((gridRows - 1) * VERTICAL_SPACING) / 2;
+    const gridWidth = (GRID_COLUMNS - 1) * 150;
     const opNodeId = `combine-op-${operationName}`;
+    
     nodes.push({
       id: opNodeId,
       type: 'operation',
-      position: { x: START_X + HORIZONTAL_SPACING, y: START_Y },
+      position: { x: START_X + gridWidth + HORIZONTAL_SPACING, y: gridCenterY },
       data: {
         name: operationName,
         kind: operation.kind,
@@ -85,14 +112,16 @@
       selectable: true,
     });
 
-    // Create edges
-    edges.push({
-      id: `combine-edge-1-${operationName}`,
-      source: sourceNodeId,
-      target: opNodeId,
-      type: 'bezier',
-      animated: false,
-      style: 'stroke: #64748b; stroke-width: 2px;',
+    // Create edges from each source node to the operation node
+    sourceNodeIds.forEach((sourceNodeId, index) => {
+      edges.push({
+        id: `combine-edge-${index}-${operationName}`,
+        source: sourceNodeId,
+        target: opNodeId,
+        type: 'bezier',
+        animated: false,
+        style: 'stroke: #64748b; stroke-width: 2px;',
+      });
     });
 
     return { nodes, edges };
@@ -115,6 +144,18 @@
       default:
         return 'Unknown Source';
     }
+  }
+
+  function getSectionLabel(section: Section): string {
+    const fileCount = section.files.length;
+    const folderName = section.folderPath.split(/[/\\]/).pop() || 'Unknown Folder';
+    return `${folderName} (${fileCount} files)`;
+  }
+
+  function getFileLabel(file: AudioFileItem, section: Section): string {
+    const fileName = file.path.split(/[/\\]/).pop() || 'Unknown File';
+    const sectionName = section.folderPath.split(/[/\\]/).pop() || 'Unknown Folder';
+    return `${fileName} (${sectionName})`;
   }
 
   // Handle keyboard events for debug toggle
