@@ -5,9 +5,10 @@ use tauri::ipc::Channel;
 use tauri::State;
 use uuid::Uuid;
 
-use crate::logging::{LogSystem, LoggingService};
-use crate::state::{AppState, AudioFile};
 use crate::log_info;
+use crate::logging::{LogSystem, LoggingService};
+use crate::send_channel_event;
+use crate::state::{AppState, AudioFile};
 
 #[derive(Clone, Serialize)]
 #[serde(
@@ -51,9 +52,12 @@ pub fn update_sorting(
     }
 
     println!("STARTING SORT");
-    let _ = on_event.send(SortAudioEvent::Started {
-        content_length: (10),
-    });
+    send_channel_event!(
+        on_event,
+        SortAudioEvent::Started {
+            content_length: (10),
+        }
+    );
     let mut audio_files = state.audio_files.lock().map_err(|_| "Lock poisoned")?;
 
     // Print initial BTreeMap order
@@ -139,11 +143,14 @@ pub fn update_sorting(
 
             // Send progress as a float between 0.0 and 1.0
             let progress = (i + 1) as f64 / num_updates as f64;
-            on_event.send(SortAudioEvent::Progress {
-                progress,
-                start_offset: file.start_offset,
-                id: file.id,
-            });
+            send_channel_event!(
+                on_event,
+                SortAudioEvent::Progress {
+                    progress,
+                    start_offset: file.start_offset,
+                    id: file.id,
+                }
+            );
 
             if let Err(e) = on_event.send(SortAudioEvent::Progress {
                 progress,
