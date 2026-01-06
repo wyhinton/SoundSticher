@@ -25,6 +25,16 @@
       label: 'Drag & Drop',
       icon: 'fa-arrows-alt',
     },
+    operationsLog: {
+      category: 'frontend',
+      label: 'Operations',
+      icon: 'fa-cogs',
+    },
+    waveformLog: {
+      category: 'frontend',
+      label: 'Waveform',
+      icon: 'fa-wave-square',
+    },
     // Backend logging systems
     encoderLog: {
       category: 'backend',
@@ -45,11 +55,6 @@
       category: 'backend',
       label: 'Sorting',
       icon: 'fa-sort',
-    },
-    waveformLog: {
-      category: 'backend',
-      label: 'Waveform',
-      icon: 'fa-wave-square',
     },
   };
 

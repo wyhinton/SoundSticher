@@ -9,6 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
 import type { OperationDef, CombineOperation } from './operation';
+import { logger } from './logging';
 
 // ============================================================================
 // TYPES
@@ -93,14 +94,18 @@ export class WaveformCache {
     // Check local cache first
     const cached = this.cache.get(key);
     if (cached) {
+      logger.waveform.cache(`Cache hit for ${filePath} (${spec.width}x${spec.height})`);
       return cached;
     }
 
     // Check if already in-flight
     const inFlight = this.inFlight.get(key);
     if (inFlight) {
+      logger.waveform.fetch(`Request already in-flight for ${filePath}, waiting...`);
       return inFlight;
     }
+
+    logger.waveform.fetch(`Fetching waveform for ${filePath} (${spec.width}x${spec.height})`);
 
     // Create new request
     const promise = this.fetchWaveform(filePath, spec)
@@ -108,10 +113,12 @@ export class WaveformCache {
         this.cache.set(key, waveform);
         this.inFlight.delete(key);
         this.evictIfNeeded();
+        logger.waveform.success(`Waveform cached for ${filePath} (duration: ${waveform.duration}s)`);
         return waveform;
       })
       .catch(error => {
         this.inFlight.delete(key);
+        logger.waveform.error(`Failed to fetch waveform for ${filePath}:`, error);
         throw error;
       });
 
@@ -141,6 +148,8 @@ export class WaveformCache {
     filePaths: string[],
     spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
   ): Promise<Map<string, Waveform>> {
+    logger.waveform.batch(`Batch request for ${filePaths.length} waveforms (${spec.width}x${spec.height})`);
+    
     const result = new Map<string, Waveform>();
     const toFetch: string[] = [];
 
@@ -150,33 +159,47 @@ export class WaveformCache {
       const cached = this.cache.get(key);
       if (cached) {
         result.set(filePath, cached);
+        logger.waveform.cache(`Batch cache hit for ${filePath}`);
       } else {
         toFetch.push(filePath);
       }
     }
 
+    logger.waveform.batch(`${result.size} cache hits, ${toFetch.length} to fetch from backend`);
+
     // Fetch remaining from backend
     if (toFetch.length > 0) {
-      const response = await invoke<BatchWaveformResponse>('get_waveforms_batch', {
-        request: {
-          filePaths: toFetch,
-          width: spec.width,
-          height: spec.height,
-          normalize: spec.normalize,
-        },
-      });
+      try {
+        const response = await invoke<BatchWaveformResponse>('get_waveforms_batch', {
+          request: {
+            filePaths: toFetch,
+            width: spec.width,
+            height: spec.height,
+            normalize: spec.normalize,
+          },
+        });
 
-      for (const item of response.items) {
-        if (item.waveform) {
-          const key = createCacheKey(item.filePath, spec.width, spec.height);
-          this.cache.set(key, item.waveform);
-          result.set(item.filePath, item.waveform);
+        logger.waveform.batch(`Backend returned ${response.items.length} items (hits: ${response.totalCacheHits}, computed: ${response.totalComputed}, errors: ${response.totalErrors})`);
+
+        for (const item of response.items) {
+          if (item.waveform) {
+            const key = createCacheKey(item.filePath, spec.width, spec.height);
+            this.cache.set(key, item.waveform);
+            result.set(item.filePath, item.waveform);
+            logger.waveform.success(`Batched waveform for ${item.filePath} (${item.cacheHit ? 'backend cache hit' : 'computed'})`);
+          } else if (item.error) {
+            logger.waveform.error(`Batch error for ${item.filePath}: ${item.error}`);
+          }
         }
-      }
 
-      this.evictIfNeeded();
+        this.evictIfNeeded();
+      } catch (error) {
+        logger.waveform.error('Batch fetch failed:', error);
+        throw error;
+      }
     }
 
+    logger.waveform.batch(`Batch complete: ${result.size} waveforms ready`);
     return result;
   }
 
@@ -195,11 +218,17 @@ export class WaveformCache {
    * Invalidate cached waveform for a file
    */
   invalidate(filePath: string): void {
+    let removedCount = 0;
     // Remove all entries for this file (any resolution)
     for (const key of this.cache.keys()) {
       if (key.startsWith(filePath + ':')) {
         this.cache.delete(key);
+        removedCount++;
       }
+    }
+    
+    if (removedCount > 0) {
+      logger.waveform.cache(`Invalidated ${removedCount} cache entries for ${filePath}`);
     }
   }
 
@@ -207,8 +236,13 @@ export class WaveformCache {
    * Clear all cached waveforms
    */
   clear(): void {
+    const oldSize = this.cache.size;
     this.cache.clear();
     this.inFlight.clear();
+    
+    if (oldSize > 0) {
+      logger.waveform.cache(`Cleared ${oldSize} waveform cache entries`);
+    }
   }
 
   /**
@@ -222,11 +256,17 @@ export class WaveformCache {
    * Evict oldest entries if over max size
    */
   private evictIfNeeded(): void {
+    const evicted: string[] = [];
     while (this.cache.size > this.maxEntries) {
       const firstKey = this.cache.keys().next().value;
       if (firstKey) {
         this.cache.delete(firstKey);
+        evicted.push(firstKey);
       }
+    }
+    
+    if (evicted.length > 0) {
+      logger.waveform.cache(`Evicted ${evicted.length} cache entries (over max size ${this.maxEntries})`);
     }
   }
 }
@@ -268,6 +308,8 @@ function createOperationWaveformStore() {
      * Load waveforms for an operation
      */
     async loadForOperation(operationName: string, filePaths: string[]): Promise<void> {
+      logger.waveform.operation(`Loading waveforms for operation "${operationName}" (${filePaths.length} files)`);
+      
       update(state => ({
         ...state,
         operationName,
@@ -283,12 +325,17 @@ function createOperationWaveformStore() {
           waveforms,
           loading: false,
         }));
+        
+        logger.waveform.operation(`Operation "${operationName}" waveforms loaded successfully (${waveforms.size}/${filePaths.length})`);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         update(state => ({
           ...state,
           loading: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
         }));
+        
+        logger.waveform.error(`Failed to load waveforms for operation "${operationName}": ${errorMessage}`);
       }
     },
 
@@ -296,6 +343,7 @@ function createOperationWaveformStore() {
      * Clear the current operation waveforms
      */
     clear(): void {
+      logger.waveform.operation('Clearing current operation waveforms');
       set({
         operationName: null,
         filePaths: [],
@@ -363,11 +411,16 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
     // If no operation selected, return empty or fall back to legacy timeline items
     if (!selectedOpName || !$appState.operations?.defs) {
       // Fall back to legacy timeline items for backward compatibility
-      return $appState.timelineItems || [];
+      const legacyItems = $appState.timelineItems || [];
+      if (legacyItems.length > 0) {
+        logger.waveform.info(`Using legacy timeline items (${legacyItems.length} items)`);
+      }
+      return legacyItems;
     }
 
     const operation = $appState.operations.defs[selectedOpName];
     if (!operation) {
+      logger.waveform.warning(`Operation "${selectedOpName}" not found in definitions`);
       return [];
     }
 
@@ -375,16 +428,23 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
     const fileItems = getOperationFileItems(operation).filter(f => f.active);
 
     if (fileItems.length === 0) {
+      logger.waveform.info(`No active files in operation "${selectedOpName}"`);
       return [];
     }
 
     // Calculate total duration based on waveforms
     let totalDuration = 0;
+    let loadedWaveforms = 0;
     for (const file of fileItems) {
       const waveform = $operationWaveforms.waveforms.get(file.path);
       if (waveform) {
         totalDuration += waveform.duration;
+        loadedWaveforms++;
       }
+    }
+
+    if (loadedWaveforms < fileItems.length) {
+      logger.waveform.info(`Operation "${selectedOpName}" has ${loadedWaveforms}/${fileItems.length} waveforms loaded`);
     }
 
     // Build timeline items with start offsets
@@ -411,6 +471,7 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
       }
     }
 
+    logger.waveform.info(`Generated ${items.length} timeline items for operation "${selectedOpName}" (total duration: ${totalDuration.toFixed(1)}s)`);
     return items;
   }
 );
@@ -448,14 +509,18 @@ let unsubscribe: (() => void) | null = null;
  * Initialize the waveform service to react to operation changes
  */
 export function initWaveformService(): () => void {
+  logger.waveform.info('Initializing waveform service');
+  
   unsubscribe = appState.subscribe($appState => {
     const selectedOpName = $appState.uiSettings?.selectedOperationName || null;
 
     // Only react if the selected operation changed
     if (selectedOpName !== lastSelectedOperationName) {
+      logger.waveform.operation(`Operation changed: "${lastSelectedOperationName}" → "${selectedOpName}"`);
       lastSelectedOperationName = selectedOpName;
 
       if (!selectedOpName || !$appState.operations?.defs) {
+        logger.waveform.operation('No operation selected, clearing waveforms');
         operationWaveforms.clear();
         return;
       }
@@ -464,11 +529,10 @@ export function initWaveformService(): () => void {
       if (operation) {
         const filePaths = getOperationFilePaths(operation);
         if (filePaths.length > 0) {
-          console.log(
-            `🎵 Loading waveforms for operation "${selectedOpName}" (${filePaths.length} files)`
-          );
+          logger.waveform.operation(`Loading waveforms for operation "${selectedOpName}" (${filePaths.length} files)`);
           operationWaveforms.loadForOperation(selectedOpName, filePaths);
         } else {
+          logger.waveform.operation(`No active files in operation "${selectedOpName}", clearing waveforms`);
           operationWaveforms.clear();
         }
       }
@@ -476,6 +540,7 @@ export function initWaveformService(): () => void {
   });
 
   return () => {
+    logger.waveform.info('Cleaning up waveform service');
     if (unsubscribe) {
       unsubscribe();
       unsubscribe = null;
@@ -491,21 +556,43 @@ export function initWaveformService(): () => void {
  * Invalidate backend cache for a file
  */
 export async function invalidateWaveformBackend(filePath: string): Promise<void> {
-  await invoke('invalidate_waveform', { filePath });
-  waveformCache.invalidate(filePath);
+  logger.waveform.cache(`Invalidating backend cache for ${filePath}`);
+  try {
+    await invoke('invalidate_waveform', { filePath });
+    waveformCache.invalidate(filePath);
+    logger.waveform.success(`Successfully invalidated cache for ${filePath}`);
+  } catch (error) {
+    logger.waveform.error(`Failed to invalidate backend cache for ${filePath}:`, error);
+    throw error;
+  }
 }
 
 /**
  * Clear all backend waveform cache
  */
 export async function clearWaveformCacheBackend(): Promise<void> {
-  await invoke('clear_waveform_cache');
-  waveformCache.clear();
+  logger.waveform.cache('Clearing all backend waveform cache');
+  try {
+    await invoke('clear_waveform_cache');
+    waveformCache.clear();
+    logger.waveform.success('Successfully cleared all waveform cache');
+  } catch (error) {
+    logger.waveform.error('Failed to clear backend waveform cache:', error);
+    throw error;
+  }
 }
 
 /**
  * Get backend cache statistics
  */
 export async function getWaveformCacheStats(): Promise<CacheStats> {
-  return await invoke<CacheStats>('get_waveform_cache_stats');
+  logger.waveform.cache('Fetching backend cache statistics');
+  try {
+    const stats = await invoke<CacheStats>('get_waveform_cache_stats');
+    logger.waveform.cache(`Cache stats - hits: ${stats.hits}, misses: ${stats.misses}, evictions: ${stats.evictions}, compute time: ${stats.totalComputeTimeMs}ms`);
+    return stats;
+  } catch (error) {
+    logger.waveform.error('Failed to get cache statistics:', error);
+    throw error;
+  }
 }
