@@ -134,7 +134,8 @@ pub async fn get_waveform(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     request: WaveformRequest,
 ) -> Result<WaveformResponse, Error> {
-    let spec = WaveformSpec::new(request.width, request.height).with_normalize(request.normalize);
+    let spec: WaveformSpec =
+        WaveformSpec::new(request.width, request.height).with_normalize(request.normalize);
 
     // Log the request
     if let Ok(logger) = logging_service.lock() {

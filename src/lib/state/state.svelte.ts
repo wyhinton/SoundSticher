@@ -51,6 +51,7 @@ export interface AppState {
     tabContentHeight?: number;
     selectedOperationName?: string | null;
     timelineDebugMode?: boolean;
+    showFullSvgPath?: boolean;
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -152,6 +153,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       tabContentHeight: 120,
       selectedOperationName: null,
       timelineDebugMode: false,
+      showFullSvgPath: false,
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -265,6 +267,7 @@ export const appState = persisted<AppState>(
       tabContentHeight: 120,
       selectedOperationName: null,
       timelineDebugMode: false,
+      showFullSvgPath: false,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -942,6 +945,26 @@ export function setSelectedOperationName(operationName: string | null) {
       state.uiSettings = {};
     }
     state.uiSettings.selectedOperationName = operationName;
+    return state;
+  });
+}
+
+export function toggleShowFullSvgPath() {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.showFullSvgPath = !(state.uiSettings.showFullSvgPath ?? false);
+    return state;
+  });
+}
+
+export function setShowFullSvgPath(value: boolean) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.showFullSvgPath = value;
     return state;
   });
 }

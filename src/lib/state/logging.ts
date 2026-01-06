@@ -15,6 +15,7 @@ export interface LoggingState {
   combineLog: boolean;
   playbackLog: boolean;
   sortingLog: boolean;
+  waveformBackendLog: boolean;
   // Add future logging categories here
   // performanceLog?: boolean;
   // audioLog?: boolean;
@@ -40,6 +41,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   combineLog: false,
   playbackLog: false,
   sortingLog: false,
+  waveformBackendLog: false,
 });
 
 // Store for backend log messages
@@ -80,6 +82,7 @@ export const initializeBackendLogListener = () => {
       combine: { bg: '#FF5722', color: 'white' },
       playback: { bg: '#9C27B0', color: 'white' },
       sorting: { bg: '#3F51B5', color: 'white' },
+      waveform: { bg: '#9C27B0', color: 'white' },
       cook: { bg: '#607D8B', color: 'white' },
       graph: { bg: '#795548', color: 'white' },
     };
@@ -119,6 +122,7 @@ export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) 
       combine_enabled: config.combineLog ?? false,
       playback_enabled: config.playbackLog ?? false,
       sorting_enabled: config.sortingLog ?? false,
+      waveform_enabled: config.waveformBackendLog ?? false,
       console_output: true,
     };
 

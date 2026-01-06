@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 /// Stable audio identity for content-addressable caching
 /// This ensures two ops referencing the same file resolve to the same waveform
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct AudioKey {
     /// Source identifier (file path or asset id)
     pub source_id: String,
@@ -54,8 +55,7 @@ impl AudioKey {
 }
 
 /// Channel mode for waveform rendering
-#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
-#[derive(Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, Default)]
 pub enum ChannelMode {
     /// Sum all channels to mono
     #[default]
@@ -67,7 +67,6 @@ pub enum ChannelMode {
     /// Use right channel only
     Right,
 }
-
 
 /// Waveform generation parameters (part of cache key)
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
@@ -146,6 +145,7 @@ impl WaveformCacheKey {
 
 /// Waveform data - a lightweight, shareable artifact
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Waveform {
     /// SVG path string for rendering
     pub svg_path: String,

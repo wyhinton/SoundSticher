@@ -43,21 +43,12 @@
     type DragDropState, // <-- add this type export in DragDropManager.ts
     DEFAULT_DD, // <-- export this from DragDropManager.ts (recommended)
   } from './Timeline/DragDropManager';
+  import { get } from 'svelte/store';
 
   const dispatch = createEventDispatcher();
 
   // Props to control which system to use
   export let useOperationSystem = true; // Set to true to use operation-based timeline items
-
-  // DEBUG: Track when system switches
-  $: {
-    console.log('🔧 Timeline: System switch ->', {
-      useOperationSystem,
-      legacyItems: $appState?.timelineItems?.length || 0,
-      operationItems: $operationTimelineItems?.length || 0,
-      activeItems: timelineItems?.length || 0,
-    });
-  }
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -123,16 +114,6 @@
   // When useOperationSystem is true, use operation-derived items
   // Otherwise fall back to the legacy appState.timelineItems
   $: timelineItems = useOperationSystem ? $operationTimelineItems : $appState?.timelineItems || [];
-
-  // DEBUG: Log timeline items changes
-  $: if (useOperationSystem) {
-    console.log('🔧 Timeline: Operation timeline items changed:', {
-      operationTimelineItems: $operationTimelineItems,
-      count: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
-      operationWaveformsLoading: $operationWaveformsLoading,
-    });
-  }
 
   // Reactive duration based on active system
   $: currentDuration = useOperationSystem ? $operationDuration : $durationSeconds;
@@ -207,6 +188,7 @@
       operationDuration: $operationDuration,
       isLoadingWaveforms,
     });
+    console.log(get(operationTimelineItems));
 
     // Clean up existing managers
     if (d3Manager) d3Manager.destroy();
@@ -299,6 +281,7 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    console.log(timelineItems);
     // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
     if (
       typeof import.meta !== 'undefined' &&
@@ -364,7 +347,7 @@
     });
 
     resizeObserver.observe(container);
-
+    console.log(timelineItems);
     return () => {
       resizeObserver.disconnect();
       if (d3Manager) d3Manager.destroy();
