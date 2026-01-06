@@ -1,8 +1,7 @@
 <script lang="ts">
   import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
-  import type { TimelineItem } from './D3TimelineManager';
-  import { durationSeconds } from '../../state/state.svelte';
-
+  import { durationSeconds, type TimelineItem } from '../../state/state.svelte';
+  // import { type TimlineItem}
   // Props passed from Timeline component
   export let isDragging: boolean;
   export let draggedSegmentIndex: number;
@@ -64,7 +63,7 @@
     <div><b>Items ({timelineItems.length}):</b></div>
     {#each timelineItems as item, i}
       <div
-        class="item"
+        class="item d-flex gap-2"
         class:dragged={i === draggedSegmentIndex}
         class:selected={selectedSegments.has(i)}
       >
@@ -81,6 +80,15 @@
           originalPathWidth *
           scaleX
         ).toFixed(0)}px
+        {#if item.type === 'audio-file'}
+          <div>
+            {#if item.svgPath}
+              {item.svgPath}
+            {:else}
+              <span style="color: red;">undefined</span>
+            {/if}
+          </div>
+        {/if}
       </div>
     {/each}
   {:else}

@@ -50,6 +50,7 @@ export interface AppState {
     debugActiveTab?: string;
     tabContentHeight?: number;
     selectedOperationName?: string | null;
+    timelineDebugMode?: boolean;
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -150,6 +151,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
       selectedOperationName: null,
+      timelineDebugMode: false,
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -262,6 +264,7 @@ export const appState = persisted<AppState>(
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
       selectedOperationName: null,
+      timelineDebugMode: false,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -292,6 +295,27 @@ export const appState = persisted<AppState>(
     },
   }
 );
+
+// Convenience function for timeline debug mode
+export const timelineDebugMode = {
+  subscribe: derived(appState, state => state.uiSettings?.timelineDebugMode ?? false).subscribe,
+  toggle: () =>
+    appState.update(state => ({
+      ...state,
+      uiSettings: {
+        ...state.uiSettings,
+        timelineDebugMode: !(state.uiSettings?.timelineDebugMode ?? false),
+      },
+    })),
+  set: (value: boolean) =>
+    appState.update(state => ({
+      ...state,
+      uiSettings: {
+        ...state.uiSettings,
+        timelineDebugMode: value,
+      },
+    })),
+};
 
 const defaults: AppState = {
   sections: [],

@@ -6,7 +6,8 @@
   import { loggingState } from '../state/logging';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  import { debugState, timelineDebugMode, customContextMenu } from '../state/debug.svelte';
+  import { debugState, customContextMenu } from '../state/debug.svelte';
+  import { timelineDebugMode } from '../state/state.svelte';
 
   // Visibility state
   let isVisible = false;
@@ -416,8 +417,8 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <span class="group-title">Timeline</span>
         <button
           class="btn btn-xs"
-          class:btn-outline-success={!$debugState.timelineDebugMode}
-          class:btn-success={$debugState.timelineDebugMode}
+          class:btn-outline-success={!$timelineDebugMode}
+          class:btn-success={$timelineDebugMode}
           on:click={timelineDebugMode.toggle}
         >
           <i class="fa fa-bug"></i>
@@ -474,7 +475,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
     <div class="debug-info">
       <small>
         <i class="fa fa-info-circle"></i>
-        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
+        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$timelineDebugMode
           ? 'ON'
           : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} |
         {#each loggingCategories as category}

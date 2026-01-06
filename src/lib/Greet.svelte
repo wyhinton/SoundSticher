@@ -22,7 +22,7 @@
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
 
   // Feature flag: Set to true to use the new operation-based waveform system
-  const USE_OPERATION_SYSTEM = false; // Change to true when ready to switch
+  const USE_OPERATION_SYSTEM = true; // Change to true when ready to switch
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})

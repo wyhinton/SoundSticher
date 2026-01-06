@@ -25,7 +25,8 @@
     previewActive,
   } from '../state/selection.svelte';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
-  import { debugState, timelineDebugMode } from '../state/debug.svelte';
+  import { debugState } from '../state/debug.svelte';
+  import { timelineDebugMode } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
   import {
     operationTimelineItems,
@@ -47,6 +48,16 @@
 
   // Props to control which system to use
   export let useOperationSystem = true; // Set to true to use operation-based timeline items
+
+  // DEBUG: Track when system switches
+  $: {
+    console.log('🔧 Timeline: System switch ->', {
+      useOperationSystem,
+      legacyItems: $appState?.timelineItems?.length || 0,
+      operationItems: $operationTimelineItems?.length || 0,
+      activeItems: timelineItems?.length || 0,
+    });
+  }
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -113,6 +124,16 @@
   // Otherwise fall back to the legacy appState.timelineItems
   $: timelineItems = useOperationSystem ? $operationTimelineItems : $appState?.timelineItems || [];
 
+  // DEBUG: Log timeline items changes
+  $: if (useOperationSystem) {
+    console.log('🔧 Timeline: Operation timeline items changed:', {
+      operationTimelineItems: $operationTimelineItems,
+      count: $operationTimelineItems?.length || 0,
+      operationDuration: $operationDuration,
+      operationWaveformsLoading: $operationWaveformsLoading,
+    });
+  }
+
   // Reactive duration based on active system
   $: currentDuration = useOperationSystem ? $operationDuration : $durationSeconds;
 
@@ -176,6 +197,16 @@
 
   function initializeManagers() {
     if (!svgEl || !axisGroup || !pathGroup || !container) return;
+
+    // DEBUG: Log initialization
+    console.log('🔧 Timeline: Initializing managers with:', {
+      useOperationSystem,
+      currentDuration,
+      width,
+      operationTimelineItems: $operationTimelineItems?.length || 0,
+      operationDuration: $operationDuration,
+      isLoadingWaveforms,
+    });
 
     // Clean up existing managers
     if (d3Manager) d3Manager.destroy();
@@ -280,7 +311,7 @@
       event.preventDefault();
       event.stopPropagation();
       timelineDebugMode.toggle();
-      console.log('🔧 Timeline: Toggled debug mode:', !$debugState.timelineDebugMode);
+      console.log('🔧 Timeline: Toggled debug mode:', !$timelineDebugMode);
       return;
     }
 
@@ -309,6 +340,25 @@
   }
 
   onMount(() => {
+    // DEBUG: Log component mount state
+    console.log('🔧 Timeline: Component mounted with:', {
+      useOperationSystem,
+      operationTimelineItems: $operationTimelineItems?.length || 0,
+      operationDuration: $operationDuration,
+      operationWaveformsLoading: $operationWaveformsLoading,
+    });
+
+    // Initialize waveform service if using operation system
+    if (useOperationSystem) {
+      console.log('🔧 Timeline: Initializing waveform service...');
+      try {
+        initWaveformService();
+        console.log('🔧 Timeline: Waveform service initialized');
+      } catch (error) {
+        console.error('🔧 Timeline: Failed to initialize waveform service:', error);
+      }
+    }
+
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
     });
@@ -498,7 +548,7 @@
   </div>
 
   <!-- Debug Panel -->
-  {#if $debugState.timelineDebugMode}
+  {#if $timelineDebugMode}
     <TimelineDebugPanel
       {isDragging}
       {draggedSegmentIndex}
