@@ -6,8 +6,8 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::logging::{LogSystem, LoggingService};
-use crate::state::{get_app_state, AppState, AudioFile};
-use crate::{log_debug, log_info};
+use crate::state::{AppState, AudioFile};
+use crate::log_info;
 
 #[derive(Clone, Serialize)]
 #[serde(

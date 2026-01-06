@@ -94,7 +94,7 @@ impl Operation for SplitOperation {
         }
     }
 
-    fn execute(&self, mut context: OperationContext) -> OperationResult {
+    fn execute(&self, context: OperationContext) -> OperationResult {
         context.report_progress(0.0);
 
         // Get input artifact
@@ -151,14 +151,14 @@ impl Operation for SplitOperation {
         "Split audio files into multiple segments using various methods"
     }
 
-    fn estimated_duration(&self, context: &OperationContext) -> std::time::Duration {
+    fn estimated_duration(&self, _context: &OperationContext) -> std::time::Duration {
         match self.split_type {
             SplitType::TimeSegments | SplitType::EqualChunks => std::time::Duration::from_secs(1),
             SplitType::SilenceDetection => std::time::Duration::from_secs(5), // Requires analysis
         }
     }
 
-    fn memory_requirement(&self, context: &OperationContext) -> usize {
+    fn memory_requirement(&self, _context: &OperationContext) -> usize {
         match self.split_type {
             SplitType::SilenceDetection => 200 * 1024 * 1024, // 200MB - needs full audio in memory
             _ => 50 * 1024 * 1024,                            // 50MB for other types
@@ -174,7 +174,7 @@ impl SplitOperation {
         context: &OperationContext,
     ) -> Result<Vec<AudioArtifact>, OperationError> {
         let mut segments = Vec::new();
-        let padding: f64 = context.get_parameter("padding").unwrap_or(0.1);
+        let _padding: f64 = context.get_parameter("padding").unwrap_or(0.1);
 
         // Add start and end points
         let mut all_points = vec![0.0];
@@ -205,8 +205,8 @@ impl SplitOperation {
     fn split_by_silence(
         &self,
         input: &AudioArtifact,
-        threshold_db: f64,
-        min_silence_duration: f64,
+        _threshold_db: f64,
+        _min_silence_duration: f64,
         context: &OperationContext,
     ) -> Result<Vec<AudioArtifact>, OperationError> {
         // TODO: Implement silence detection algorithm

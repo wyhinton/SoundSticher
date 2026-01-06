@@ -1,6 +1,6 @@
 // SlotMap and ID utilities
 
-pub use slotmap::{DefaultKey, DenseSlotMap, SecondaryMap, SlotMap};
+pub use slotmap::{DefaultKey, DenseSlotMap, SlotMap};
 
 /// Re-export commonly used ID types
 pub type OpId = DefaultKey;

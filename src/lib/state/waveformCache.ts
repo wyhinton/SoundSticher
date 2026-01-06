@@ -84,7 +84,10 @@ export class WaveformCache {
   /**
    * Get a waveform from cache or fetch from backend
    */
-  async getOrFetch(filePath: string, spec: WaveformSpec = { width: 1000, height: 70, normalize: false }): Promise<Waveform> {
+  async getOrFetch(
+    filePath: string,
+    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+  ): Promise<Waveform> {
     const key = createCacheKey(filePath, spec.width, spec.height);
 
     // Check local cache first
@@ -100,15 +103,17 @@ export class WaveformCache {
     }
 
     // Create new request
-    const promise = this.fetchWaveform(filePath, spec).then(waveform => {
-      this.cache.set(key, waveform);
-      this.inFlight.delete(key);
-      this.evictIfNeeded();
-      return waveform;
-    }).catch(error => {
-      this.inFlight.delete(key);
-      throw error;
-    });
+    const promise = this.fetchWaveform(filePath, spec)
+      .then(waveform => {
+        this.cache.set(key, waveform);
+        this.inFlight.delete(key);
+        this.evictIfNeeded();
+        return waveform;
+      })
+      .catch(error => {
+        this.inFlight.delete(key);
+        throw error;
+      });
 
     this.inFlight.set(key, promise);
     return promise;
@@ -132,7 +137,10 @@ export class WaveformCache {
   /**
    * Batch fetch waveforms for multiple files
    */
-  async getBatch(filePaths: string[], spec: WaveformSpec = { width: 1000, height: 70, normalize: false }): Promise<Map<string, Waveform>> {
+  async getBatch(
+    filePaths: string[],
+    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+  ): Promise<Map<string, Waveform>> {
     const result = new Map<string, Waveform>();
     const toFetch: string[] = [];
 
@@ -175,7 +183,10 @@ export class WaveformCache {
   /**
    * Check if a waveform is cached locally
    */
-  isCached(filePath: string, spec: WaveformSpec = { width: 1000, height: 70, normalize: false }): boolean {
+  isCached(
+    filePath: string,
+    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+  ): boolean {
     const key = createCacheKey(filePath, spec.width, spec.height);
     return this.cache.has(key);
   }
@@ -252,7 +263,7 @@ function createOperationWaveformStore() {
 
   return {
     subscribe,
-    
+
     /**
      * Load waveforms for an operation
      */
@@ -307,14 +318,10 @@ export const operationWaveforms = createOperationWaveformStore();
  */
 function getOperationFilePaths(operation: OperationDef | undefined): string[] {
   if (!operation) return [];
-  
+
   // Operations have their own sections array
   const sections = operation.sections || [];
-  return sections.flatMap(section => 
-    section.files
-      .filter(f => f.active)
-      .map(f => f.path)
-  );
+  return sections.flatMap(section => section.files.filter(f => f.active).map(f => f.path));
 }
 
 /**
@@ -327,9 +334,9 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
   index: number;
 }> {
   if (!operation) return [];
-  
+
   const sections = operation.sections || [];
-  return sections.flatMap(section => 
+  return sections.flatMap(section =>
     section.files.map(f => ({
       id: f.id,
       path: f.path,
@@ -341,7 +348,7 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
 
 /**
  * Derived store that provides timeline items for the currently selected operation.
- * 
+ *
  * This is the key store that the Timeline component should use instead of
  * appState.timelineItems. It reactively updates when:
  * - The selected operation changes
@@ -352,25 +359,25 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
   [appState, operationWaveforms],
   ([$appState, $operationWaveforms]) => {
     const selectedOpName = $appState.uiSettings?.selectedOperationName;
-    
+
     // If no operation selected, return empty or fall back to legacy timeline items
     if (!selectedOpName || !$appState.operations?.defs) {
       // Fall back to legacy timeline items for backward compatibility
       return $appState.timelineItems || [];
     }
-    
+
     const operation = $appState.operations.defs[selectedOpName];
     if (!operation) {
       return [];
     }
-    
+
     // Get active file items from the operation
     const fileItems = getOperationFileItems(operation).filter(f => f.active);
-    
+
     if (fileItems.length === 0) {
       return [];
     }
-    
+
     // Calculate total duration based on waveforms
     let totalDuration = 0;
     for (const file of fileItems) {
@@ -379,17 +386,17 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
         totalDuration += waveform.duration;
       }
     }
-    
+
     // Build timeline items with start offsets
     const items: TimelineItem[] = [];
     let currentOffset = 0;
-    
+
     for (const file of fileItems) {
       const waveform = $operationWaveforms.waveforms.get(file.path);
-      
+
       if (waveform) {
         const size = totalDuration > 0 ? waveform.duration / totalDuration : 0;
-        
+
         items.push({
           type: 'audio-file',
           id: file.id,
@@ -399,11 +406,11 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
           size,
           active: file.active,
         } as AudioFileTimelineItem);
-        
+
         currentOffset += size;
       }
     }
-    
+
     return items;
   }
 );
@@ -413,7 +420,7 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
  */
 export const operationDuration: Readable<number> = derived(
   operationWaveforms,
-  ($operationWaveforms) => {
+  $operationWaveforms => {
     let totalDuration = 0;
     for (const waveform of $operationWaveforms.waveforms.values()) {
       totalDuration += waveform.duration;
@@ -427,7 +434,7 @@ export const operationDuration: Readable<number> = derived(
  */
 export const operationWaveformsLoading: Readable<boolean> = derived(
   operationWaveforms,
-  ($operationWaveforms) => $operationWaveforms.loading
+  $operationWaveforms => $operationWaveforms.loading
 );
 
 // ============================================================================
@@ -441,23 +448,25 @@ let unsubscribe: (() => void) | null = null;
  * Initialize the waveform service to react to operation changes
  */
 export function initWaveformService(): () => void {
-  unsubscribe = appState.subscribe(($appState) => {
+  unsubscribe = appState.subscribe($appState => {
     const selectedOpName = $appState.uiSettings?.selectedOperationName || null;
-    
+
     // Only react if the selected operation changed
     if (selectedOpName !== lastSelectedOperationName) {
       lastSelectedOperationName = selectedOpName;
-      
+
       if (!selectedOpName || !$appState.operations?.defs) {
         operationWaveforms.clear();
         return;
       }
-      
+
       const operation = $appState.operations.defs[selectedOpName];
       if (operation) {
         const filePaths = getOperationFilePaths(operation);
         if (filePaths.length > 0) {
-          console.log(`🎵 Loading waveforms for operation "${selectedOpName}" (${filePaths.length} files)`);
+          console.log(
+            `🎵 Loading waveforms for operation "${selectedOpName}" (${filePaths.length} files)`
+          );
           operationWaveforms.loadForOperation(selectedOpName, filePaths);
         } else {
           operationWaveforms.clear();
@@ -465,7 +474,7 @@ export function initWaveformService(): () => void {
       }
     }
   });
-  
+
   return () => {
     if (unsubscribe) {
       unsubscribe();

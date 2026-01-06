@@ -1,39 +1,34 @@
-use log;
 use std::collections::HashMap;
-use std::fs::{metadata, File};
-use std::io::BufReader;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::fs::metadata;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use std::{fs, thread};
 use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::error::Error;
+use crate::graph::OperationGraph;
 use crate::logging::{LogSystem, LoggingConfig, LoggingService};
 use crate::metadata::get_metadata;
 use crate::state::AppState;
-use crate::cook::CookScheduler;
-use crate::graph::OperationGraph;
 use crate::waveform::WaveformService;
 
+mod artifacts;
 mod audio_manager;
 mod combine;
+mod cook;
 mod encoder;
 mod error;
+mod graph;
+mod graph_tests;
 mod logging;
 mod looping_samples_buffer;
 mod macros;
 mod metadata;
+mod ops;
 mod sample_playback;
 mod sorting;
 mod state;
 mod timeline_playback;
-mod artifacts;
-mod cook;
-mod graph;
-mod graph_tests;
-mod ops;
 mod util;
 mod waveform;
 
@@ -174,10 +169,10 @@ pub fn run() {
 
             // Initialize cook scheduler
             {
-                use crate::cook::{CookScheduler, SchedulerConfig};
-                use crate::ops::{OperationRegistry, MergeOperation};
-                use crate::graph::{OperationNodeManager, InvalidationManager};
                 use crate::artifacts::ArtifactStorage;
+                use crate::cook::{CookScheduler, SchedulerConfig};
+                use crate::graph::{InvalidationManager, OperationNodeManager};
+                use crate::ops::{MergeOperation, OperationRegistry};
 
                 // Create operation registry and register operations
                 let mut operation_registry = OperationRegistry::new();
@@ -187,8 +182,9 @@ pub fn run() {
                 // Create other components
                 let operation_graph = OperationGraph::new();
                 let node_manager = Arc::new(Mutex::new(OperationNodeManager::new()));
-                let invalidation_manager = Arc::new(Mutex::new(InvalidationManager::new(operation_graph)));
-                
+                let invalidation_manager =
+                    Arc::new(Mutex::new(InvalidationManager::new(operation_graph)));
+
                 // Create artifact storage
                 let storage_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
                 let artifact_storage = match ArtifactStorage::new(storage_dir, 100 * 1024 * 1024) {
@@ -204,7 +200,7 @@ pub fn run() {
 
                 // Extract logger from mutex for scheduler
                 let logger = {
-                    if let Ok(service) = logging_service.lock() {
+                    if let Ok(_service) = logging_service.lock() {
                         // Create a new logging service instance for the scheduler
                         let mut scheduler_logger = LoggingService::new();
                         scheduler_logger.set_app_handle(app.handle().clone());
@@ -254,7 +250,7 @@ pub fn run() {
             {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
-                app.listen("download-started", |event| {});
+                app.listen("download-started", |_event| {});
             }
             #[cfg(not(debug_assertions))] // Only for release builds
             {

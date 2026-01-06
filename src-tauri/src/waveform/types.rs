@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
 
 /// Stable audio identity for content-addressable caching
 /// This ensures two ops referencing the same file resolve to the same waveform
@@ -56,8 +55,10 @@ impl AudioKey {
 
 /// Channel mode for waveform rendering
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Default)]
 pub enum ChannelMode {
     /// Sum all channels to mono
+    #[default]
     Mono,
     /// Keep stereo (or first two channels)
     Stereo,
@@ -67,11 +68,6 @@ pub enum ChannelMode {
     Right,
 }
 
-impl Default for ChannelMode {
-    fn default() -> Self {
-        Self::Mono
-    }
-}
 
 /// Waveform generation parameters (part of cache key)
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]

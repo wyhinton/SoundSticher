@@ -1,7 +1,5 @@
 pub mod cache;
-pub mod types;
 pub mod commands;
+pub mod types;
 
-pub use cache::*;
-pub use types::*;
 pub use commands::*;

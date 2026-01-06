@@ -112,7 +112,7 @@ pub trait Operation: Send + Sync + std::fmt::Debug {
     }
 
     /// Validate parameters before execution
-    fn validate_parameters(&self, parameters: &serde_json::Value) -> Result<(), OperationError> {
+    fn validate_parameters(&self, _parameters: &serde_json::Value) -> Result<(), OperationError> {
         // Default implementation - no validation
         Ok(())
     }

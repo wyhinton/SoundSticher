@@ -1,17 +1,13 @@
 use crate::error::Error;
 use crate::logging::{LogSystem, LoggingService};
 use crate::state::{AppState, AudioFile};
-use hound::{SampleFormat, WavSpec, WavWriter};
-use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, Sink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::File;
-use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::thread::{self, sleep};
-use std::time::{Duration, Instant};
+use std::thread::sleep;
+use std::time::Duration;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::FormatOptions;
@@ -297,7 +293,7 @@ pub async fn combine_all_cached_samples(
         let mut audio_files = state.audio_files.lock().unwrap();
 
         let sample_rate = 44100.0;
-        let full_waveform_width = 1000.0;
+        let _full_waveform_width = 1000.0;
 
         let mut combined_samples: Vec<i16> = Vec::new();
         let mut total_samples = 0;
@@ -419,11 +415,11 @@ pub async fn test_async(
     state: State<'_, Arc<AppState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     app: AppHandle,
-    on_event: Channel<CombineAudioEvent>,
+    _on_event: Channel<CombineAudioEvent>,
 ) -> Result<String, Error> {
     let state = Arc::clone(&state); // Clone for thread
     let logging_service = logging_service.inner().clone();
-    let app = app.clone(); // Clone for thread
+    let _app = app.clone(); // Clone for thread
 
     let count = state.combine_process.clone();
     *count.lock().unwrap() += 1;
@@ -439,7 +435,7 @@ pub async fn test_async(
 }
 
 #[tauri::command]
-pub fn cancel_combine(state: State<'_, Arc<AppState>>) -> Result<(), Error> {
+pub fn cancel_combine(_state: State<'_, Arc<AppState>>) -> Result<(), Error> {
     println!("🚨 Cancellation flag set");
     Ok(())
 }

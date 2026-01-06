@@ -35,8 +35,7 @@ pub async fn test_scheduler(
         let scheduler = match scheduler_state.lock() {
             Ok(s) => s,
             Err(_) => {
-                return Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Error::Io(std::io::Error::other(
                     "Failed to acquire scheduler lock"
                 )));
             }
@@ -86,8 +85,7 @@ pub async fn test_scheduler(
         let scheduler = match scheduler_state.lock() {
             Ok(s) => s,
             Err(_) => {
-                return Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Error::Io(std::io::Error::other(
                     "Failed to acquire scheduler lock for stats"
                 )));
             }
@@ -193,8 +191,7 @@ pub async fn test_operation(
             
             // Ensure the work directory exists
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
-                return Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Error::Io(std::io::Error::other(
                     format!("Failed to create work directory: {}", e)
                 )));
             }
@@ -240,8 +237,7 @@ pub async fn test_operation(
                             &format!("Operation failed: {:?}", e)
                         );
                     }
-                    Err(Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    Err(Error::Io(std::io::Error::other(
                         format!("Operation failed: {:?}", e)
                     )))
                 }
@@ -460,8 +456,7 @@ pub async fn test_operation_with_params(
             
             // Ensure the work directory exists
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
-                return Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(Error::Io(std::io::Error::other(
                     format!("Failed to create work directory: {}", e)
                 )));
             }
@@ -514,8 +509,7 @@ pub async fn test_operation_with_params(
                             &format!("Operation with custom parameters failed: {:?}", e)
                         );
                     }
-                    Err(Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    Err(Error::Io(std::io::Error::other(
                         format!("Operation failed: {:?}", e)
                     )))
                 }
@@ -583,21 +577,15 @@ pub async fn test_operation_with_params(
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
                 
-            let target_lufs = match params.parameters.get("target_lufs") {
-                Some(v) => Some(v.as_f64()
+            let target_lufs = params.parameters.get("target_lufs").map(|v| v.as_f64()
                     .unwrap_or(-23.0)
                     .max(-40.0) // Minimum reasonable LUFS
-                    .min(-6.0)), // Maximum reasonable LUFS
-                None => None
-            };
+                    .min(-6.0));
             
-            let true_peak_limit = match params.parameters.get("true_peak_limit") {
-                Some(v) => Some(v.as_f64()
+            let true_peak_limit = params.parameters.get("true_peak_limit").map(|v| v.as_f64()
                     .unwrap_or(-1.0)
                     .max(-6.0) // Minimum reasonable limit
-                    .min(0.0)),  // Maximum (0dB)
-                None => None
-            };
+                    .min(0.0));
 
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -647,23 +635,17 @@ pub async fn test_operation_with_params(
                 .filter(|s| !s.trim().is_empty()) // Ensure non-empty path
                 .unwrap_or("./output");
                 
-            let bit_rate = match params.parameters.get("bit_rate") {
-                Some(v) => Some(v.as_u64()
+            let bit_rate = params.parameters.get("bit_rate").map(|v| v.as_u64()
                     .map(|v| v as u32)
                     .unwrap_or(320)
                     .max(64)    // Minimum reasonable bitrate
-                    .min(2048)), // Maximum reasonable bitrate
-                None => None
-            };
+                    .min(2048));
             
-            let sample_rate = match params.parameters.get("sample_rate") {
-                Some(v) => Some(v.as_u64()
+            let sample_rate = params.parameters.get("sample_rate").map(|v| v.as_u64()
                     .map(|v| v as u32)
                     .unwrap_or(44100)
                     .max(8000)   // Minimum reasonable sample rate
-                    .min(192000)), // Maximum reasonable sample rate
-                None => None
-            };
+                    .min(192000));
             
             let normalize_before_export = params.parameters.get("normalize_before_export")
                 .and_then(|v| v.as_bool())

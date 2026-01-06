@@ -226,29 +226,23 @@ pub struct StorageHints {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum CompressionType {
+    #[default]
     None,
     Lz4,
     Zstd,
     Gzip,
 }
 
-impl Default for CompressionType {
-    fn default() -> Self {
-        CompressionType::None
-    }
-}
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum StoragePriority {
     Low,
+    #[default]
     Normal,
     High,
     Critical,
 }
 
-impl Default for StoragePriority {
-    fn default() -> Self {
-        StoragePriority::Normal
-    }
-}

@@ -1,7 +1,7 @@
 // Dirty propagation and invalidation system
 
 use crate::graph::{OpId, OperationGraph};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
 /// Handles invalidation cascading through the operation graph
 #[derive(Debug)]

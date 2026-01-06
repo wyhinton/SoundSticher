@@ -104,7 +104,7 @@ impl LoopingSamplesBuffer {
     /// Seek to a normalized position (0.0 to 1.0)
     /// Returns true if the seek was successful, false if position is out of bounds
     pub fn seek_to_progress(&mut self, progress: f32) -> bool {
-        if progress < 0.0 || progress > 1.0 {
+        if !(0.0..=1.0).contains(&progress) {
             return false;
         }
 

@@ -1,4 +1,3 @@
-use rodio::buffer::SamplesBuffer;
 use rodio::{OutputStream, Sink};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -10,7 +9,7 @@ use crate::epr;
 use crate::logging::{LogSystem, LoggingService};
 use crate::looping_samples_buffer::LoopingSamplesBuffer;
 use crate::state::AppState;
-use crate::{log_debug, log_error, log_info};
+use crate::{log_debug, log_info};
 
 // Custom macro for bold red error messages
 
@@ -99,7 +98,7 @@ pub fn play_timeline_audio(
             }
         };
 
-        let duration = samples.len() as f32 / (channels as f32 * sample_rate as f32);
+        let _duration = samples.len() as f32 / (channels as f32 * sample_rate as f32);
         let start = Instant::now();
         println!(
             "🎵 Total samples: {}, Using FULL audio (no trimming)",
@@ -296,7 +295,7 @@ pub fn set_volume(
         );
     }
 
-    let mut current_song = state.current_song.lock().unwrap();
+    let current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
         sink.set_volume(vol);
     }
@@ -339,7 +338,7 @@ pub fn set_timeline_play_position(
                     let guard = state.combined_audio.lock().unwrap();
                     if let Some(ref samples) = *guard {
                         let sample_rate = 44100.0;
-                        let channels = 2.0;
+                        let _channels = 2.0;
                         samples.len() as f32 / (sample_rate)
                     } else {
                         1.0 // Default fallback
@@ -425,7 +424,7 @@ fn set_timeline_play_position_fallback(
             }
         };
 
-        let duration = samples.len() as f32 / (channels as f32 * sample_rate as f32);
+        let _duration = samples.len() as f32 / (channels as f32 * sample_rate as f32);
         let start = Instant::now();
 
         println!("🎵 Fallback: Using FULL audio samples: {}", samples.len());
@@ -596,7 +595,7 @@ pub fn set_timeline_loop_enabled(
 
         // Restart with new loop setting
         let state_clone = state.inner().clone();
-        let app_clone = app.clone();
+        let _app_clone = app.clone();
 
         thread::spawn(move || {
             // Small delay to ensure cleanup

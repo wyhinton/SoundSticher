@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use lofty::file::AudioFile;
-use lofty::probe::Probe;
 use lofty::read_from_path;
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,9 +10,6 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::probe::ProbeResult;
 use symphonia::default::get_probe;
-
-use lofty;
-use uuid::Uuid;
 
 use crate::error::Error;
 
@@ -38,7 +34,7 @@ pub fn get_duration(path: &str) -> Option<f32> {
         .ok()?;
 
     let format = probed.format;
-    let track = format.default_track().or_else(|| format.tracks().get(0))?;
+    let track = format.default_track().or_else(|| format.tracks().first())?;
 
     let duration = track.codec_params.n_frames?;
     let sample_rate = track.codec_params.sample_rate?;
@@ -54,12 +50,13 @@ pub fn get_duration(path: &str) -> Option<f32> {
 }
 
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileMetadata {
     pub path: String,
     pub size: Option<u64>,
-    pub bitRate: Option<u32>,
+    pub bit_rate: Option<u32>,
     pub channels: Option<u8>,
-    pub bitDepth: Option<u8>,
+    pub bit_depth: Option<u8>,
     pub duration: u128,
 }
 
@@ -98,9 +95,9 @@ pub fn get_metadata(titles: Vec<String>) -> Result<Vec<FileMetadata>, Error> {
                 results.push(FileMetadata {
                     path: title.clone(),
                     size: get_file_size(title.clone()),
-                    bitRate: props.audio_bitrate(),
+                    bit_rate: props.audio_bitrate(),
                     channels: props.channels(),
-                    bitDepth: props.bit_depth(),
+                    bit_depth: props.bit_depth(),
                     duration: props.duration().as_millis(),
                 });
             }
@@ -130,5 +127,5 @@ fn get_file_size(path: String) -> Option<u64> {
     if let Ok(metadata) = std::fs::metadata(path) {
         return Some(metadata.len());
     }
-    return None;
+    None
 }

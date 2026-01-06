@@ -1,12 +1,12 @@
 // Cook scheduler for managing operation execution
 
 use crate::artifacts::{Artifact, ArtifactStorage};
-use crate::cook::{CookTask, CookTaskPriority, TaskStatus};
+use crate::cook::{CookTask, TaskStatus};
 use crate::graph::{InvalidationManager, OpId, OperationNodeManager};
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::{OperationContext, OperationRegistry, OperationResult};
+use crate::ops::{OperationContext, OperationRegistry};
 use crate::util::id_utils;
-use std::collections::{BinaryHeap, HashMap, VecDeque};
+use std::collections::{BinaryHeap, HashMap};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};

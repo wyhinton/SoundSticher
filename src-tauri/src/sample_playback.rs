@@ -1,11 +1,10 @@
-use rodio::buffer::SamplesBuffer;
 use rodio::{Decoder, OutputStream, Sink};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{fs, thread};
+use std::thread;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::metadata;
@@ -13,7 +12,7 @@ use crate::state::AppState;
 
 #[tauri::command]
 pub fn pause_sample_preview(state: State<'_, Arc<AppState>>) {
-    let mut current_song = state.current_song.lock().unwrap();
+    let current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
         println!("PAUSING!!!!");
         sink.pause();

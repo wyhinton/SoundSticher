@@ -3,7 +3,6 @@ pub mod fingerprint;
 pub mod scheduler;
 pub mod task;
 
-pub use cache::*;
 pub use fingerprint::*;
 pub use scheduler::*;
 pub use task::*;

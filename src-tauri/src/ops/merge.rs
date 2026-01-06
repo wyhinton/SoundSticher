@@ -57,13 +57,13 @@ impl Operation for MergeOperation {
         })
     }
 
-    fn validate_parameters(&self, parameters: &serde_json::Value) -> Result<(), OperationError> {
+    fn validate_parameters(&self, _parameters: &serde_json::Value) -> Result<(), OperationError> {
         // Only concatenation is supported, so no validation needed for merge_type
         // Could validate crossfade_ms and normalize parameters if needed
         Ok(())
     }
 
-    fn execute(&self, mut context: OperationContext) -> OperationResult {
+    fn execute(&self, context: OperationContext) -> OperationResult {
         context.report_progress(0.0);
 
         // Get input artifacts
@@ -132,12 +132,12 @@ impl Operation for MergeOperation {
         "Concatenate multiple audio files sequentially"
     }
 
-    fn estimated_duration(&self, context: &OperationContext) -> std::time::Duration {
+    fn estimated_duration(&self, _context: &OperationContext) -> std::time::Duration {
         // Estimate based on input file sizes
         std::time::Duration::from_secs(2)
     }
 
-    fn memory_requirement(&self, context: &OperationContext) -> usize {
+    fn memory_requirement(&self, _context: &OperationContext) -> usize {
         // Estimate for concatenation - relatively modest memory requirements
         50 * 1024 * 1024 // 50MB
     }
@@ -148,14 +148,14 @@ impl MergeOperation {
         &self,
         inputs: &[AudioArtifact],
         output_path: &std::path::Path,
-        crossfade_ms: f64,
+        _crossfade_ms: f64,
         context: &OperationContext,
     ) -> Result<(), OperationError> {
         // TODO: Implement audio concatenation with optional crossfade
         // For now, this is a placeholder that would use an audio library like cpal or symphonia
 
         // Progress tracking for concatenation
-        for (i, input) in inputs.iter().enumerate() {
+        for (i, _input) in inputs.iter().enumerate() {
             let progress = 0.2 + (0.6 * (i as f32 / inputs.len() as f32));
             context.report_progress(progress);
 
@@ -172,8 +172,8 @@ impl MergeOperation {
 
     fn normalize_audio(
         &self,
-        file_path: &std::path::Path,
-        context: &OperationContext,
+        _file_path: &std::path::Path,
+        _context: &OperationContext,
     ) -> Result<(), OperationError> {
         // TODO: Implement audio normalization
         // - Find peak amplitude

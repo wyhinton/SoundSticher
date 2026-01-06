@@ -188,7 +188,7 @@ impl AudioEncoder for FlacEncoder {
             println!("===================");
         }
 
-        if samples.len() % num_channels != 0 {
+        if !samples.len().is_multiple_of(num_channels) {
             return Err(Error::UnevenNumberOfSamples);
         }
 
@@ -368,7 +368,7 @@ impl AudioEncoder for Mp3Encoder {
             println!("🎧 ==================");
         }
 
-        if samples.len() % num_channels != 0 {
+        if !samples.len().is_multiple_of(num_channels) {
             return Err(Error::UnevenNumberOfSamples);
         }
 
@@ -668,11 +668,7 @@ pub async fn export_audio(
 
     tauri::async_runtime::spawn_blocking(move || {
         // Get the logger
-        let logger = if let Ok(service) = logging_service.lock() {
-            Some(service)
-        } else {
-            None
-        };
+        let logger = logging_service.lock().ok();
 
         // lock audio_files
         let audio_files = state.audio_files.lock().unwrap();
@@ -687,7 +683,7 @@ pub async fn export_audio(
             println!("🎵 ENCODING STARTED of {} audio files", audio_files.len());
         }
 
-        if audio_files.len() == 0 {
+        if audio_files.is_empty() {
             if let Some(logger) = &logger {
                 logger.error(
                     LogSystem::Encoder,
