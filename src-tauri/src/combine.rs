@@ -113,7 +113,7 @@ pub async fn update_inputs(
 ) -> Result<String, Error> {
     let state = state.inner().clone();
     let logging_service = logging_service.inner().clone();
-    let current_token = state.cancel_token.fetch_add(1, Ordering::SeqCst) + 1;
+    let _current_token = state.cancel_token.fetch_add(1, Ordering::SeqCst) + 1;
     
     // Log operation start
     if let Ok(logger) = logging_service.lock() {

@@ -58,8 +58,8 @@
         // Calculate grid position
         const column = nodeIndex % GRID_COLUMNS;
         const row = Math.floor(nodeIndex / GRID_COLUMNS);
-        const xPosition = START_X + (column * 150); // Reduced spacing for grid
-        const yPosition = START_Y + (row * VERTICAL_SPACING);
+        const xPosition = START_X + column * 150; // Reduced spacing for grid
+        const yPosition = START_Y + row * VERTICAL_SPACING;
 
         nodes.push({
           id: sourceNodeId,
@@ -85,7 +85,7 @@
     const gridCenterY = START_Y + ((gridRows - 1) * VERTICAL_SPACING) / 2;
     const gridWidth = (GRID_COLUMNS - 1) * 150;
     const opNodeId = `combine-op-${operationName}`;
-    
+
     nodes.push({
       id: opNodeId,
       type: 'operation',

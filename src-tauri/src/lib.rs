@@ -15,6 +15,7 @@ use crate::metadata::get_metadata;
 use crate::state::AppState;
 use crate::cook::CookScheduler;
 use crate::graph::OperationGraph;
+use crate::waveform::WaveformService;
 
 mod audio_manager;
 mod combine;
@@ -34,6 +35,7 @@ mod graph;
 mod graph_tests;
 mod ops;
 mod util;
+mod waveform;
 
 pub struct Song {
     pub title: String,
@@ -245,6 +247,9 @@ pub fn run() {
                 seek_start_time: Mutex::new(0.0),
             }));
 
+            // Initialize waveform cache service
+            app.manage(Arc::new(WaveformService::new()));
+
             #[cfg(debug_assertions)] // Only include this code on debug builds
             {
                 let window = app.get_webview_window("main").unwrap();
@@ -289,6 +294,13 @@ pub fn run() {
             graph_tests::test_scheduler,
             graph_tests::test_operation_with_params,
             get_artifacts_directory,
+            // Waveform cache commands
+            waveform::get_waveform,
+            waveform::get_waveforms_batch,
+            waveform::invalidate_waveform,
+            waveform::clear_waveform_cache,
+            waveform::get_waveform_cache_stats,
+            waveform::get_waveforms_for_operation,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

@@ -4,7 +4,7 @@ use crate::artifacts::{Artifact, ArtifactStorage};
 use crate::cook::{CookTask, CookTaskPriority, TaskStatus};
 use crate::graph::{InvalidationManager, OpId, OperationNodeManager};
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::{Operation, OperationContext, OperationRegistry, OperationResult};
+use crate::ops::{OperationContext, OperationRegistry, OperationResult};
 use crate::util::id_utils;
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::sync::{mpsc, Arc, Mutex};

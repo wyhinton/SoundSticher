@@ -46,6 +46,9 @@ pub enum Error {
 
     #[error("Lock poisoned")]
     LockPoisoned,
+
+    #[error("Waveform error: {0}")]
+    WaveformError(String),
 }
 
 #[derive(serde::Serialize)]
@@ -66,6 +69,7 @@ pub enum ErrorKind {
     UnevenNumberOfSamples,
     FlacEncodeError(String),
     FlacOutputError(String),
+    WaveformError(String),
 }
 
 impl serde::Serialize for Error {
@@ -90,6 +94,7 @@ impl serde::Serialize for Error {
             Self::FlacEncodeError(_) => ErrorKind::FlacEncodeError(error_message),
             Self::FlacOutputError(_) => ErrorKind::FlacOutputError(error_message),
             Self::LockPoisoned => ErrorKind::UnevenNumberOfSamples,
+            Self::WaveformError(_) => ErrorKind::WaveformError(error_message),
         };
         error_kind.serialize(serializer)
     }

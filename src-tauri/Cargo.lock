@@ -10,6 +10,7 @@ dependencies = [
  "flacenc",
  "hound",
  "lame",
+ "lazy_static",
  "lofty",
  "log",
  "mp3lame-encoder",

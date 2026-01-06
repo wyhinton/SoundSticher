@@ -15,10 +15,14 @@
   import { exportState } from './state/export';
   import { get } from 'svelte/store';
   import { initializeStateSynchronization } from './state/stateSynchronization';
+  import { initWaveformService } from './state/waveformCache';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
+
+  // Feature flag: Set to true to use the new operation-based waveform system
+  const USE_OPERATION_SYSTEM = false; // Change to true when ready to switch
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -30,6 +34,8 @@
   let unlisten: UnlistenFn;
   let contextMenuWrapper: ContextMenuWrapper;
   let timelineComponent: any;
+  let cleanupWaveformService: (() => void) | null = null;
+
   async function onDrop(event) {
     filedropEvent = event;
     if (!filedropEvent) return;
@@ -58,6 +64,11 @@
     // Initialize state synchronization
     initializeStateSynchronization();
 
+    // Initialize waveform service (handles loading waveforms when operation changes)
+    if (USE_OPERATION_SYSTEM) {
+      cleanupWaveformService = initWaveformService();
+    }
+
     window.addEventListener('keyup', handleSpaceBar);
     exportState.update(s => {
       s.message = undefined;
@@ -75,6 +86,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keyup', handleSpaceBar);
+    cleanupWaveformService?.();
   });
 </script>
 
@@ -102,7 +114,10 @@
     <!-- <Waveform></Waveform> -->
     <div>
       <PlottedInfo></PlottedInfo>
-      <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
+      <Plotted
+        bind:this={timelineComponent}
+        on:selectionChange={handleTimelineSelectionChange}
+        useOperationSystem={USE_OPERATION_SYSTEM}
       ></Plotted>
       <Export></Export>
     </div>

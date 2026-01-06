@@ -27,6 +27,12 @@
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
   import { debugState, timelineDebugMode } from '../state/debug.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
+  import {
+    operationTimelineItems,
+    operationDuration,
+    operationWaveformsLoading,
+    initWaveformService,
+  } from '../state/waveformCache';
 
   import {
     DragDropManager,
@@ -38,6 +44,9 @@
   } from './Timeline/DragDropManager';
 
   const dispatch = createEventDispatcher();
+
+  // Props to control which system to use
+  export let useOperationSystem = false; // Set to true to use operation-based timeline items
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -68,7 +77,8 @@
   let playHeadX = 0;
 
   // Initialize managers when dependencies change
-  $: if (width > 0 && $durationSeconds > 0) {
+  // Use currentDuration for operation-based system or durationSeconds for legacy
+  $: if (width > 0 && currentDuration > 0) {
     initializeManagers();
   }
 
@@ -93,6 +103,26 @@
 
   const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
+
+  // ============================================================================
+  // TIMELINE ITEMS - Switch between legacy and operation-based systems
+  // ============================================================================
+
+  // Reactive timeline items that respond to which system is active
+  // When useOperationSystem is true, use operation-derived items
+  // Otherwise fall back to the legacy appState.timelineItems
+  $: timelineItems = useOperationSystem ? $operationTimelineItems : $appState?.timelineItems || [];
+
+  // Reactive duration based on active system
+  $: currentDuration = useOperationSystem ? $operationDuration : $durationSeconds;
+
+  // Loading state for operation waveforms
+  $: isLoadingWaveforms = useOperationSystem && $operationWaveformsLoading;
+
+  // Check if we have no active samples
+  $: hasNoActiveSamples = useOperationSystem
+    ? timelineItems.length === 0 && !isLoadingWaveforms
+    : $appState?.hasNoActiveSamples;
 
   // Selection state - now derived from the selection service
   $: selectedSegments = $selectedIds;
@@ -156,11 +186,11 @@
     unsubscribeDragDrop?.();
     unsubscribeDragDrop = null;
 
-    // Create new D3 manager
+    // Create new D3 manager - use currentDuration instead of durationSeconds
     d3Manager = new D3TimelineManager({
       width,
       height,
-      durationSeconds: $durationSeconds,
+      durationSeconds: currentDuration,
       originalPathWidth,
       onTransformChange: transform => {
         currentTransform = transform;
@@ -197,13 +227,13 @@
   }
 
   // Update manager options when width or duration changes
-  $: if (d3Manager && (width > 0 || $durationSeconds > 0)) {
-    d3Manager.updateOptions({ width, durationSeconds: $durationSeconds });
+  $: if (d3Manager && (width > 0 || currentDuration > 0)) {
+    d3Manager.updateOptions({ width, durationSeconds: currentDuration });
     scaleX = d3Manager.getScaleX();
   }
 
   listen<number>('timeline-progress', event => {
-    playHeadPosition = event.payload * $durationSeconds;
+    playHeadPosition = event.payload * currentDuration;
   });
 
   function handleClick(event: MouseEvent) {
@@ -225,9 +255,10 @@
     }
 
     // Check for segment clicks only if not in x-axis area
-    const clickedSegmentIndex = $appState?.timelineItems
-      ? d3Manager.findClickedSegment(relativeX, $appState.timelineItems as TimelineItem[])
-      : null;
+    const clickedSegmentIndex =
+      timelineItems.length > 0
+        ? d3Manager.findClickedSegment(relativeX, timelineItems as TimelineItem[])
+        : null;
 
     if (clickedSegmentIndex === null) {
       handleClearSelection();
@@ -258,19 +289,19 @@
         return;
       event.preventDefault();
 
-      const selectedIds: string[] = [];
-      if ($appState?.timelineItems) {
+      const selectedFileIds: string[] = [];
+      if (timelineItems.length > 0) {
         Array.from(selectedSegments).forEach(index => {
-          if (index < $appState.timelineItems.length) {
-            const item = $appState.timelineItems[index];
-            if (item && isAudioFileItem(item)) selectedIds.push(item.id);
+          if (index < timelineItems.length) {
+            const item = timelineItems[index];
+            if (item && isAudioFileItem(item)) selectedFileIds.push(item.id);
           }
         });
       }
 
-      if (selectedIds.length > 0) {
+      if (selectedFileIds.length > 0) {
         audioFileStateManager
-          .setFilesActive(selectedIds, false)
+          .setFilesActive(selectedFileIds, false)
           .then(() => handleClearSelection())
           .catch(error => console.error('Failed to deactivate segments:', error));
       }
@@ -327,11 +358,19 @@
     {currentTransform.k.toFixed(2)}x
   </div>
   <!-- No Active Samples Message -->
-  {#if $appState?.hasNoActiveSamples}
+  {#if hasNoActiveSamples}
     <div class="no-active-samples-message">
-      <div class="message-content">No active samples to display</div>
+      <div class="message-content">
+        {#if isLoadingWaveforms}
+          Loading waveforms...
+        {:else}
+          No active samples to display
+        {/if}
+      </div>
       <div class="message-subtitle">
-        Activate audio files from the Sources panel to see them here
+        {#if !isLoadingWaveforms}
+          Activate audio files from the Sources panel to see them here
+        {/if}
       </div>
     </div>
   {/if}
@@ -381,10 +420,10 @@
 
           <Playhead {playHeadX} {currentTransform} />
 
-          <!-- {#if $appState?.timelneItems} -->
+          <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
-            {#if $appState?.timelineItems.length > 0}
-              {#each $appState?.timelineItems as timelineItem, i}
+            {#if timelineItems.length > 0}
+              {#each timelineItems as timelineItem, i}
                 <TimelineSegment
                   {scaleX}
                   index={i}
@@ -431,10 +470,10 @@
           </g>
         </g>
       </g>
-      {#if $appState?.timelineItems.length > 0}
+      {#if timelineItems.length > 0}
         <LabelLayer
           {scaleX}
-          items={$appState?.timelineItems}
+          items={timelineItems}
           {originalPathWidth}
           {currentTransform}
           {isDragging}
@@ -469,7 +508,7 @@
       {scaleX}
       {playHeadPosition}
       {currentTransform}
-      timelineItems={$appState?.timelineItems || []}
+      {timelineItems}
       {originalPathWidth}
       {selectedSegments}
       {lastSelectedIndex}
