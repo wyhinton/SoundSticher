@@ -82,8 +82,9 @@ pub struct AudioSend {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Section {
-    folderPath: String,
+    folder_path: String,
     paths: Vec<AudioSend>,
 }
 
@@ -189,7 +190,6 @@ pub async fn update_inputs(
         let existing_total_samples: usize = audio_files.values().map(|f| f.samples.len()).sum();
         let grand_total_samples = existing_total_samples + total_new_samples;
 
-        //TODO: DUPLICATE FILES
         for (i, (path, samples)) in new_files.iter().enumerate() {
             combined.extend(samples);
 
