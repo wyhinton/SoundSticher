@@ -105,7 +105,7 @@
         <div class="d-flex flex-column w-100">
           <OperationsFlowPanel></OperationsFlowPanel>
         </div>
-        <div class="d-flex h-fill-available w-100" style:max-height="470px">
+        <div class="d-flex h-fill-available w-100" style:max-height="500px">
           <Sources></Sources>
           <FileTable sections={$currentOperationSections}></FileTable>
         </div>

@@ -105,7 +105,7 @@
   }
 </script>
 
-<div class="h-fill-available w-fill-available card d-flex flex-column position-relative">
+<div class="w-fill-available card d-flex flex-column position-relative">
   <div class="d-flex flex-column h-fill-available" style:background-color="#080808">
     <div class="d-flex flex-column"></div>
     {#if sections.length === 0}
@@ -342,10 +342,6 @@
   .error {
     border: 1px solid red;
     color: red;
-  }
-
-  input {
-    height: 20px;
   }
 
   .sort-arrow-active {
