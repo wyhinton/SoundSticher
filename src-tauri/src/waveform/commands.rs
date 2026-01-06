@@ -4,9 +4,10 @@
 // Operations do not store waveforms - they request them via this service.
 
 use crate::error::Error;
+use crate::logging::{LogSystem, LoggingService};
 use crate::waveform::cache::{WaveformCache, WaveformError};
 use crate::waveform::types::*;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 /// Waveform service state (wraps the cache)
 pub struct WaveformService {
@@ -130,40 +131,155 @@ impl Default for WaveformService {
 #[tauri::command]
 pub async fn get_waveform(
     service: State<'_, Arc<WaveformService>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     request: WaveformRequest,
 ) -> Result<WaveformResponse, Error> {
     let spec = WaveformSpec::new(request.width, request.height).with_normalize(request.normalize);
 
-    service
+    // Log the request
+    if let Ok(logger) = logging_service.lock() {
+        logger.debug_with_data(
+            LogSystem::Waveform,
+            "Processing single waveform request",
+            Some("single_request"),
+            serde_json::json!({
+                "file_path": request.file_path,
+                "spec": {
+                    "width": request.width,
+                    "height": request.height,
+                    "normalize": request.normalize
+                }
+            }),
+        );
+    }
+
+    let result = service
         .get_waveform(&request.file_path, &spec)
-        .map_err(|e| Error::WaveformError(e.to_string()))
+        .map_err(|e| Error::WaveformError(e.to_string()));
+
+    // Log the result
+    if let Ok(logger) = logging_service.lock() {
+        match &result {
+            Ok(response) => {
+                logger.debug_with_data(
+                    LogSystem::Waveform,
+                    "Successfully generated waveform",
+                    Some("single_result"),
+                    serde_json::json!({
+                        "file_path": request.file_path,
+                        "cache_hit": response.cache_hit,
+                        "peaks_count": response.waveform.peaks.len(),
+                        "duration": response.waveform.duration,
+                        "sample_count": response.waveform.sample_count
+                    }),
+                );
+            }
+            Err(e) => {
+                logger.error(
+                    LogSystem::Waveform,
+                    &format!(
+                        "Failed to generate waveform for {}: {}",
+                        request.file_path, e
+                    ),
+                    Some("single_error"),
+                );
+            }
+        }
+    }
+
+    result
 }
 
 /// Get waveforms for multiple files (batch)
 #[tauri::command]
 pub async fn get_waveforms_batch(
     service: State<'_, Arc<WaveformService>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     request: BatchWaveformRequest,
 ) -> Result<BatchWaveformResponse, Error> {
     let spec = WaveformSpec::new(request.width, request.height).with_normalize(request.normalize);
 
-    Ok(service.get_waveforms_batch(&request.file_paths, &spec))
+    // Log the batch request
+    if let Ok(logger) = logging_service.lock() {
+        logger.info_with_data(
+            LogSystem::Waveform,
+            "Processing batch waveform request",
+            Some("batch_request"),
+            serde_json::json!({
+                "file_count": request.file_paths.len(),
+                "spec": {
+                    "width": request.width,
+                    "height": request.height,
+                    "normalize": request.normalize
+                }
+            }),
+        );
+    }
+
+    let result = service.get_waveforms_batch(&request.file_paths, &spec);
+
+    // Log the result
+    if let Ok(logger) = logging_service.lock() {
+        logger.info_with_data(
+            LogSystem::Waveform,
+            "Completed batch waveform request",
+            Some("batch_result"),
+            serde_json::json!({
+                "cache_hits": result.total_cache_hits,
+                "computed": result.total_computed,
+                "errors": result.total_errors,
+                "success_count": result.items.iter().filter(|i| i.error.is_none()).count(),
+                "error_count": result.items.iter().filter(|i| i.error.is_some()).count()
+            }),
+        );
+    }
+
+    Ok(result)
 }
 
 /// Invalidate cached waveform for a file
 #[tauri::command]
 pub fn invalidate_waveform(
     service: State<'_, Arc<WaveformService>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     file_path: String,
 ) -> Result<(), Error> {
     service.invalidate(&file_path);
+
+    if let Ok(logger) = logging_service.lock() {
+        logger.info(
+            LogSystem::Waveform,
+            &format!("Invalidated cached waveform for: {}", file_path),
+            Some("cache_invalidate"),
+        );
+    }
+
     Ok(())
 }
 
 /// Clear all cached waveforms
 #[tauri::command]
-pub fn clear_waveform_cache(service: State<'_, Arc<WaveformService>>) -> Result<(), Error> {
+pub fn clear_waveform_cache(
+    service: State<'_, Arc<WaveformService>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<(), Error> {
+    let stats_before = service.get_stats();
     service.clear();
+
+    if let Ok(logger) = logging_service.lock() {
+        logger.info_with_data(
+            LogSystem::Waveform,
+            "Cleared waveform cache",
+            Some("cache_clear"),
+            serde_json::json!({
+                "previous_hits": stats_before.hits,
+                "previous_misses": stats_before.misses,
+                "previous_evictions": stats_before.evictions,
+                "total_compute_time_ms": stats_before.total_compute_time_ms
+            }),
+        );
+    }
+
     Ok(())
 }
 
@@ -180,11 +296,43 @@ pub fn get_waveform_cache_stats(
 #[tauri::command]
 pub async fn get_waveforms_for_operation(
     service: State<'_, Arc<WaveformService>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     file_paths: Vec<String>,
     width: Option<u32>,
     height: Option<u32>,
 ) -> Result<BatchWaveformResponse, Error> {
     let spec = WaveformSpec::new(width.unwrap_or(1000), height.unwrap_or(70));
 
-    Ok(service.get_waveforms_batch(&file_paths, &spec))
+    // Log the operation request
+    if let Ok(logger) = logging_service.lock() {
+        logger.info_with_data(
+            LogSystem::Waveform,
+            "Processing waveforms for operation",
+            Some("operation_request"),
+            serde_json::json!({
+                "file_count": file_paths.len(),
+                "width": width.unwrap_or(1000),
+                "height": height.unwrap_or(70)
+            }),
+        );
+    }
+
+    let result = service.get_waveforms_batch(&file_paths, &spec);
+
+    // Log the result
+    if let Ok(logger) = logging_service.lock() {
+        logger.info_with_data(
+            LogSystem::Waveform,
+            "Completed operation waveforms",
+            Some("operation_result"),
+            serde_json::json!({
+                "cache_hits": result.total_cache_hits,
+                "computed": result.total_computed,
+                "errors": result.total_errors,
+                "total_items": result.items.len()
+            }),
+        );
+    }
+
+    Ok(result)
 }

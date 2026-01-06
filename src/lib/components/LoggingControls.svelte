@@ -46,6 +46,11 @@
       label: 'Sorting',
       icon: 'fa-sort',
     },
+    waveformLog: {
+      category: 'backend',
+      label: 'Waveform',
+      icon: 'fa-wave-square',
+    },
   };
 
   // Get frontend and backend systems

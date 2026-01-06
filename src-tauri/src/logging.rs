@@ -17,14 +17,11 @@ pub enum LogLevel {
 pub enum LogSystem {
     Encoder,
     Combine,
-    #[allow(dead_code)] // For future use
     Playback,
-    #[allow(dead_code)] // For future use
     Sorting,
-    #[allow(dead_code)] // For future use
     Cook,
-    #[allow(dead_code)] // For future use
     Graph,
+    Waveform,
 }
 
 /// A log message that will be sent to the frontend
@@ -46,6 +43,7 @@ pub struct LoggingConfig {
     pub combine_enabled: bool,
     pub playback_enabled: bool,
     pub sorting_enabled: bool,
+    pub waveform_enabled: bool,
     pub console_output: bool, // Whether to also print to console
 }
 
@@ -56,6 +54,7 @@ impl Default for LoggingConfig {
             combine_enabled: false,
             playback_enabled: false,
             sorting_enabled: false,
+            waveform_enabled: false,
             console_output: true,
         }
     }
@@ -111,6 +110,7 @@ impl LoggingService {
             LogSystem::Cook => false,  // Future system, default to off
             LogSystem::Graph => false, // Future system, default to off
             LogSystem::Sorting => config.sorting_enabled,
+            LogSystem::Waveform => config.waveform_enabled,
         };
 
         if !should_log {
@@ -145,6 +145,7 @@ impl LoggingService {
                 LogSystem::Sorting => "SORTING",
                 LogSystem::Cook => "COOK",
                 LogSystem::Graph => "GRAPH",
+                LogSystem::Waveform => "WAVEFORM",
             };
 
             let category_str = category.map(|c| format!("[{}] ", c)).unwrap_or_default();

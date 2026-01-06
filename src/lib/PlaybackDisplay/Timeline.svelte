@@ -46,7 +46,7 @@
   const dispatch = createEventDispatcher();
 
   // Props to control which system to use
-  export let useOperationSystem = false; // Set to true to use operation-based timeline items
+  export let useOperationSystem = true; // Set to true to use operation-based timeline items
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
