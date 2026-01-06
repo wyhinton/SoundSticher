@@ -66,9 +66,6 @@ pub fn update_sorting(
         println!("{} -> {}", key, file.id);
     }
 
-    // println!("update0{}", updates[0].id);
-    // println!("update1{}", updates[1].id);
-
     // Print order before sorting
     println!("Order before sorting (by input order):");
     for (i, update) in updates.iter().enumerate() {
@@ -115,10 +112,6 @@ pub fn update_sorting(
         .filter_map(|u| audio_files.values().find(|f| f.id == u.id))
         .map(|file| file.samples.len())
         .sum();
-
-    // if total_samples == 0 {
-    //     return Ok(()); // nothing to update
-    // }
 
     let mut current_sample_offset = 0;
     println!("Current AudioFile IDs in BTreeMap:");
