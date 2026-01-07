@@ -4,7 +4,7 @@
 // using the pull-based playback system.
 
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::sample::SamplePlayableOp;
+use crate::ops::sample::SampleOp;
 use crate::playback::op_playback::{
     AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
 };
@@ -199,7 +199,7 @@ pub fn op_playback_build_graph(
         };
 
         // Create the playable operation
-        let op = Box::new(SamplePlayableOp::new(samples.clone(), spec));
+        let op = Box::new(SampleOp::new(samples.clone(), spec));
         let op_duration = op.duration().unwrap_or(SampleTime::new(0));
         let op_duration_seconds = op_duration.to_seconds(sample_rate);
 

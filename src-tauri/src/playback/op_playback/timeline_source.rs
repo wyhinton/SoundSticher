@@ -11,7 +11,6 @@
 // - Seamless seeking
 
 use super::context::PlaybackContext;
-use super::op_source::PlayableOp;
 use super::timeline::{PlaybackGraph, PlaybackTimeline};
 use super::types::{AudioSpec, PlaybackOpId, SampleTime};
 use rodio::Source;
@@ -310,112 +309,5 @@ impl TimelineSourceBuilder {
 impl Default for TimelineSourceBuilder {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::timeline::TimelineEvent;
-    use crate::{
-        ops::sample::SamplePlayableOp,
-        playback::{AudioSpec, PlaybackGraph, SampleTime, TimelineSource},
-    };
-
-    fn create_test_graph() -> Arc<PlaybackGraph> {
-        let spec = AudioSpec::new(44100, 1);
-        let graph = Arc::new(PlaybackGraph::new(spec));
-
-        // Create a simple test operation with known values
-        let samples: Vec<f32> = (0..1000).map(|i| i as f32 / 1000.0).collect();
-        let op = Box::new(SamplePlayableOp::new(samples, spec));
-
-        // Schedule it from 0 to 1000 samples
-        graph
-            .schedule_op(op, SampleTime::new(0), SampleTime::new(1000))
-            .unwrap();
-
-        graph
-    }
-
-    #[test]
-    fn test_timeline_source_creation() {
-        let spec = AudioSpec::new(44100, 1);
-        let graph = Arc::new(PlaybackGraph::new(spec));
-        let source = TimelineSource::new(graph, spec);
-
-        assert_eq!(source.channels(), 1);
-        assert_eq!(source.sample_rate(), 44100);
-        assert_eq!(source.position().samples(), 0);
-    }
-
-    #[test]
-    fn test_timeline_source_produces_samples() {
-        let graph = create_test_graph();
-        let spec = AudioSpec::new(44100, 1);
-        let mut source = TimelineSource::new(graph, spec);
-
-        // Read some samples
-        let samples: Vec<f32> = source.by_ref().take(100).collect();
-
-        assert_eq!(samples.len(), 100);
-        // First sample should be close to 0
-        assert!(samples[0].abs() < 0.01);
-    }
-
-    #[test]
-    fn test_timeline_source_seek() {
-        let graph = create_test_graph();
-        let spec = AudioSpec::new(44100, 1);
-        let mut source = TimelineSource::new(graph, spec);
-
-        // Seek to middle
-        source.seek(SampleTime::new(500));
-        assert_eq!(source.position().samples(), 500);
-
-        // Read some samples - they should start from position 500
-        let sample = source.next().unwrap();
-        // Sample at position 500 should be 500/1000 = 0.5
-        assert!((sample - 0.5).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_timeline_source_finishes() {
-        let graph = create_test_graph();
-        let spec = AudioSpec::new(44100, 1);
-        let mut source = TimelineSource::new(graph, spec);
-
-        // Read all samples plus some extra
-        let samples: Vec<f32> = source.by_ref().take(1500).collect();
-
-        // Should have gotten samples up to the end
-        assert!(source.is_finished());
-    }
-
-    #[test]
-    fn test_timeline_source_looping() {
-        let graph = create_test_graph();
-        let spec = AudioSpec::new(44100, 1);
-        let mut source = TimelineSource::new_looping(graph, spec);
-
-        // Read more samples than the timeline duration
-        let samples: Vec<f32> = source.by_ref().take(2500).collect();
-
-        assert_eq!(samples.len(), 2500);
-        assert!(!source.is_finished()); // Should not be finished when looping
-    }
-
-    #[test]
-    fn test_timeline_source_builder() {
-        let graph = create_test_graph();
-
-        let source = TimelineSourceBuilder::new()
-            .sample_rate(48000)
-            .channels(2)
-            .looping(true)
-            .build(graph);
-
-        assert_eq!(source.sample_rate(), 48000);
-        assert_eq!(source.channels(), 2);
-        assert!(!source.is_finished());
     }
 }

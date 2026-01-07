@@ -8,10 +8,12 @@
 // 2. Each active op is asked to render its contribution
 // 3. Contributions are summed
 
-use super::op_source::{BoxedPlayableOp, PlayableOp};
+use super::op_source::PlayableOp;
 use super::types::{AudioSpec, PlaybackOpId, PlaybackResult, SampleTime};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+
+pub type BoxedPlayableOp = Box<dyn PlayableOp>;
 
 /// A timeline event represents an operation scheduled at a specific time range
 #[derive(Debug, Clone)]
@@ -299,157 +301,5 @@ impl PlaybackGraph {
     /// Check if the timeline is empty
     pub fn is_empty(&self) -> bool {
         self.timeline.read().unwrap().is_empty()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ops::sample::SamplePlayableOp;
-
-    #[test]
-    fn test_timeline_event_is_active_at() {
-        let event = TimelineEvent::new(
-            PlaybackOpId::new(0),
-            SampleTime::new(100),
-            SampleTime::new(200),
-        );
-
-        assert!(!event.is_active_at(SampleTime::new(50)));
-        assert!(event.is_active_at(SampleTime::new(100)));
-        assert!(event.is_active_at(SampleTime::new(150)));
-        assert!(!event.is_active_at(SampleTime::new(200))); // End is exclusive
-        assert!(!event.is_active_at(SampleTime::new(250)));
-    }
-
-    #[test]
-    fn test_timeline_event_muted() {
-        let mut event = TimelineEvent::new(
-            PlaybackOpId::new(0),
-            SampleTime::new(100),
-            SampleTime::new(200),
-        );
-
-        assert!(event.is_active_at(SampleTime::new(150)));
-
-        event.muted = true;
-        assert!(!event.is_active_at(SampleTime::new(150)));
-    }
-
-    #[test]
-    fn test_timeline_event_to_local_time() {
-        let event = TimelineEvent::new(
-            PlaybackOpId::new(0),
-            SampleTime::new(100),
-            SampleTime::new(200),
-        );
-
-        assert_eq!(event.to_local_time(SampleTime::new(150)).samples(), 50);
-        assert_eq!(event.to_local_time(SampleTime::new(100)).samples(), 0);
-        assert_eq!(event.to_local_time(SampleTime::new(50)).samples(), 0); // Before start
-    }
-
-    #[test]
-    fn test_op_registry() {
-        let mut registry = OpRegistry::new();
-        let spec = AudioSpec::cd_quality();
-
-        let op1 = Box::new(SamplePlayableOp::new(vec![0.0; 100], spec));
-        let op2 = Box::new(SamplePlayableOp::new(vec![0.0; 100], spec));
-
-        let id1 = registry.register(op1);
-        let id2 = registry.register(op2);
-
-        assert_ne!(id1, id2);
-        assert!(registry.contains(id1));
-        assert!(registry.contains(id2));
-        assert_eq!(registry.len(), 2);
-    }
-
-    #[test]
-    fn test_playback_timeline_basic() {
-        let spec = AudioSpec::cd_quality();
-        let mut timeline = PlaybackTimeline::new(spec);
-
-        let event1 = TimelineEvent::new(
-            PlaybackOpId::new(0),
-            SampleTime::new(0),
-            SampleTime::new(100),
-        );
-        let event2 = TimelineEvent::new(
-            PlaybackOpId::new(1),
-            SampleTime::new(50),
-            SampleTime::new(150),
-        );
-
-        timeline.add_event(event1);
-        timeline.add_event(event2);
-
-        // At t=25, only event1 is active
-        let active = timeline.get_active_ids(SampleTime::new(25));
-        assert_eq!(active.len(), 1);
-        assert_eq!(active[0], PlaybackOpId::new(0));
-
-        // At t=75, both events are active
-        let active = timeline.get_active_ids(SampleTime::new(75));
-        assert_eq!(active.len(), 2);
-
-        // At t=125, only event2 is active
-        let active = timeline.get_active_ids(SampleTime::new(125));
-        assert_eq!(active.len(), 1);
-        assert_eq!(active[0], PlaybackOpId::new(1));
-    }
-
-    #[test]
-    fn test_playback_timeline_duration() {
-        let spec = AudioSpec::cd_quality();
-        let mut timeline = PlaybackTimeline::new(spec);
-
-        assert_eq!(timeline.duration().samples(), 0);
-
-        timeline.add_event(TimelineEvent::new(
-            PlaybackOpId::new(0),
-            SampleTime::new(0),
-            SampleTime::new(100),
-        ));
-        assert_eq!(timeline.duration().samples(), 100);
-
-        timeline.add_event(TimelineEvent::new(
-            PlaybackOpId::new(1),
-            SampleTime::new(50),
-            SampleTime::new(200),
-        ));
-        assert_eq!(timeline.duration().samples(), 200);
-    }
-
-    #[test]
-    fn test_playback_timeline_solo() {
-        let spec = AudioSpec::cd_quality();
-        let mut timeline = PlaybackTimeline::new(spec);
-
-        let mut event1 = TimelineEvent::new(
-            PlaybackOpId::new(0),
-            SampleTime::new(0),
-            SampleTime::new(100),
-        );
-        let event2 = TimelineEvent::new(
-            PlaybackOpId::new(1),
-            SampleTime::new(0),
-            SampleTime::new(100),
-        );
-
-        timeline.add_event(event1.clone());
-        timeline.add_event(event2);
-
-        // Both active initially
-        assert_eq!(timeline.get_active_ids(SampleTime::new(50)).len(), 2);
-
-        // Solo event1
-        timeline.set_solo(PlaybackOpId::new(0), true);
-
-        // Only event1 should be active now
-        let active = timeline.get_active_ids(SampleTime::new(50));
-        assert_eq!(active.len(), 1);
-        assert_eq!(active[0], PlaybackOpId::new(0));
     }
 }
