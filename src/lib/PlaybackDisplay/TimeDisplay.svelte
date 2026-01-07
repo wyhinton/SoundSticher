@@ -2,24 +2,48 @@
   import { listen } from '@tauri-apps/api/event';
   import { appState, durationSeconds } from '../state/state.svelte';
   import { formatMilliseconds } from '../utils/format';
+  import { opPlaybackState, opIsPlaying, opIsPaused } from '../state/opPlaybackService';
+  import { operationDuration } from '../state/waveformCache';
+
+  // Props to control which system to use
+  export let useOperationSystem = true;
 
   let playHeadPosition = 0;
 
+  // Listen to legacy timeline progress
   listen<number>('timeline-progress', event => {
-    playHeadPosition = event.payload * $durationSeconds;
+    if (!useOperationSystem) {
+      playHeadPosition = event.payload * $durationSeconds;
+    }
   });
+
+  // Listen to operation playback state when using operation system
+  $: if (useOperationSystem) {
+    playHeadPosition = $opPlaybackState.positionSeconds;
+  }
+
+  // Reactive current duration based on active system
+  $: currentDuration = useOperationSystem ? $operationDuration : $durationSeconds;
+
+  // Reactive total length
+  $: totalLength = useOperationSystem
+    ? $opPlaybackState.durationSeconds
+    : $appState.combinedFileLength || 0;
+
+  // Reactive play state
+  $: isCurrentlyPlaying = useOperationSystem
+    ? $opIsPlaying && !$opIsPaused
+    : $appState.playingCombined;
 </script>
 
 <!-- Current Time Display -->
 <div class="time-display my-1">
-  <div class="current-time" class:playing={$appState.playingCombined}>
+  <div class="current-time" class:playing={isCurrentlyPlaying}>
     {formatMilliseconds(playHeadPosition * 1000)}
   </div>
   <div class="time-separator">/</div>
   <div class="total-time">
-    {$appState.combinedFileLength
-      ? formatMilliseconds($appState.combinedFileLength * 1000)
-      : '0:00.000'}
+    {totalLength > 0 ? formatMilliseconds(totalLength * 1000) : '0:00.000'}
   </div>
 </div>
 

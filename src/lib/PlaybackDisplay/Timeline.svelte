@@ -34,6 +34,8 @@
     operationWaveformsLoading,
     initWaveformService,
   } from '../state/waveformCache';
+  // Import operation playback service
+  import { opPlaybackService, opPlaybackProgress, opPlaybackState } from '../state/opPlaybackService';
 
   import {
     DragDropManager,
@@ -252,8 +254,16 @@
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
+  // Listen to operation playback progress when using operation system
+  $: if (useOperationSystem && $opPlaybackProgress !== undefined) {
+    playHeadPosition = $opPlaybackProgress * currentDuration;
+  }
+
+  // Listen to legacy timeline progress for the legacy system
   listen<number>('timeline-progress', event => {
-    playHeadPosition = event.payload * currentDuration;
+    if (!useOperationSystem) {
+      playHeadPosition = event.payload * currentDuration;
+    }
   });
 
   function handleClick(event: MouseEvent) {
@@ -270,7 +280,13 @@
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-      invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+      
+      // Use operation playback service for seeking when using operation system
+      if (useOperationSystem) {
+        opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      } else {
+        invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+      }
       return;
     }
 
@@ -283,7 +299,13 @@
     if (clickedSegmentIndex === null) {
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-      invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+      
+      // Use operation playback service for seeking when using operation system
+      if (useOperationSystem) {
+        opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      } else {
+        invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+      }
     }
   }
 
@@ -372,6 +394,11 @@
       } catch (error) {
         console.error('🔧 Timeline: Failed to initialize waveform service:', error);
       }
+
+      // Initialize the operation playback progress listener
+      opPlaybackService.initProgressListener().catch(err => {
+        console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
+      });
     }
 
     const resizeObserver = new ResizeObserver(() => {
@@ -399,6 +426,11 @@
         unsubscribeDragDrop();
         unsubscribeDragDrop = null;
       }
+
+      // Clean up operation playback listener
+      if (useOperationSystem) {
+        opPlaybackService.cleanupProgressListener();
+      }
     };
   });
 
@@ -418,6 +450,11 @@
     if (unsubscribeDragDrop) {
       unsubscribeDragDrop();
       unsubscribeDragDrop = null;
+    }
+
+    // Clean up operation playback listener
+    if (useOperationSystem) {
+      opPlaybackService.cleanupProgressListener();
     }
 
     // Clear any pending scroll timeout

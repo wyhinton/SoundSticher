@@ -20,6 +20,7 @@
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
+  import { opPlaybackService } from './state/opPlaybackService';
 
   // Feature flag: Set to true to use the new operation-based waveform system
   const USE_OPERATION_SYSTEM = true; // Change to true when ready to switch
@@ -48,15 +49,23 @@
       ev.preventDefault(); // optional, if you want to prevent default scrolling
       console.log('Spacebar pressed');
 
-      appState.update(s => {
-        s.playingCombined = !s.playingCombined;
-        if (s.playingCombined) {
-          invokeWithPerf('play_timeline_audio');
-        } else {
-          invokeWithPerf('pause_timeline_audio');
-        }
-        return s;
-      });
+      if (USE_OPERATION_SYSTEM) {
+        // Use the new operation playback service
+        opPlaybackService.togglePlayPause().catch(err => {
+          console.error('Error toggling playback:', err);
+        });
+      } else {
+        // Legacy playback system
+        appState.update(s => {
+          s.playingCombined = !s.playingCombined;
+          if (s.playingCombined) {
+            invokeWithPerf('play_timeline_audio');
+          } else {
+            invokeWithPerf('pause_timeline_audio');
+          }
+          return s;
+        });
+      }
     }
   };
 
@@ -113,7 +122,7 @@
     </div>
     <!-- <Waveform></Waveform> -->
     <div>
-      <PlottedInfo></PlottedInfo>
+      <PlottedInfo useOperationSystem={USE_OPERATION_SYSTEM}></PlottedInfo>
       <Plotted
         bind:this={timelineComponent}
         on:selectionChange={handleTimelineSelectionChange}

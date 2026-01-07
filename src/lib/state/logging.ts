@@ -10,6 +10,7 @@ export interface LoggingState {
   dragdropLog: boolean;
   operationsLog: boolean;
   waveformLog: boolean;
+  opPlaybackLog: boolean;
   // Backend logging system toggles
   encoderLog: boolean;
   combineLog: boolean;
@@ -37,6 +38,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   dragdropLog: false,
   operationsLog: false,
   waveformLog: false,
+  opPlaybackLog: false,
   encoderLog: false,
   combineLog: false,
   playbackLog: false,
@@ -454,6 +456,68 @@ export const logger = {
           `%c❌ Waveform %c${message}`,
           'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
           'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
+  opPlayback: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('opPlaybackLog')) {
+        console.log(
+          `%c🎬 OpPlayback %c${message}`,
+          'background: #00BCD4; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #00BCD4; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    success: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('opPlaybackLog')) {
+        console.log(
+          `%c✅ OpPlayback %c${message}`,
+          'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #4CAF50; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    warning: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('opPlaybackLog')) {
+        console.warn(
+          `%c⚠️ OpPlayback %c${message}`,
+          'background: #FF9800; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF9800; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('opPlaybackLog')) {
+        console.error(
+          `%c❌ OpPlayback %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    graph: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('opPlaybackLog')) {
+        console.log(
+          `%c📊 OpPlayback-Graph %c${message}`,
+          'background: #3F51B5; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #3F51B5; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    seek: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('opPlaybackLog')) {
+        console.log(
+          `%c⏩ OpPlayback-Seek %c${message}`,
+          'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF5722; font-weight: normal;',
           ...args
         );
       }

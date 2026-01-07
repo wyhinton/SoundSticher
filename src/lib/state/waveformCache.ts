@@ -10,6 +10,7 @@ import { writable, derived, get, type Writable, type Readable } from 'svelte/sto
 import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
 import type { OperationDef, CombineOperation } from './operation';
 import { logger } from './logging';
+import { opPlaybackService, type AddOpRequest } from './opPlaybackService';
 
 // ============================================================================
 // TYPES
@@ -317,7 +318,7 @@ function createOperationWaveformStore() {
     subscribe,
 
     /**
-     * Load waveforms for an operation
+     * Load waveforms for an operation and build the playback graph
      */
     async loadForOperation(operationName: string, filePaths: string[]): Promise<void> {
       logger.waveform.operation(
@@ -343,6 +344,9 @@ function createOperationWaveformStore() {
         logger.waveform.operation(
           `Operation "${operationName}" waveforms loaded successfully (${waveforms.size}/${filePaths.length})`
         );
+
+        // Build playback graph with the loaded waveforms
+        await buildPlaybackGraphFromWaveforms(operationName, filePaths, waveforms);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         update(state => ({
@@ -369,8 +373,72 @@ function createOperationWaveformStore() {
         loading: false,
         error: null,
       });
+
+      // Clear the playback graph as well
+      opPlaybackService.clearGraph().catch(err => {
+        logger.waveform.error('Failed to clear playback graph:', err);
+      });
     },
   };
+}
+
+/**
+ * Build a playback graph from loaded waveforms
+ */
+async function buildPlaybackGraphFromWaveforms(
+  operationName: string,
+  filePaths: string[],
+  waveforms: Map<string, Waveform>
+): Promise<void> {
+  logger.waveform.operation(
+    `Building playback graph for operation "${operationName}" (${filePaths.length} files)`
+  );
+
+  // Build operations list for the playback graph
+  // Files are scheduled sequentially (one after another)
+  let currentTime = 0;
+  const operations: AddOpRequest[] = [];
+
+  for (let i = 0; i < filePaths.length; i++) {
+    const filePath = filePaths[i];
+    if (!filePath) continue;
+    
+    const waveform = waveforms.get(filePath);
+
+    if (waveform) {
+      operations.push({
+        name: `file_${i}`,
+        filePath,
+        startTime: currentTime,
+        endTime: currentTime + waveform.duration,
+        gain: 1.0,
+      });
+      currentTime += waveform.duration;
+    } else {
+      logger.waveform.warning(`No waveform for file ${filePath}, skipping in playback graph`);
+    }
+  }
+
+  if (operations.length === 0) {
+    logger.waveform.warning('No operations to build playback graph');
+    return;
+  }
+
+  try {
+    const response = await opPlaybackService.buildGraph({
+      operations,
+      sampleRate: 44100,
+      channels: 2,
+      loopPlayback: true,
+    });
+
+    logger.waveform.operation(
+      `Playback graph built: ${response.operationCount} ops, ${response.totalDurationSeconds.toFixed(2)}s duration`
+    );
+  } catch (error) {
+    logger.waveform.error('Failed to build playback graph:', error);
+    // Don't rethrow - waveforms are still valid even if playback graph fails
+  }
 }
 
 export const operationWaveforms = createOperationWaveformStore();

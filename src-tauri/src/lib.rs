@@ -26,7 +26,9 @@ mod logging;
 mod looping_samples_buffer;
 mod macros;
 mod metadata;
+mod op_playback_commands;
 mod ops;
+mod playback;
 mod sample_playback;
 mod sorting;
 mod state;
@@ -248,6 +250,9 @@ pub fn run() {
             // Initialize waveform cache service
             app.manage(Arc::new(WaveformService::new()));
 
+            // Initialize operation-based playback state
+            app.manage(Arc::new(op_playback_commands::OpPlaybackState::new()));
+
             #[cfg(debug_assertions)] // Only include this code on debug builds
             {
                 let window = app.get_webview_window("main").unwrap();
@@ -299,6 +304,17 @@ pub fn run() {
             waveform::clear_waveform_cache,
             waveform::get_waveform_cache_stats,
             waveform::get_waveforms_for_operation,
+            // Operation-based playback commands
+            op_playback_commands::op_playback_build_graph,
+            op_playback_commands::op_playback_play,
+            op_playback_commands::op_playback_pause,
+            op_playback_commands::op_playback_resume,
+            op_playback_commands::op_playback_stop,
+            op_playback_commands::op_playback_seek,
+            op_playback_commands::op_playback_get_progress,
+            op_playback_commands::op_playback_set_volume,
+            op_playback_commands::op_playback_set_loop,
+            op_playback_commands::op_playback_clear_graph,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
