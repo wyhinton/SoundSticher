@@ -111,7 +111,10 @@ export const opPlaybackState: Readable<OpPlaybackState> = derived(internalState,
 /**
  * Current progress (0.0 to 1.0)
  */
-export const opPlaybackProgress: Readable<number> = derived(internalState, $state => $state.progress);
+export const opPlaybackProgress: Readable<number> = derived(
+  internalState,
+  $state => $state.progress
+);
 
 /**
  * Whether currently playing
@@ -241,7 +244,9 @@ export async function buildGraphFromFiles(
  * Start playback
  */
 export async function play(startSeconds?: number): Promise<void> {
-  logger.opPlayback.info(`Starting playback${startSeconds !== undefined ? ` at ${startSeconds.toFixed(2)}s` : ''}`);
+  logger.opPlayback.info(
+    `Starting playback${startSeconds !== undefined ? ` at ${startSeconds.toFixed(2)}s` : ''}`
+  );
 
   try {
     await invoke('op_playback_play', { startSeconds: startSeconds ?? null });

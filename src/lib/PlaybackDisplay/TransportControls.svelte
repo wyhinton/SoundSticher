@@ -199,22 +199,10 @@
 <div class="transport-controls d-flex align-items-center gap-2 py-2 px-2">
   {@render transportButton('fa-backward-step', 'Skip to Start', handleSkipToStart)}
   {@render transportButton('fa-play', 'Play', handlePlayPause, 'btn-play', isCurrentlyPlaying)}
-  {@render transportButton(
-    'fa-pause',
-    'Pause',
-    handlePause,
-    'btn-pause',
-    isCurrentlyPaused
-  )}
+  {@render transportButton('fa-pause', 'Pause', handlePause, 'btn-pause', isCurrentlyPaused)}
   {@render transportButton('fa-stop', 'Stop', handleStop, 'btn-stop')}
   {@render transportButton('fa-forward-step', 'Skip to End', handleSkipToEnd)}
-  {@render transportButton(
-    'fa-repeat',
-    'Loop',
-    toggleLoop,
-    'btn-loop',
-    isLoopEnabled
-  )}
+  {@render transportButton('fa-repeat', 'Loop', toggleLoop, 'btn-loop', isLoopEnabled)}
 </div>
 
 <style>

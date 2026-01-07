@@ -35,7 +35,11 @@
     initWaveformService,
   } from '../state/waveformCache';
   // Import operation playback service
-  import { opPlaybackService, opPlaybackProgress, opPlaybackState } from '../state/opPlaybackService';
+  import {
+    opPlaybackService,
+    opPlaybackProgress,
+    opPlaybackState,
+  } from '../state/opPlaybackService';
 
   import {
     DragDropManager,
@@ -280,7 +284,7 @@
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-      
+
       // Use operation playback service for seeking when using operation system
       if (useOperationSystem) {
         opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
@@ -299,7 +303,7 @@
     if (clickedSegmentIndex === null) {
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-      
+
       // Use operation playback service for seeking when using operation system
       if (useOperationSystem) {
         opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));

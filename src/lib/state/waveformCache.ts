@@ -402,7 +402,7 @@ async function buildPlaybackGraphFromWaveforms(
   for (let i = 0; i < filePaths.length; i++) {
     const filePath = filePaths[i];
     if (!filePath) continue;
-    
+
     const waveform = waveforms.get(filePath);
 
     if (waveform) {
