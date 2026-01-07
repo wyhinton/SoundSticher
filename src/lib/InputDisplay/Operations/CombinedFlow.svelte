@@ -3,7 +3,7 @@
   import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
-  import type { CombineOperation } from '$lib/state/operation';
+  import type { MergeOp } from '$lib/state/operation';
   import { OperationInfoDictionary } from '$lib/state/operation';
   import { type Section, type AudioFileItem } from '$lib/state/state.svelte';
 
@@ -11,7 +11,7 @@
   import OperationNode from './OperationNode.svelte';
   import { createEventDispatcher } from 'svelte';
 
-  export let operation: CombineOperation;
+  export let operation: MergeOp;
   export let operationName: string;
   export let isSelected: boolean = false;
 
@@ -137,7 +137,7 @@
     return { nodes, edges };
   }
 
-  function getSourceLabel(source: CombineOperation['source']): string {
+  function getSourceLabel(source: MergeOp['source']): string {
     switch (source.type) {
       case 'group':
         return `Group: ${source.groupRef}`;

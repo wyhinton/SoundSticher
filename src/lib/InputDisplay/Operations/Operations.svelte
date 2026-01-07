@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
   import { deleteOperation, OperationInfoDictionary } from '$lib/state/operation';
-  import type { OperationDef, CombineOperation, PipelineOperation } from '$lib/state/operation';
+  import type { OperationDef, MergeOp, PipelineOp } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
 
   // Use selected operation from global state

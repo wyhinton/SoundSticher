@@ -17,7 +17,7 @@ export interface OperationsState {
  * An operation can be either a file rendering operation (produces output files)
  * or a sample editing operation (modifies audio in-place).
  */
-export type OperationDef = CombineOperation | PipelineOperation;
+export type OperationDef = MergeOp | PipelineOp | SampleOp;
 
 // ============================================================================
 // FILE RENDERING OPERATIONS (produce new output files)
@@ -29,15 +29,15 @@ export interface MergeSource {
   active: boolean;
 }
 
-export interface CombineOperation {
-  kind: 'combine';
+export interface MergeOp {
+  kind: 'merge';
   /** Group reference or explicit file IDs to combine */
   source: OperationSource;
   /** Output file path (can use templates like {date}, {name}) */
   sources: MergeSource[];
 }
 
-export interface PipelineOperation {
+export interface PipelineOp {
   kind: 'pipeline';
   /** Ordered list of operation references to execute in sequence */
   operations: string[];
@@ -81,7 +81,7 @@ export interface OperationInfo {
 }
 
 export const OperationInfoDictionary: Record<OperationDef['kind'], OperationInfo> = {
-  combine: {
+  merge: {
     icon: '➕',
     label: 'Combine',
     description: 'Concatenate multiple audio files into a single output file',
@@ -438,7 +438,7 @@ export const testOperations: NamedOperationDef[] = [
     name: 'combine_active',
     def: {
       sources: [],
-      kind: 'combine',
+      kind: 'merge',
       source: { type: 'active' },
     },
   },

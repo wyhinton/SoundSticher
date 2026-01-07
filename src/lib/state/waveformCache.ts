@@ -7,7 +7,7 @@
 
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
-import type { OperationDef, CombineOperation } from './operation';
+import type { OperationDef, MergeOp } from './operation';
 import { logger } from './logging';
 import { opPlaybackService, type AddOpRequest } from './opPlaybackService';
 import { invokeWithPerf } from './performance';

@@ -7,7 +7,6 @@
   import Sources from './InputDisplay/Sources.svelte';
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import type { Event, UnlistenFn } from '@tauri-apps/api/event';
-  import Toolbar from './Toolbar.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { invokeWithPerf, updateInputs } from './state/performance';
   import Export from './Export.svelte';
