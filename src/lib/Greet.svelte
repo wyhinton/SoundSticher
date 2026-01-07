@@ -106,7 +106,10 @@
     <MainDebugToolbar />
   {/if}
 
-  <div class="content-area flex-grow-1 d-flex justify-content-between flex-column">
+  <div
+    style:height="70vh"
+    class="content-area flex-grow-1 d-flex justify-content-between flex-column"
+  >
     <div class="px-0 d-flex h-fill-available">
       <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
       <MainLeftPanel></MainLeftPanel>
@@ -114,14 +117,14 @@
         <div class="d-flex flex-column w-100">
           <OperationsFlowPanel></OperationsFlowPanel>
         </div>
-        <div class="d-flex h-fill-available w-100" style:max-height="500px">
+        <div class="d-flex w-100" style:max-height="500px">
           <Sources></Sources>
           <FileTable sections={$currentOperationSections}></FileTable>
         </div>
       </div>
     </div>
     <!-- <Waveform></Waveform> -->
-    <div>
+    <div style:height="30vh">
       <PlottedInfo useOperationSystem={USE_OPERATION_SYSTEM}></PlottedInfo>
       <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
       ></Plotted>

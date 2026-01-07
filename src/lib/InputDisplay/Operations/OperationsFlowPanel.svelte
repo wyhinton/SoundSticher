@@ -33,7 +33,7 @@
   $: selectedOperationName = $appState.uiSettings?.selectedOperationName || null;
 
   // Panel height management
-  let panelHeight = 300; // default height in pixels
+  let panelHeight = 200; // default height in pixels
   let isResizing = false;
   let resizeStartY = 0;
   let resizeStartHeight = 0;
