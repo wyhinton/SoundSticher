@@ -3,10 +3,11 @@
 // Frontend service for the pull-based operation playback system.
 // This provides a clean API for building playback graphs and controlling playback.
 
-import { invoke } from '@tauri-apps/api/core';
+// Import removed - using invokeWithPerf instead
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { writable, derived, get, type Readable, type Writable } from 'svelte/store';
 import { logger } from './logging';
+import { invokeWithPerf } from './performance';
 
 // ============================================================================
 // TYPES
@@ -174,7 +175,13 @@ export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraph
   logger.opPlayback.info(`Building playback graph with ${request.operations.length} operations`);
 
   try {
-    const response = await invoke<BuildGraphResponse>('op_playback_build_graph', { request });
+    const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', { request });
+    
+    if (!result.ok) {
+      throw new Error(`Failed to build graph: ${result.error.message}`);
+    }
+
+    const response = result.value;
 
     internalState.update(s => ({
       ...s,
@@ -249,7 +256,11 @@ export async function play(startSeconds?: number): Promise<void> {
   );
 
   try {
-    await invoke('op_playback_play', { startSeconds: startSeconds ?? null });
+    const result = await invokeWithPerf('op_playback_play', { startSeconds: startSeconds ?? null });
+    
+    if (!result.ok) {
+      throw new Error(`Failed to start playback: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,
@@ -271,7 +282,11 @@ export async function pause(): Promise<void> {
   logger.opPlayback.info('Pausing playback');
 
   try {
-    await invoke('op_playback_pause');
+    const result = await invokeWithPerf('op_playback_pause');
+    
+    if (!result.ok) {
+      throw new Error(`Failed to pause playback: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,
@@ -292,7 +307,11 @@ export async function resume(): Promise<void> {
   logger.opPlayback.info('Resuming playback');
 
   try {
-    await invoke('op_playback_resume');
+    const result = await invokeWithPerf('op_playback_resume');
+    
+    if (!result.ok) {
+      throw new Error(`Failed to resume playback: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,
@@ -313,7 +332,11 @@ export async function stop(): Promise<void> {
   logger.opPlayback.info('Stopping playback');
 
   try {
-    await invoke('op_playback_stop');
+    const result = await invokeWithPerf('op_playback_stop');
+    
+    if (!result.ok) {
+      throw new Error(`Failed to stop playback: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,
@@ -337,7 +360,11 @@ export async function seek(positionSeconds: number): Promise<void> {
   logger.opPlayback.info(`Seeking to ${positionSeconds.toFixed(2)}s`);
 
   try {
-    await invoke('op_playback_seek', { positionSeconds });
+    const result = await invokeWithPerf('op_playback_seek', { positionSeconds });
+    
+    if (!result.ok) {
+      throw new Error(`Failed to seek: ${result.error.message}`);
+    }
 
     const state = get(internalState);
     const progress = state.durationSeconds > 0 ? positionSeconds / state.durationSeconds : 0;
@@ -371,7 +398,11 @@ export async function setVolume(volume: number): Promise<void> {
   logger.opPlayback.info(`Setting volume to ${(volume * 100).toFixed(0)}%`);
 
   try {
-    await invoke('op_playback_set_volume', { volume });
+    const result = await invokeWithPerf('op_playback_set_volume', { volume });
+    
+    if (!result.ok) {
+      throw new Error(`Failed to set volume: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,
@@ -392,7 +423,11 @@ export async function setLoop(enabled: boolean): Promise<void> {
   logger.opPlayback.info(`Setting loop mode to ${enabled}`);
 
   try {
-    await invoke('op_playback_set_loop', { loopPlayback: enabled });
+    const result = await invokeWithPerf('op_playback_set_loop', { loopPlayback: enabled });
+    
+    if (!result.ok) {
+      throw new Error(`Failed to set loop mode: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,
@@ -417,7 +452,13 @@ export function getProgress(): number {
  * Get current progress from backend (async)
  */
 export async function getProgressAsync(): Promise<number> {
-  return invoke<number>('op_playback_get_progress');
+  const result = await invokeWithPerf<number>('op_playback_get_progress');
+  
+  if (!result.ok) {
+    throw new Error(`Failed to get progress: ${result.error.message}`);
+  }
+  
+  return result.value;
 }
 
 /**
@@ -427,7 +468,11 @@ export async function clearGraph(): Promise<void> {
   logger.opPlayback.info('Clearing playback graph');
 
   try {
-    await invoke('op_playback_clear_graph');
+    const result = await invokeWithPerf('op_playback_clear_graph');
+    
+    if (!result.ok) {
+      throw new Error(`Failed to clear graph: ${result.error.message}`);
+    }
 
     internalState.update(s => ({
       ...s,

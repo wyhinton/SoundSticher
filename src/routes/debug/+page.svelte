@@ -15,6 +15,8 @@
     setDebugActiveTab,
     currentOperationSections,
     setSvgPathDisplayMode,
+    callSiteTrackingEnabled,
+    toggleCallSiteTrackingEnabled,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
@@ -149,6 +151,29 @@
     });
   });
 
+  // Derive invoke history - all invokes sorted by timestamp
+  const invokeHistory = derived(performanceStore, $store => {
+    const allInvokes: Array<{
+      command: string;
+      metric: PerformanceMetric;
+      timestamp: number;
+    }> = [];
+
+    // Collect all metrics from all commands
+    Object.entries($store).forEach(([command, metrics]) => {
+      metrics.forEach(metric => {
+        allInvokes.push({
+          command,
+          metric,
+          timestamp: metric.timeStamp,
+        });
+      });
+    });
+
+    // Sort by timestamp (newest first)
+    return allInvokes.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // Show last 100 invokes
+  });
+
   interface AppStateDebug {
     audio_files: { [key: string]: any };
     combined_audio: string;
@@ -251,6 +276,7 @@
     { id: 'frontend', label: 'Frontend State', icon: 'fa-code' },
     { id: 'backend', label: 'Backend State', icon: 'fa-server' },
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
+    { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
     { id: 'debug', label: 'Debug Info', icon: 'fa-bug' },
@@ -475,6 +501,88 @@
       </table>
     </div>
 
+    <!-- Invoke History Tab -->
+    <div slot="invoke-history">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Invoke History</h3>
+        <div class="history-controls">
+          <label class="toggle-label me-3">
+            <input
+              type="checkbox"
+              checked={$callSiteTrackingEnabled}
+              on:change={() => toggleCallSiteTrackingEnabled()}
+            />
+            <i class="fa fa-map-marker"></i> Call Site Tracking
+          </label>
+          {@render actionButton(
+            () => resetPerformance(),
+            'fa-trash',
+            'Clear History',
+            false,
+            'danger'
+          )}
+        </div>
+      </div>
+
+      {#if $invokeHistory.length === 0}
+        <div class="empty-state">
+          <i class="fa fa-history"></i>
+          <p>No invoke history yet. Call some Tauri commands to see them here.</p>
+        </div>
+      {:else}
+        <div class="history-table-container">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Command</th>
+                <th>Duration (ms)</th>
+                <th>Call Site</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each $invokeHistory as { command, metric, timestamp }}
+                <tr>
+                  <td class="timestamp">
+                    {new Date(timestamp).toLocaleTimeString('en-US', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      fractionalSecondDigits: 3,
+                    })}
+                  </td>
+                  <td class="command">
+                    <code>{command}</code>
+                  </td>
+                  <td
+                    class="duration text-center"
+                    class:slow={metric.time > 100}
+                    class:medium={metric.time > 50 && metric.time <= 100}
+                  >
+                    {metric.time.toFixed(2)}
+                  </td>
+                  <td class="call-site">
+                    {#if metric.callSite}
+                      <span class="call-site-info" title={metric.callSite}>
+                        <i class="fa fa-map-marker"></i>
+                        {metric.fileName}:{metric.lineNumber}
+                      </span>
+                    {:else}
+                      <span class="no-call-site">
+                        <i class="fa fa-question-circle"></i>
+                        No tracking
+                      </span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+
     <!-- Export State Tab -->
     <div slot="export">
       <h3>Export State</h3>
@@ -587,6 +695,139 @@
 
   .performance-table tr:last-child td {
     border-bottom: none;
+  }
+
+  /* Invoke History Styles */
+  .history-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .history-table-container {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .history-table {
+    width: 100%;
+    background-color: transparent;
+  }
+
+  .history-table th {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    padding: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .history-table td {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: middle;
+  }
+
+  .history-table tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .timestamp {
+    font-family: 'Courier New', monospace;
+    color: rgba(156, 163, 175, 0.9);
+    white-space: nowrap;
+    min-width: 100px;
+  }
+
+  .command {
+    min-width: 200px;
+  }
+
+  .command code {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .duration {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    min-width: 80px;
+  }
+
+  .duration.medium {
+    color: #fbbf24;
+  }
+
+  .duration.slow {
+    color: #f87171;
+  }
+
+  .call-site {
+    max-width: 250px;
+  }
+
+  .call-site-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background-color: rgba(34, 197, 94, 0.1);
+    color: #4ade80;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .call-site-info i {
+    font-size: 8px;
+  }
+
+  .no-call-site {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(156, 163, 175, 0.6);
+    font-size: 10px;
+    font-style: italic;
+  }
+
+  .no-call-site i {
+    font-size: 8px;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: rgba(156, 163, 175, 0.6);
+    text-align: center;
+  }
+
+  .empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+
+  .empty-state p {
+    margin: 0;
+    font-style: italic;
   }
 
   /* Tab Content Styling for TabContainer */

@@ -9,6 +9,7 @@ import {
   type Section,
   type SectionSend,
   bumpRevision,
+  callSiteTrackingEnabled,
 } from './state.svelte';
 import type { BufferAudioEvent, CombineAudioEvent, ExportAudioEvent } from './events';
 import { exportState, type ExportSettings, type ExportState } from './export';
@@ -17,12 +18,59 @@ import { createTypedEventChannel } from '$lib/utils/channelMaker';
 export interface PerformanceMetric {
   time: number;
   timeStamp: number;
+  callSite?: string;
+  fileName?: string;
+  lineNumber?: number;
+  columnNumber?: number;
 }
 
 type PerfMetricName = keyof PerformanceState;
 
+// Helper function to get call site information
+function getCallSiteInfo() {
+  const stack = new Error().stack;
+  if (!stack) return null;
+
+  const lines = stack.split('\n');
+  // Skip the first 3 lines: Error message, getCallSiteInfo, and invokeWithPerf
+  const callerLine = lines[3];
+
+  if (!callerLine) return null;
+
+  // Parse the stack trace line to extract file info
+  const match = callerLine.match(/at\s+(.+?)\s+\((.+):(\d+):(\d+)\)/);
+  if (match) {
+    const [, functionName, fileName, lineNumber, columnNumber] = match;
+    if (fileName && lineNumber && columnNumber) {
+      return {
+        callSite: `${functionName} (${fileName.split(/[\\\/]/).pop()}:${lineNumber})`,
+        fileName: fileName.split(/[\\\/]/).pop(),
+        lineNumber: parseInt(lineNumber),
+        columnNumber: parseInt(columnNumber),
+      };
+    }
+  }
+
+  // Fallback for different stack trace formats
+  const simpleMatch = callerLine.match(/(\w+\.(?:ts|js|svelte)):(\d+):(\d+)/);
+  if (simpleMatch) {
+    const [, fileName, lineNumber, columnNumber] = simpleMatch;
+    if (fileName && lineNumber && columnNumber) {
+      return {
+        callSite: `${fileName}:${lineNumber}`,
+        fileName,
+        lineNumber: parseInt(lineNumber),
+        columnNumber: parseInt(columnNumber),
+      };
+    }
+  }
+
+  return { callSite: callerLine.trim() };
+}
+
 export interface PerformanceState {
   cancel_combine: PerformanceMetric[];
+  clear_audio_files: [];
   clear_waveform_cache: PerformanceMetric[];
   combine_all_cached_samples: PerformanceMetric[];
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
@@ -31,6 +79,7 @@ export interface PerformanceState {
   get_audio_file_active_status: PerformanceMetric[];
   get_current_play_progress: PerformanceMetric[];
   get_custom_order: PerformanceMetric[];
+  get_file_paths_in_folder: PerformanceMetric[];
   get_metadata: PerformanceMetric[];
   get_waveform: PerformanceMetric[];
   get_waveform_cache_stats: PerformanceMetric[];
@@ -47,6 +96,7 @@ export interface PerformanceState {
   op_playback_set_loop: PerformanceMetric[];
   op_playback_set_volume: PerformanceMetric[];
   op_playback_stop: PerformanceMetric[];
+  open_in_explorer: PerformanceMetric[];
   pause_sample_preview: PerformanceMetric[];
   pause_timeline_audio: PerformanceMetric[];
   play_sample_preview: PerformanceMetric[];
@@ -68,6 +118,7 @@ export interface PerformanceState {
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
   cancel_combine: [],
+  clear_audio_files: [],
   clear_waveform_cache: [],
   combine_all_cached_samples: [],
   combine_all_cached_samples_with_custom_order: [],
@@ -76,6 +127,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   get_audio_file_active_status: [],
   get_current_play_progress: [],
   get_custom_order: [],
+  get_file_paths_in_folder: [],
   get_metadata: [],
   get_waveform: [],
   get_waveform_cache_stats: [],
@@ -92,6 +144,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   op_playback_set_loop: [],
   op_playback_set_volume: [],
   op_playback_stop: [],
+  open_in_explorer: [],
   pause_sample_preview: [],
   pause_timeline_audio: [],
   play_sample_preview: [],
@@ -111,11 +164,18 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   update_sorting: [],
 });
 
-export const setPerfMetric = (metric: PerfMetricName, time: number) => {
+export const setPerfMetric = (metric: PerfMetricName, time: number, callSiteInfo?: any) => {
   performanceStore.update(store => {
     const previous = store[metric] ?? [];
 
-    const updatedMetric = [...previous, { time, timeStamp: Date.now() }].slice(-100); // Keep only the last 100 entries
+    const updatedMetric = [
+      ...previous,
+      {
+        time,
+        timeStamp: Date.now(),
+        ...callSiteInfo,
+      },
+    ].slice(-100); // Keep only the last 100 entries
 
     return {
       ...store,
@@ -148,17 +208,18 @@ export async function invokeWithPerf<T = string, E = CommandError>(
   args?: Record<string, any>
 ): Promise<Result<T, E>> {
   const start = performance.now();
+  const callSiteInfo = get(callSiteTrackingEnabled) ? getCallSiteInfo() : null;
+
   try {
     const result = await invoke<T>(command, args);
     const end = performance.now();
-    setPerfMetric(command, end - start);
+    setPerfMetric(command, end - start, callSiteInfo);
     return { ok: true, value: result };
   } catch (err: unknown) {
     const end = performance.now();
-    setPerfMetric(command, end - start);
+    setPerfMetric(command, end - start, callSiteInfo);
 
     return { ok: false, error: err as E };
-    4;
   }
 }
 

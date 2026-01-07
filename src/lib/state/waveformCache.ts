@@ -5,12 +5,12 @@
 // - Batch requests when switching operations
 // - Reactive stores for timeline items derived from operations
 
-import { invoke } from '@tauri-apps/api/core';
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
 import type { OperationDef, CombineOperation } from './operation';
 import { logger } from './logging';
 import { opPlaybackService, type AddOpRequest } from './opPlaybackService';
+import { invokeWithPerf } from './performance';
 
 // ============================================================================
 // TYPES
@@ -134,7 +134,7 @@ export class WaveformCache {
    * Fetch waveform from backend
    */
   private async fetchWaveform(filePath: string, spec: WaveformSpec): Promise<Waveform> {
-    const response = await invoke<WaveformResponse>('get_waveform', {
+    const result = await invokeWithPerf<WaveformResponse>('get_waveform', {
       request: {
         filePath,
         width: spec.width,
@@ -143,7 +143,11 @@ export class WaveformCache {
       },
     });
 
-    return response.waveform;
+    if (!result.ok) {
+      throw new Error(`Failed to fetch waveform: ${result.error.message}`);
+    }
+
+    return result.value.waveform;
   }
 
   /**
@@ -177,7 +181,7 @@ export class WaveformCache {
     // Fetch remaining from backend
     if (toFetch.length > 0) {
       try {
-        const response = await invoke<BatchWaveformResponse>('get_waveforms_batch', {
+        const batchResult = await invokeWithPerf<BatchWaveformResponse>('get_waveforms_batch', {
           request: {
             filePaths: toFetch,
             width: spec.width,
@@ -185,6 +189,12 @@ export class WaveformCache {
             normalize: spec.normalize,
           },
         });
+
+        if (!batchResult.ok) {
+          throw new Error(`Batch fetch failed: ${batchResult.error.message}`);
+        }
+
+        const response = batchResult.value;
 
         logger.waveform.batch(
           `Backend returned ${response.items.length} items (hits: ${response.totalCacheHits}, computed: ${response.totalComputed}, errors: ${response.totalErrors})`
@@ -700,7 +710,10 @@ export function initWaveformService(): () => void {
 export async function invalidateWaveformBackend(filePath: string): Promise<void> {
   logger.waveform.cache(`Invalidating backend cache for ${filePath}`);
   try {
-    await invoke('invalidate_waveform', { filePath });
+    const result = await invokeWithPerf('invalidate_waveform', { filePath });
+    if (!result.ok) {
+      throw new Error(`Failed to invalidate: ${result.error.message}`);
+    }
     waveformCache.invalidate(filePath);
     logger.waveform.success(`Successfully invalidated cache for ${filePath}`);
   } catch (error) {
@@ -715,7 +728,10 @@ export async function invalidateWaveformBackend(filePath: string): Promise<void>
 export async function clearWaveformCacheBackend(): Promise<void> {
   logger.waveform.cache('Clearing all backend waveform cache');
   try {
-    await invoke('clear_waveform_cache');
+    const result = await invokeWithPerf('clear_waveform_cache');
+    if (!result.ok) {
+      throw new Error(`Failed to clear cache: ${result.error.message}`);
+    }
     waveformCache.clear();
     logger.waveform.success('Successfully cleared all waveform cache');
   } catch (error) {
@@ -730,7 +746,11 @@ export async function clearWaveformCacheBackend(): Promise<void> {
 export async function getWaveformCacheStats(): Promise<CacheStats> {
   logger.waveform.cache('Fetching backend cache statistics');
   try {
-    const stats = await invoke<CacheStats>('get_waveform_cache_stats');
+    const result = await invokeWithPerf<CacheStats>('get_waveform_cache_stats');
+    if (!result.ok) {
+      throw new Error(`Failed to get cache stats: ${result.error.message}`);
+    }
+    const stats = result.value;
     logger.waveform.cache(
       `Cache stats - hits: ${stats.hits}, misses: ${stats.misses}, evictions: ${stats.evictions}, compute time: ${stats.totalComputeTimeMs}ms`
     );

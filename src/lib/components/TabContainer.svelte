@@ -88,6 +88,8 @@
         <slot name="debug" />
       {:else if activeTab === 'logging'}
         <slot name="logging" />
+      {:else if activeTab === 'invoke-history'}
+        <slot name="invoke-history" />
       {:else}
         <slot {activeTab} />
       {/if}

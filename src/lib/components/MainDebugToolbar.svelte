@@ -1,6 +1,10 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { appState } from '../state/state.svelte';
+  import {
+    appState,
+    callSiteTrackingEnabled,
+    toggleCallSiteTrackingEnabled,
+  } from '../state/state.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { loggingState } from '../state/logging';
@@ -336,6 +340,13 @@ Project: Sound Stitch (Tauri + SvelteKit)
     console.log(`🔧 Debug: ${categoryKey} toggled to:`, newState[categoryKey]);
   }
 
+  // Toggle call site tracking for performance metrics
+  function toggleCallSiteTracking() {
+    toggleCallSiteTrackingEnabled();
+    const newValue = get(callSiteTrackingEnabled);
+    console.log(`🔧 Debug: Call site tracking toggled to:`, newValue);
+  }
+
   // Keep the specific function for backward compatibility, but use the generic one
   function toggleGroupsLogging() {
     toggleLogging('groupsLog');
@@ -453,6 +464,16 @@ Project: Sound Stitch (Tauri + SvelteKit)
             {category.label}
           </button>
         {/each}
+        <button
+          class="btn btn-xs"
+          class:btn-outline-warning={!$callSiteTrackingEnabled}
+          class:btn-warning={$callSiteTrackingEnabled}
+          on:click={toggleCallSiteTracking}
+          title="Toggle call site tracking for performance metrics"
+        >
+          <i class="fa fa-map-marker"></i>
+          Call Sites
+        </button>
       </div>
 
       <div class="button-group">
@@ -477,7 +498,9 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <i class="fa fa-info-circle"></i>
         DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$timelineDebugMode
           ? 'ON'
-          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} |
+          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Call Sites: {$callSiteTrackingEnabled
+          ? 'ON'
+          : 'OFF'} |
         {#each loggingCategories as category}
           {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
         {/each}

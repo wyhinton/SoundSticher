@@ -53,6 +53,7 @@ export interface AppState {
     timelineDebugMode?: boolean;
     showFullSvgPath?: boolean;
     svgPathDisplayMode?: 'full' | 'trim' | 'hide';
+    callSiteTrackingEnabled?: boolean;
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -156,6 +157,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       timelineDebugMode: false,
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
+      callSiteTrackingEnabled: false,
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -212,6 +214,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       debugActiveTab: loadedState.uiSettings?.debugActiveTab || 'frontend',
       tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
       selectedOperationName: loadedState.uiSettings?.selectedOperationName || null,
+      timelineDebugMode: loadedState.uiSettings?.timelineDebugMode || false,
+      showFullSvgPath: loadedState.uiSettings?.showFullSvgPath || false,
+      svgPathDisplayMode: loadedState.uiSettings?.svgPathDisplayMode || 'trim',
+      callSiteTrackingEnabled: loadedState.uiSettings?.callSiteTrackingEnabled || false,
       theme: {
         panelHeaderBackgroundColor:
           loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
@@ -271,6 +277,7 @@ export const appState = persisted<AppState>(
       timelineDebugMode: false,
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
+      callSiteTrackingEnabled: false,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -513,28 +520,6 @@ export async function pause_sample_preview() {
 export interface CombineAudioResult {
   output: string;
   svgPath: string;
-}
-
-export async function combine_audio_files(input_files: string[], output_path: string) {
-  const combineAudioFilesRes = await invokeWithPerf<CombineAudioResult>('combine_audio_files', {
-    inputFiles: input_files,
-    outputPath: output_path,
-  });
-  if (combineAudioFilesRes.ok === true) {
-    const getMetadataRes = await invokeWithPerf<FileMetadata>('get_metadata', {
-      title:
-        'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav',
-    });
-    if (getMetadataRes.ok === true) {
-      appState.update(state => {
-        state.combinedFile = {
-          path: combineAudioFilesRes.value.output,
-          svgPath: combineAudioFilesRes.value.svgPath,
-        };
-        return state;
-      });
-    }
-  }
 }
 
 export async function get_file_paths_in_folder(sectionIndex: number) {
@@ -1215,3 +1200,30 @@ export function deleteSectionFromCurrentOperation(index: number) {
     return s;
   });
 }
+
+// Call site tracking functions
+export function setCallSiteTrackingEnabled(enabled: boolean) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.callSiteTrackingEnabled = enabled;
+    return state;
+  });
+}
+
+export function toggleCallSiteTrackingEnabled() {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.callSiteTrackingEnabled = !(state.uiSettings.callSiteTrackingEnabled ?? false);
+    return state;
+  });
+}
+
+// Derived store for call site tracking enabled
+export const callSiteTrackingEnabled = derived(
+  appState,
+  $appState => $appState.uiSettings?.callSiteTrackingEnabled ?? false
+);
