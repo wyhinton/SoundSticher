@@ -23,7 +23,7 @@
 
   // Create a reactive key that includes sections data to ensure re-rendering
   $: sectionsRevision = JSON.stringify(
-    operation.sections?.map(s => ({
+    operation.sources?.map(s => ({
       folderPath: s.folderPath,
       fileCount: s.files.length,
       activeFiles: s.files.filter(f => f.active).length,

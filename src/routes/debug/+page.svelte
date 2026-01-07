@@ -8,7 +8,6 @@
   } from '$lib/state/performance';
   import { addNewFolderOnDrop, positionStore } from '$lib/state/position';
   import {
-    addSource,
     appState,
     hoveredSourceItem,
     resetAppState,

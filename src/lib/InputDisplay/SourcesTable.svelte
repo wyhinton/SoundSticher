@@ -2,7 +2,6 @@
   import { tick } from 'svelte';
   import {
     appState,
-    addSource,
     currentOperationSections,
     addSourceToCurrentOperation,
   } from '../state/state.svelte';

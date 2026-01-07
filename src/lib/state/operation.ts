@@ -23,6 +23,11 @@ export type OperationDef = MergeOp | PipelineOp | SampleOp;
 // FILE RENDERING OPERATIONS (produce new output files)
 // ============================================================================
 
+interface SampleOp {
+  kind: 'sample';
+  source: OperationSource;
+}
+
 export interface MergeSource {
   sampleOpId: string;
   index: number;
@@ -34,7 +39,10 @@ export interface MergeOp {
   /** Group reference or explicit file IDs to combine */
   source: OperationSource;
   /** Output file path (can use templates like {date}, {name}) */
-  sources: MergeSource[];
+  sources: OperationSource[];
+  outputPath: string;
+  gapSeconds: number;
+  format: string;
 }
 
 export interface PipelineOp {
@@ -94,6 +102,13 @@ export const OperationInfoDictionary: Record<OperationDef['kind'], OperationInfo
     description: 'Chain multiple operations together in sequence',
     category: 'meta',
     params: ['source', 'operations'],
+  },
+  sample: {
+    icon: '🔊',
+    label: 'Sample',
+    description: 'Simple audio file playback',
+    category: 'render',
+    params: ['source'],
   },
 };
 
@@ -437,6 +452,10 @@ export const testOperations: NamedOperationDef[] = [
   {
     name: 'combine_active',
     def: {
+      outputPath:
+        'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\static\\tests\\test.wav',
+      gapSeconds: 0,
+      format: 'wav',
       sources: [],
       kind: 'merge',
       source: { type: 'active' },

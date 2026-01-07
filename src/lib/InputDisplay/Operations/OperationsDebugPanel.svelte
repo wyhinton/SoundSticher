@@ -1,12 +1,9 @@
 <script lang="ts">
   import {
-    testOperations,
     addTestOperations,
     deleteAllOperations,
-    addOperation,
     deleteOperation,
     OperationInfoDictionary,
-    type OperationDef,
     type OperationsState,
   } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';

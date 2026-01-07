@@ -314,8 +314,9 @@
     const operationName = `combine_${timestamp}`;
 
     addOperation(operationName, {
-      kind: 'combine',
+      kind: 'merge',
       source: { type: 'active' },
+      sources: [],
       outputPath: `output/combined_${timestamp}.wav`,
       gapSeconds: 0,
       format: 'wav',
@@ -426,7 +427,7 @@
   {#if isExpanded}
     <div class="panel-content" style="height: {panelHeight}px;">
       <div class="flow-container">
-        {#if $appState.operations?.defs && Object.keys($appState.operations.defs).some(name => $appState.operations?.defs[name].kind === 'combine')}
+        {#if $appState.operations?.defs && Object.keys($appState.operations.defs).some(name => $appState.operations?.defs[name].kind === 'merge')}
           <!-- Show individual CombinedFlow components for each combine operation -->
           <div class="combined-flows-row h-100 d-flex">
             {#each combineOperations as combineOp (combineOp.revisionKey)}
