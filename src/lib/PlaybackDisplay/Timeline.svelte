@@ -78,10 +78,14 @@
   let playHeadPosition = 0;
   let playHeadX = 0;
 
-  // Initialize managers when dependencies change
-  // Use currentDuration for operation-based system or durationSeconds for legacy
-  $: if (width > 0 && currentDuration > 0) {
+  // Initialize managers once when component mounts and DOM is ready
+  $: if (width > 0 && currentDuration > 0 && !d3Manager) {
     initializeManagers();
+  }
+
+  // Update managers when props change (instead of re-initializing)
+  $: if (d3Manager && (width > 0 || currentDuration > 0)) {
+    updateManagers();
   }
 
   // Drag and drop state
@@ -193,15 +197,6 @@
       isLoadingWaveforms,
     });
 
-    // Clean up existing managers
-    if (d3Manager) d3Manager.destroy();
-
-    if (dragDropManager) dragDropManager.destroy();
-
-    // ✅ Clean up previous subscription (important since you recreate the manager)
-    unsubscribeDragDrop?.();
-    unsubscribeDragDrop = null;
-
     // Create new D3 manager - use currentDuration instead of durationSeconds
     d3Manager = new D3TimelineManager({
       width,
@@ -226,7 +221,7 @@
     // Initialize with current selection
     dragDropManager.setSelectedSegments(selectedSegments);
 
-    // ✅ Subscribe to manager's state store (Option A)
+    // ✅ Subscribe to manager's state store
     unsubscribeDragDrop = dragDropManager.state.subscribe(s => {
       dragDropState = s;
     });
@@ -237,15 +232,24 @@
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
+  function updateManagers() {
+    if (!d3Manager) return;
+
+    // Update D3 manager options
+    d3Manager.updateOptions({ width, durationSeconds: currentDuration });
+    scaleX = d3Manager.getScaleX();
+    xScale = d3Manager.getXScale() ?? xScale;
+    playHeadX = d3Manager.getPlayheadX(playHeadPosition);
+
+    // Update drag drop manager if needed
+    if (dragDropManager) {
+      dragDropManager.setSelectedSegments(selectedSegments);
+    }
+  }
+
   // Update playhead position when it changes
   $: if (d3Manager) {
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
-  }
-
-  // Update manager options when width or duration changes
-  $: if (d3Manager && (width > 0 || currentDuration > 0)) {
-    d3Manager.updateOptions({ width, durationSeconds: currentDuration });
-    scaleX = d3Manager.getScaleX();
   }
 
   listen<number>('timeline-progress', event => {
@@ -375,18 +379,46 @@
     });
 
     resizeObserver.observe(container);
-    console.log(timelineItems);
+
     return () => {
       resizeObserver.disconnect();
-      if (d3Manager) d3Manager.destroy();
-      if (dragDropManager) dragDropManager.destroy();
-      unsubscribeDragDrop?.();
+
+      // Clean up managers
+      if (d3Manager) {
+        d3Manager.destroy();
+        d3Manager = null;
+      }
+
+      if (dragDropManager) {
+        dragDropManager.destroy();
+        dragDropManager = null;
+      }
+
+      // Clean up subscriptions
+      if (unsubscribeDragDrop) {
+        unsubscribeDragDrop();
+        unsubscribeDragDrop = null;
+      }
     };
   });
 
   onDestroy(() => {
-    // in case the component is destroyed without onMount cleanup firing as expected
-    unsubscribeDragDrop?.();
+    // Clean up managers if component is destroyed without onMount cleanup firing
+    if (d3Manager) {
+      d3Manager.destroy();
+      d3Manager = null;
+    }
+
+    if (dragDropManager) {
+      dragDropManager.destroy();
+      dragDropManager = null;
+    }
+
+    // Clean up subscriptions
+    if (unsubscribeDragDrop) {
+      unsubscribeDragDrop();
+      unsubscribeDragDrop = null;
+    }
 
     // Clear any pending scroll timeout
     if (scrollTimeout !== null) {
