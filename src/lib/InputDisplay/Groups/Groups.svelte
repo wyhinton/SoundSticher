@@ -422,7 +422,6 @@
   }
 
   .groups-container {
-    padding: 12px;
     height: 100%;
     display: flex;
     flex-direction: column;

@@ -395,7 +395,6 @@
 
 <style>
   .operations-panel {
-    padding: 12px;
     height: 100%;
     color: #cdd6f4;
   }

@@ -52,6 +52,7 @@ export interface AppState {
     selectedOperationName?: string | null;
     timelineDebugMode?: boolean;
     showFullSvgPath?: boolean;
+    svgPathDisplayMode?: 'full' | 'trim' | 'hide';
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -154,6 +155,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       selectedOperationName: null,
       timelineDebugMode: false,
       showFullSvgPath: false,
+      svgPathDisplayMode: 'trim',
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -268,6 +270,7 @@ export const appState = persisted<AppState>(
       selectedOperationName: null,
       timelineDebugMode: false,
       showFullSvgPath: false,
+      svgPathDisplayMode: 'trim',
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -965,6 +968,16 @@ export function setShowFullSvgPath(value: boolean) {
       state.uiSettings = {};
     }
     state.uiSettings.showFullSvgPath = value;
+    return state;
+  });
+}
+
+export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.svgPathDisplayMode = mode;
     return state;
   });
 }

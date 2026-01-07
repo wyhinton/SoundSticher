@@ -1,12 +1,17 @@
 <script lang="ts">
-  import { appState, removeFromFavorites, addSource } from '../state/state.svelte';
+  import {
+    appState,
+    removeFromFavorites,
+    addSource,
+    addSourceToCurrentOperation,
+  } from '../state/state.svelte';
 
   function handleRemoveFromFavorites(path: string) {
     removeFromFavorites(path);
   }
 
   function handleAddFavoriteAsSource(path: string) {
-    addSource([path]);
+    addSourceToCurrentOperation([path]);
   }
 
   function getDirectoryName(path: string): string {
@@ -148,7 +153,6 @@
   .favorites-list {
     flex: 1;
     overflow-y: auto;
-    padding-right: 4px;
   }
 
   .favorite-item {

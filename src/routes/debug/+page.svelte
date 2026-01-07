@@ -14,6 +14,7 @@
     resetAppState,
     setDebugActiveTab,
     currentOperationSections,
+    setSvgPathDisplayMode,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
@@ -34,19 +35,57 @@
     loggingState,
   } from '$lib/state/logging';
 
+  // Helper function to process svg_path properties based on display mode
+  function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => processSvgPaths(item, mode, maxLength));
+    }
+
+    if (typeof obj === 'object') {
+      const result: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === 'svg_path' || key === 'svgPath') {
+          // Process svg path properties based on mode
+          if (mode === 'hide') {
+            result[key] = '[SVG Path Hidden]';
+          } else if (mode === 'trim' && typeof value === 'string' && value.length > maxLength) {
+            result[key] = value.substring(0, maxLength) + `... (${value.length} chars total)`;
+          } else {
+            // mode === 'full' or value is short enough
+            result[key] = value;
+          }
+        } else {
+          // Recursively process other properties
+          result[key] = processSvgPaths(value, mode, maxLength);
+        }
+      }
+      return result;
+    }
+
+    return obj;
+  }
+
   // Reactive derived state for simplified display
-  $: forPrint = {
-    ...$appState,
-    sections: $appState.sections.map(s => ({
-      folderPath: s.folderPath,
-      files: s.files.length,
-      // files: s.files.length,
-    })),
-    currentOperationSections: $currentOperationSections.map(s => ({
-      folderPath: s.folderPath,
-      files: s.files.length,
-    })),
-  };
+  $: svgDisplayMode = $appState.uiSettings?.svgPathDisplayMode || 'trim';
+  $: forPrint = processSvgPaths(
+    {
+      ...$appState,
+      sections: $appState.sections.map(s => ({
+        folderPath: s.folderPath,
+        files: s.files.length,
+        // files: s.files.length,
+      })),
+      currentOperationSections: $currentOperationSections.map(s => ({
+        folderPath: s.folderPath,
+        files: s.files.length,
+      })),
+    },
+    svgDisplayMode
+  );
 
   $: t = {
     x: JSON.stringify($positionStore),
@@ -378,7 +417,25 @@
   >
     <!-- Frontend State Tab -->
     <div slot="frontend">
-      <h3>Frontend State</h3>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Frontend State</h3>
+        <div class="svg-path-controls">
+          <label for="svg-path-select" class="control-label">SVG Path Display:</label>
+          <select
+            id="svg-path-select"
+            bind:value={svgDisplayMode}
+            on:change={e =>
+              setSvgPathDisplayMode(
+                (e.target as HTMLSelectElement).value as 'full' | 'trim' | 'hide'
+              )}
+            class="svg-path-select"
+          >
+            <option value="full">Show Full</option>
+            <option value="trim">Trim</option>
+            <option value="hide">Hide</option>
+          </select>
+        </div>
+      </div>
       <PrismWrapper data={forPrint} />
     </div>
 
@@ -689,7 +746,8 @@
 
   /* Select Styles */
   select,
-  .example-select {
+  .example-select,
+  .svg-path-select {
     background-color: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
@@ -701,9 +759,28 @@
   }
 
   select option,
-  .example-select option {
+  .example-select option,
+  .svg-path-select option {
     background-color: #1a1a1a;
     color: white;
+  }
+
+  /* SVG Path Controls */
+  .svg-path-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .control-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .svg-path-select {
+    min-width: 100px;
   }
 
   /* Responsive Design */

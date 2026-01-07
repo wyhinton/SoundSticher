@@ -36,7 +36,7 @@
 </script>
 
 <!-- Tab panel section -->
-<section class="tab-panel-section" style="width: {panelWidth}px;">
+<section class="tab-panel-section" style="width: {panelWidth}px; min-width: {panelWidth}px;">
   <div class="tab-panel-container">
     <!-- Tab navigation -->
     <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
@@ -140,6 +140,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    width: inherit;
   }
 
   /* Tab styles */

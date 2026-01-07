@@ -1,7 +1,12 @@
 <script lang="ts">
   import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
-  import { durationSeconds, type TimelineItem, appState, toggleShowFullSvgPath } from '../../state/state.svelte';
-  
+  import {
+    durationSeconds,
+    type TimelineItem,
+    appState,
+    toggleShowFullSvgPath,
+  } from '../../state/state.svelte';
+
   // Props passed from Timeline component
   export let isDragging: boolean;
   export let draggedSegmentIndex: number;
@@ -16,7 +21,7 @@
   export let selectedSegments: Set<number>;
   export let lastSelectedIndex: number | null;
   export let segmentsToMove: number[] = [];
-  
+
   // Reactive access to showFullSvgPath setting
   $: showFullSvgPath = $appState.uiSettings?.showFullSvgPath ?? false;
 </script>
@@ -24,11 +29,7 @@
 <div class="debug">
   <div class="controls-row">
     <label>
-      <input 
-        type="checkbox" 
-        checked={showFullSvgPath}
-        on:change={() => toggleShowFullSvgPath()}
-      />
+      <input type="checkbox" checked={showFullSvgPath} on:change={() => toggleShowFullSvgPath()} />
       Show full SVG path
     </label>
   </div>
@@ -151,7 +152,7 @@
     cursor: pointer;
   }
 
-  .controls-row input[type="checkbox"] {
+  .controls-row input[type='checkbox'] {
     margin: 0;
   }
 
