@@ -123,10 +123,7 @@
     <!-- <Waveform></Waveform> -->
     <div>
       <PlottedInfo useOperationSystem={USE_OPERATION_SYSTEM}></PlottedInfo>
-      <Plotted
-        bind:this={timelineComponent}
-        on:selectionChange={handleTimelineSelectionChange}
-        useOperationSystem={USE_OPERATION_SYSTEM}
+      <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
       ></Plotted>
       <Export></Export>
     </div>

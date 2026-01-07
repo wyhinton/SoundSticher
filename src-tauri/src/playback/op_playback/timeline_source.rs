@@ -17,7 +17,6 @@ use super::types::{AudioSpec, PlaybackOpId, SampleTime};
 use rodio::Source;
 use std::sync::Arc;
 use std::time::Duration;
-
 /// Block size for internal buffering (in frames)
 const BLOCK_SIZE: usize = 512;
 
@@ -316,9 +315,11 @@ impl Default for TimelineSourceBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::super::op_source::SamplePlayableOp;
     use super::super::timeline::TimelineEvent;
-    use super::*;
+    use crate::{
+        ops::sample::SamplePlayableOp,
+        playback::{AudioSpec, PlaybackGraph, SampleTime, TimelineSource},
+    };
 
     fn create_test_graph() -> Arc<PlaybackGraph> {
         let spec = AudioSpec::new(44100, 1);

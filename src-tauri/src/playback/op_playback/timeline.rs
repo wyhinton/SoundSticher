@@ -304,8 +304,8 @@ impl PlaybackGraph {
 
 #[cfg(test)]
 mod tests {
-    use super::super::op_source::SamplePlayableOp;
     use super::*;
+    use crate::ops::sample::SamplePlayableOp;
 
     #[test]
     fn test_timeline_event_is_active_at() {

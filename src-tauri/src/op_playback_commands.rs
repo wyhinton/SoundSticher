@@ -4,9 +4,9 @@
 // using the pull-based playback system.
 
 use crate::logging::{LogSystem, LoggingService};
+use crate::ops::sample::SamplePlayableOp;
 use crate::playback::op_playback::{
-    AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SamplePlayableOp, SampleTime,
-    TimelineEvent, TimelineSource, TimelineSourceBuilder,
+    AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
 };
 use crate::{log_debug, log_info};
 use rodio::{OutputStream, Sink};
@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 /// State for operation-based playback
 pub struct OpPlaybackState {
@@ -279,18 +279,28 @@ pub fn op_playback_play(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let graph = state.get_graph().ok_or("No playback graph available")?;
+    let spec = *state.spec.read().unwrap();
+    let loop_playback = state.loop_playback.load(Ordering::Relaxed);
+
+    // Get operation info for logging
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_count = op_id_map.len();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+    let total_duration = graph.duration().to_seconds(spec.sample_rate);
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_play",
-            &format!("Starting operation playback (start={:?}s)", start_seconds)
+            &format!(
+                "Starting operation playback: {} operations [{}], {:.2}s duration, start={:?}s, loop={}",
+                op_count, op_names.join(", "), total_duration, start_seconds, loop_playback
+            )
         );
     }
-
-    let graph = state.get_graph().ok_or("No playback graph available")?;
-    let spec = *state.spec.read().unwrap();
-    let loop_playback = state.loop_playback.load(Ordering::Relaxed);
 
     // Stop any current playback
     stop_current_playback(&state);
@@ -334,7 +344,7 @@ pub fn op_playback_play(
         };
 
         // Create timeline source
-        let mut source = TimelineSourceBuilder::new()
+        let source = TimelineSourceBuilder::new()
             .spec(spec)
             .looping(loop_playback)
             .start_position(start_position)
@@ -408,12 +418,32 @@ pub fn op_playback_pause(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let progress = *state.progress.lock().unwrap();
+    let spec = *state.spec.read().unwrap();
+    let graph = state.get_graph();
+
+    let current_position = if let Some(ref g) = graph {
+        let total_duration = g.duration().to_seconds(spec.sample_rate);
+        progress as f64 * total_duration
+    } else {
+        0.0
+    };
+
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_pause",
-            "Pausing operation playback"
+            &format!(
+                "Pausing operation playback [{}] at {:.2}s (progress: {:.1}%)",
+                op_names.join(", "),
+                current_position,
+                progress * 100.0
+            )
         );
     }
 
@@ -436,12 +466,32 @@ pub fn op_playback_resume(
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let progress = *state.progress.lock().unwrap();
+    let spec = *state.spec.read().unwrap();
+    let graph = state.get_graph();
+
+    let current_position = if let Some(ref g) = graph {
+        let total_duration = g.duration().to_seconds(spec.sample_rate);
+        progress as f64 * total_duration
+    } else {
+        0.0
+    };
+
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_resume",
-            "Resuming operation playback"
+            &format!(
+                "Resuming operation playback [{}] from {:.2}s (progress: {:.1}%)",
+                op_names.join(", "),
+                current_position,
+                progress * 100.0
+            )
         );
     }
 
@@ -461,12 +511,23 @@ pub fn op_playback_stop(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let progress = *state.progress.lock().unwrap();
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_count = op_id_map.len();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_stop",
-            "Stopping operation playback"
+            &format!(
+                "Stopping operation playback ({} operations [{}], was at {:.1}%)",
+                op_count,
+                op_names.join(", "),
+                progress * 100.0
+            )
         );
     }
 
@@ -485,21 +546,34 @@ pub fn op_playback_seek(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let graph = state.get_graph().ok_or("No playback graph available")?;
+    let spec = *state.spec.read().unwrap();
+    let total_duration = graph.duration().to_seconds(spec.sample_rate);
+
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_count = op_id_map.len();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
+    // Calculate and update progress
+    let progress = (position_seconds / total_duration).clamp(0.0, 1.0) as f32;
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_seek",
-            &format!("Seeking to {:.2}s", position_seconds)
+            &format!(
+                "Seeking to {:.2}s / {:.2}s ({:.1}%) in {} operations [{}]",
+                position_seconds,
+                total_duration,
+                progress * 100.0,
+                op_count,
+                op_names.join(", ")
+            )
         );
     }
 
-    let graph = state.get_graph().ok_or("No playback graph available")?;
-    let spec = *state.spec.read().unwrap();
-    let total_duration = graph.duration().to_seconds(spec.sample_rate);
-
-    // Calculate and update progress
-    let progress = (position_seconds / total_duration).clamp(0.0, 1.0) as f32;
     *state.progress.lock().unwrap() = progress;
     *state.seek_position.lock().unwrap() = position_seconds as f32;
 
@@ -507,11 +581,10 @@ pub fn op_playback_seek(
     let _ = app.emit("op-timeline-progress", progress);
 
     // If currently playing, restart from new position
+    // Note: In a real implementation, you'd want to seamlessly seek
+    // without restarting. This is a simplified version.
     if state.is_playing.load(Ordering::Relaxed) && !state.is_paused.load(Ordering::Relaxed) {
-        // This will restart playback from the new position
-        drop(state); // Release borrow before calling play
-                     // Note: In a real implementation, you'd want to seamlessly seek
-                     // without restarting. This is a simplified version.
+        // Playback will continue from the new seek position
     }
 
     Ok(())
@@ -530,12 +603,22 @@ pub fn op_playback_set_volume(
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_count = op_id_map.len();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_volume",
-            &format!("Setting volume to {:.2}", volume)
+            &format!(
+                "Setting volume to {:.2} ({} operations [{}])",
+                volume,
+                op_count,
+                op_names.join(", ")
+            )
         );
     }
 
@@ -554,12 +637,22 @@ pub fn op_playback_set_loop(
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_count = op_id_map.len();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_loop",
-            &format!("Setting loop mode to {}", loop_playback)
+            &format!(
+                "Setting loop mode to {} ({} operations [{}])",
+                loop_playback,
+                op_count,
+                op_names.join(", ")
+            )
         );
     }
 
@@ -573,12 +666,29 @@ pub fn op_playback_clear_graph(
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    let op_id_map = state.op_id_map.read().unwrap();
+    let op_count = op_id_map.len();
+    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
+    drop(op_id_map);
+
+    let spec = *state.spec.read().unwrap();
+    let total_duration = if let Some(ref graph) = state.get_graph() {
+        graph.duration().to_seconds(spec.sample_rate)
+    } else {
+        0.0
+    };
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
             "op_clear",
-            "Clearing playback graph"
+            &format!(
+                "Clearing playback graph ({} operations [{}], {:.2}s duration)",
+                op_count,
+                op_names.join(", "),
+                total_duration
+            )
         );
     }
 
@@ -605,11 +715,10 @@ fn stop_current_playback(state: &OpPlaybackState) {
 
 fn load_audio_samples(
     file_path: &str,
-    target_sample_rate: u32,
-    target_channels: u16,
+    _target_sample_rate: u32,
+    _target_channels: u16,
 ) -> Result<Vec<f32>, String> {
     use std::fs::File;
-    use std::io::BufReader;
 
     // Use symphonia for audio decoding
     use symphonia::core::audio::SampleBuffer;
@@ -674,7 +783,6 @@ fn load_audio_samples(
             }
         };
 
-        let spec = *decoded.spec();
         let mut sample_buf = SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec());
         sample_buf.copy_interleaved_ref(decoded);
         samples.extend_from_slice(sample_buf.samples());
