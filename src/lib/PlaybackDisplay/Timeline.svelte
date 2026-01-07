@@ -192,7 +192,6 @@
       operationDuration: $operationDuration,
       isLoadingWaveforms,
     });
-    console.log(get(operationTimelineItems));
 
     // Clean up existing managers
     if (d3Manager) d3Manager.destroy();
