@@ -102,6 +102,17 @@ impl PlaybackContext {
         &mut self.mix
     }
 
+    /// Accumulate the scratch buffer into the mix buffer with a gain factor
+    ///
+    /// This method copies samples from scratch to mix with gain applied.
+    /// Use this after rendering into scratch_buffer to avoid borrow conflicts.
+    pub fn accumulate_scratch_to_mix(&mut self, samples: usize, gain: f32) {
+        let samples = samples.min(self.scratch.len()).min(self.mix.len());
+        for i in 0..samples {
+            self.mix[i] += self.scratch[i] * gain;
+        }
+    }
+
     /// Render a single operation into the mix buffer at the given time
     ///
     /// Returns the number of samples rendered

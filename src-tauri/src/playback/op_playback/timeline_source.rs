@@ -159,17 +159,18 @@ impl TimelineSource {
                 // Calculate local time within the operation
                 let local_time = event.to_local_time(self.position);
 
-                // Render into scratch buffer
+                // Render into scratch buffer and get the rendered sample count
                 let samples = frames_to_render * self.spec.channels as usize;
-                let scratch = self.context.scratch_buffer(frames_to_render);
-                scratch.fill(0.0);
+                let rendered = {
+                    let scratch = self.context.scratch_buffer(frames_to_render);
+                    scratch.fill(0.0);
+                    op.render_at(local_time, scratch, &self.spec)
+                };
 
-                if let Ok(rendered) = op.render_at(local_time, scratch, &self.spec) {
-                    // Apply event gain and accumulate into mix
-                    let mix = self.context.mix_buffer_mut();
-                    for i in 0..rendered {
-                        mix[i] += scratch[i] * event.gain;
-                    }
+                // Now accumulate scratch into mix (separate borrow)
+                if let Ok(rendered_count) = rendered {
+                    let gain = event.gain;
+                    self.context.accumulate_scratch_to_mix(rendered_count, gain);
                 }
             }
         }
