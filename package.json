@@ -19,6 +19,7 @@
     "type-check": "svelte-check --tsconfig ./tsconfig.json --threshold warning",
     "sync": "svelte-kit sync",
     "sync:logging": "node scripts/sync-logging-config.js",
+    "sync:performance": "node scripts/sync-performance-types.js",
     "release": "node -e \"require('child_process').spawn(process.platform === 'win32' ? '.\\\\scripts\\\\release.bat' : './scripts/release.sh', [], {stdio: 'inherit', shell: true})\"",
     "release:patch": "npm version patch && git push && git push --tags",
     "release:minor": "npm version minor && git push && git push --tags",

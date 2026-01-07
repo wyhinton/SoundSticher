@@ -22,51 +22,93 @@ export interface PerformanceMetric {
 type PerfMetricName = keyof PerformanceState;
 
 export interface PerformanceState {
-  combine_audio_files: PerformanceMetric[];
-  get_metadata: PerformanceMetric[];
-  get_file_paths_in_folder: PerformanceMetric[];
-  pause_sample_preview: PerformanceMetric[];
-  play_sample_preview: PerformanceMetric[];
-  update_inputs: PerformanceMetric[];
-  combine_all_cached_samples: PerformanceMetric[];
-  play_timeline_audio: PerformanceMetric[];
   cancel_combine: PerformanceMetric[];
-  pause_timeline_audio: PerformanceMetric[];
-  clear_audio_files: PerformanceMetric[];
-  get_app_state: PerformanceMetric[];
-  test_async: PerformanceMetric[];
-  export_audio: PerformanceMetric[];
-  open_in_explorer: PerformanceMetric[];
-  update_sorting: PerformanceMetric[];
+  clear_waveform_cache: PerformanceMetric[];
+  combine_all_cached_samples: PerformanceMetric[];
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
-  set_timeline_play_position: PerformanceMetric[];
-  stop_timeline_audio: PerformanceMetric[];
+  export_audio: PerformanceMetric[];
+  get_app_state: PerformanceMetric[];
+  get_audio_file_active_status: PerformanceMetric[];
+  get_current_play_progress: PerformanceMetric[];
+  get_custom_order: PerformanceMetric[];
+  get_metadata: PerformanceMetric[];
+  get_waveform: PerformanceMetric[];
+  get_waveform_cache_stats: PerformanceMetric[];
+  get_waveforms_batch: PerformanceMetric[];
+  get_waveforms_for_operation: PerformanceMetric[];
+  invalidate_waveform: PerformanceMetric[];
+  op_playback_build_graph: PerformanceMetric[];
+  op_playback_clear_graph: PerformanceMetric[];
+  op_playback_get_progress: PerformanceMetric[];
+  op_playback_pause: PerformanceMetric[];
+  op_playback_play: PerformanceMetric[];
+  op_playback_resume: PerformanceMetric[];
+  op_playback_seek: PerformanceMetric[];
+  op_playback_set_loop: PerformanceMetric[];
+  op_playback_set_volume: PerformanceMetric[];
+  op_playback_stop: PerformanceMetric[];
+  pause_sample_preview: PerformanceMetric[];
+  pause_timeline_audio: PerformanceMetric[];
+  play_sample_preview: PerformanceMetric[];
+  play_timeline_audio: PerformanceMetric[];
+  set_audio_file_active: PerformanceMetric[];
   set_audio_files_active_batch: PerformanceMetric[];
+  set_timeline_loop_enabled: PerformanceMetric[];
+  set_timeline_play_position: PerformanceMetric[];
+  set_volume: PerformanceMetric[];
+  stop_timeline_audio: PerformanceMetric[];
+  test_async: PerformanceMetric[];
+  test_operation: PerformanceMetric[];
+  test_operation_with_params: PerformanceMetric[];
+  test_scheduler: PerformanceMetric[];
   toggle_audio_file_active: PerformanceMetric[];
+  update_inputs: PerformanceMetric[];
+  update_sorting: PerformanceMetric[];
 }
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
-  combine_audio_files: [],
-  get_metadata: [],
-  get_file_paths_in_folder: [],
-  pause_sample_preview: [],
-  play_sample_preview: [],
-  update_inputs: [],
-  combine_all_cached_samples: [],
-  play_timeline_audio: [],
   cancel_combine: [],
-  pause_timeline_audio: [],
-  clear_audio_files: [],
-  get_app_state: [],
-  test_async: [],
-  export_audio: [],
-  open_in_explorer: [],
-  update_sorting: [],
+  clear_waveform_cache: [],
+  combine_all_cached_samples: [],
   combine_all_cached_samples_with_custom_order: [],
-  set_timeline_play_position: [],
-  stop_timeline_audio: [],
+  export_audio: [],
+  get_app_state: [],
+  get_audio_file_active_status: [],
+  get_current_play_progress: [],
+  get_custom_order: [],
+  get_metadata: [],
+  get_waveform: [],
+  get_waveform_cache_stats: [],
+  get_waveforms_batch: [],
+  get_waveforms_for_operation: [],
+  invalidate_waveform: [],
+  op_playback_build_graph: [],
+  op_playback_clear_graph: [],
+  op_playback_get_progress: [],
+  op_playback_pause: [],
+  op_playback_play: [],
+  op_playback_resume: [],
+  op_playback_seek: [],
+  op_playback_set_loop: [],
+  op_playback_set_volume: [],
+  op_playback_stop: [],
+  pause_sample_preview: [],
+  pause_timeline_audio: [],
+  play_sample_preview: [],
+  play_timeline_audio: [],
+  set_audio_file_active: [],
   set_audio_files_active_batch: [],
+  set_timeline_loop_enabled: [],
+  set_timeline_play_position: [],
+  set_volume: [],
+  stop_timeline_audio: [],
+  test_async: [],
+  test_operation: [],
+  test_operation_with_params: [],
+  test_scheduler: [],
   toggle_audio_file_active: [],
+  update_inputs: [],
+  update_sorting: [],
 });
 
 export const setPerfMetric = (metric: PerfMetricName, time: number) => {

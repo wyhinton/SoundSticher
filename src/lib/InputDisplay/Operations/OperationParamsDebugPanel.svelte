@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
+  import { invokeWithPerf } from '$lib/state/performance';
   import type { OperationDef } from '$lib/state/operation';
 
   // Props
@@ -38,7 +38,7 @@
     testResult = null;
 
     try {
-      const result = await invoke<string>('test_operation', {
+      const result = await invokeWithPerf<string>('test_operation', {
         operationName: selectedOperation.kind,
       });
 
@@ -67,7 +67,7 @@
     try {
       const operationType = getOperationType(selectedOperation);
 
-      const result = await invoke<string>('test_operation_with_params', {
+      const result = await invokeWithPerf<string>('test_operation_with_params', {
         operationName: operationType,
         params: {
           parameters: operationParams,
@@ -91,7 +91,7 @@
     schedulerTestResult = null;
 
     try {
-      const result = await invoke<string>('test_scheduler');
+      const result = await invokeWithPerf<string>('test_scheduler');
       console.log('Scheduler test result:', result);
       schedulerTestResult = { type: 'success', message: result };
     } catch (error) {
@@ -105,11 +105,11 @@
 
   async function handleOpenArtifactsFolder() {
     try {
-      const artifactsPath = await invoke<string>('get_artifacts_directory');
+      const artifactsPath = await invokeWithPerf<string>('get_artifacts_directory');
       console.log('Opening artifacts folder:', artifactsPath);
 
       // Call open_in_explorer with the artifacts directory path
-      await invoke('open_in_explorer', {
+      await invokeWithPerf('open_in_explorer', {
         fileToOpen: artifactsPath,
       });
     } catch (error) {
