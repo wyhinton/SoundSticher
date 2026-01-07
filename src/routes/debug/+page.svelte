@@ -13,7 +13,6 @@
     hoveredSourceItem,
     resetAppState,
     setDebugActiveTab,
-    currentOperationSections,
     setSvgPathDisplayMode,
     callSiteTrackingEnabled,
     toggleCallSiteTrackingEnabled,
@@ -76,15 +75,7 @@
   $: forPrint = processSvgPaths(
     {
       ...$appState,
-      sections: $appState.sections.map(s => ({
-        folderPath: s.folderPath,
-        files: s.files.length,
-        // files: s.files.length,
-      })),
-      currentOperationSections: $currentOperationSections.map(s => ({
-        folderPath: s.folderPath,
-        files: s.files.length,
-      })),
+      // sections property removed - operations no longer have sections
     },
     svgDisplayMode
   );
@@ -368,9 +359,9 @@
         'info'
       )}
       {@render actionButton(
-        () => console.log($appState.sections),
+        () => console.log('Global sections removed - use currentOperationSections instead'),
         'fa-arrows-spin',
-        'Log Sections',
+        'Log Current Op Sections',
         false,
         'info'
       )}

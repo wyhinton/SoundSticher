@@ -30,7 +30,6 @@ interface VisualSample {
 interface Operation {}
 
 export interface AppState {
-  sections: Section[];
   playingSong?: string;
   playingSection?: number;
   playProgress?: number;
@@ -138,7 +137,6 @@ const CURRENT_STATE_VERSION = 1; // Increment this when you need to run migratio
 // Function to validate and migrate appState from localStorage
 function validateAndMigrateAppState(loadedState: any): AppState {
   const defaultState: AppState = {
-    sections: [],
     isCombiningFile: false,
     combinedFileLength: 0,
     playingCombined: false,
@@ -204,8 +202,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     ...loadedState,
     // Ensure favorites array exists and is valid
     favorites: Array.isArray(loadedState.favorites) ? loadedState.favorites : [],
-    // Ensure sections array exists and is valid
-    sections: Array.isArray(loadedState.sections) ? loadedState.sections : [],
+    // Note: sections removed - now managed per operation
     // Ensure timelineItems array exists and is valid
     timelineItems: Array.isArray(loadedState.timelineItems) ? loadedState.timelineItems : [],
     // Migrate old activeTab to new uiSettings structure
@@ -249,7 +246,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     toVersion: CURRENT_STATE_VERSION,
     hasOriginalFavorites: !!loadedState.favorites,
     migratedFavoritesCount: migratedState.favorites.length,
-    sectionsCount: migratedState.sections.length,
+    // sectionsCount removed - now managed per operation
   });
 
   return migratedState;
@@ -258,7 +255,6 @@ function validateAndMigrateAppState(loadedState: any): AppState {
 export const appState = persisted<AppState>(
   'appState',
   {
-    sections: [],
     isCombiningFile: false,
     combinedFileLength: 0,
     playingCombined: false,
@@ -331,7 +327,6 @@ export const timelineDebugMode = {
 };
 
 const defaults: AppState = {
-  sections: [],
   isCombiningFile: false,
   combinedFileLength: 0,
   playingCombined: false,
@@ -380,123 +375,11 @@ const DEFAULT_FOLDER = 'C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_ti
 let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
-export async function addSource(paths?: string | string[]) {
-  const defaultSectionColor = getDefaultColor();
-  const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
+// Removed addSource() function - use operation-specific addSourceToCurrentOperation() instead
 
-  const tState = get(appState);
-  console.log(tState);
+// Removed deleteSection() function - use operation-specific deleteSectionFromCurrentOperation() instead
 
-  try {
-    // Get file paths for each folder
-    const folderFilesResult = await invokeWithPerf<Record<string, string[]>>(
-      'get_file_paths_in_folder',
-      {
-        folderPaths: selectedFolderPaths,
-      }
-    );
-
-    if (folderFilesResult.ok === true) {
-      // Flatten all file paths to request metadata at once
-      const allDiscoveredFilePaths: string[] = Object.values(folderFilesResult.value).flat();
-      console.log(allDiscoveredFilePaths);
-
-      // Get metadata for all discovered files
-      const fileMetadataResult = await invokeWithPerf<FileMetadata[]>('get_metadata', {
-        titles: allDiscoveredFilePaths,
-      });
-
-      if (fileMetadataResult.ok === true) {
-        // Calculate starting index for new files - always use sequential indexing
-        let nextIndex = 0;
-        const allExistingFiles = getAllFiles(tState.sections);
-        if (allExistingFiles.length > 0) {
-          nextIndex = Math.max(...allExistingFiles.map(f => f.index)) + 1;
-        }
-        console.log(folderFilesResult);
-        const newSourceSections: Section[] = Object.entries(folderFilesResult.value).map(
-          ([folderPath, discoveredFiles]) => {
-            const filesWithMetadata: AudioFileItem[] = discoveredFiles
-              .map((filePath, fileIndex) => {
-                const fileMetadata = fileMetadataResult.value.find(
-                  metadata => metadata.path === filePath
-                );
-
-                // Use sequential indexing for all new files
-                const properIndex = nextIndex++;
-
-                return fileMetadata
-                  ? {
-                      ...fileMetadata,
-                      color: defaultSectionColor,
-                      index: properIndex,
-                      active: true,
-                    }
-                  : null;
-              })
-              .filter(Boolean) as AudioFileItem[];
-
-            return {
-              folderPath,
-              files: filesWithMetadata,
-              errors: [],
-              metaData: [],
-              color: defaultSectionColor,
-            };
-          }
-        );
-
-        console.log(newSourceSections);
-
-        // Update app state with new sections
-        appState.update(currentState => {
-          return {
-            ...currentState,
-            combinedFile: undefined,
-            combinedFileLength: undefined,
-            sections: [...newSourceSections, ...currentState.sections],
-          };
-        });
-      }
-    }
-
-    // Send updated sections to backend/input processor
-    const updatedAppState = get(appState);
-    updateInputs(updatedAppState.sections);
-  } catch (error) {
-    console.error('Error in addSection:', error);
-  }
-}
-
-export function deleteSection(index: number) {
-  console.log(`%cHERE LINE :150 %c`, 'color: yellow; font-weight: bold', '');
-
-  appState.update(state => {
-    // Remove the section at the specified index
-    state.sections.splice(index, 1);
-    if (state.sections.length === 0) {
-      invokeWithPerf('clear_audio_files');
-      state.sections = [];
-      state.timelineItems = [];
-      state.combinedFile = undefined;
-      return state;
-    } else {
-      updateInputs(state.sections);
-    }
-    return state;
-  });
-}
-
-export function updatePath(sectionIndex: number, value: string) {
-  appState.update(state => {
-    console.log(state.sections);
-    if (state.sections[sectionIndex]) {
-      state.sections[sectionIndex].folderPath = value;
-    }
-    return state;
-  });
-  get_file_paths_in_folder(sectionIndex);
-}
+// Removed updatePath() function - use operation-specific functions instead
 
 export async function play_sample_preview(song: string) {
   await invokeWithPerf<Song[]>('play_sample_preview', { title: song }).then(f => {
@@ -600,7 +483,6 @@ appState.subscribe(s => {
 export function resetAppState() {
   appState.update(state => {
     state.combinedFile = undefined;
-    // state.sections = [];
     state.playingSong = undefined;
     state.playingSection = undefined;
     state.playProgress = undefined;
@@ -696,78 +578,12 @@ function offsetX(path: string, dx: number): string {
   });
 }
 
-// Derived store for duration in seconds - used by Timeline and other components
+// Derived store for duration in seconds - updated to use operation-specific data or default
 export const durationSeconds = derived(appState, $appState => {
-  return $appState?.combinedFileLength && $appState.sections.length > 0
-    ? $appState.combinedFileLength
-    : 30;
+  return $appState?.combinedFileLength ? $appState.combinedFileLength : 30;
 });
 
-// Function to sync file indices with backend response and trigger animations
-export function syncIndexes(
-  newOrder: [string, number][],
-  currentState: AppState
-): {
-  updatedState: AppState;
-  changedIds: string[];
-} {
-  const allFiles = getAllFiles(currentState.sections);
-  const changedIds: string[] = [];
-
-  // Update each file's index based on the new order from backend
-  newOrder.forEach(([fileId, newIndex]) => {
-    const toUpdate = allFiles.find(f => f.id === fileId);
-    if (toUpdate) {
-      const oldIndex = toUpdate.index;
-
-      // Check if the index actually changed
-      if (oldIndex !== newIndex) {
-        changedIds.push(toUpdate.id);
-        console.log(`Updating file ${toUpdate.id} index from ${oldIndex} to ${newIndex}`);
-        toUpdate.index = newIndex;
-        console.log('File after update:', toUpdate);
-      } else {
-        console.log(`File ${toUpdate.id} index unchanged: ${oldIndex}`);
-      }
-    } else {
-      console.warn(`File with ID ${fileId} not found in sections`);
-    }
-  });
-
-  console.log(`Changed IDs (${changedIds.length}):`, changedIds);
-
-  // Create new sections array to trigger reactivity
-  const newSections = currentState.sections.map(section => ({
-    ...section,
-    files: [...section.files], // Create new file arrays
-  }));
-
-  console.log('Updated sections:', newSections);
-
-  const updatedState = {
-    ...currentState,
-    sections: newSections,
-  };
-
-  return {
-    updatedState,
-    changedIds,
-  };
-}
-
-// Function to apply index sync and trigger animations
-export function applySyncIndexes(newOrder: [string, number][]): void {
-  appState.update(state => {
-    const { updatedState, changedIds } = syncIndexes(newOrder, state);
-
-    // Trigger animation for changed files
-    if (changedIds.length > 0) {
-      triggerFileAnimation(changedIds);
-    }
-
-    return updatedState;
-  });
-}
+// Removed syncIndexes() and applySyncIndexes() functions - use operation-specific functions instead
 
 export function addToFavorites(folderPath: string) {
   appState.update(state => {
@@ -968,237 +784,61 @@ export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
 }
 
 // ============================================================================
-// CURRENT OPERATION SECTIONS - Derived store and helpers
+// OPERATION-RELATED FUNCTIONS REMOVED
+// Operations no longer have sections property - these functions are deprecated
 // ============================================================================
 
+// All operation-section related functions have been removed since operations
+// no longer have a sections property. Operations now use sources instead.
+
+// Removed addSourceToCurrentOperation() - operations no longer have sections
+// Removed deleteSectionFromCurrentOperation() - operations no longer have sections
+
 /**
- * Derived store that provides the sections for the currently selected operation.
- * Falls back to an empty array if no operation is selected or if the operation has no sections.
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
  */
 export const currentOperationSections = derived(appState, $appState => {
-  const selectedName = $appState.uiSettings?.selectedOperationName;
-  if (!selectedName || !$appState.operations?.defs) {
-    return [];
-  }
-  const operation = $appState.operations.defs[selectedName];
-  return operation?.sections ?? [];
+  console.warn('currentOperationSections is deprecated - operations no longer have sections');
+  return [];
 });
 
 /**
- * Get the sections for a specific operation by name
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
  */
 export function getOperationSections(operationName: string): Section[] {
-  const state = get(appState);
-  if (!state.operations?.defs?.[operationName]) {
-    return [];
-  }
-  return state.operations.defs[operationName].sections ?? [];
+  console.warn('getOperationSections is deprecated - operations no longer have sections');
+  return [];
 }
 
 /**
- * Get the sections for the currently selected operation
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
  */
 export function getCurrentOperationSections(): Section[] {
-  const state = get(appState);
-  const selectedName = state.uiSettings?.selectedOperationName;
-  if (!selectedName) {
-    return [];
-  }
-  return getOperationSections(selectedName);
+  console.warn('getCurrentOperationSections is deprecated - operations no longer have sections');
+  return [];
 }
 
 /**
- * Update the sections for a specific operation
- */
-export function updateOperationSections(operationName: string, sections: Section[]): void {
-  appState.update(state => {
-    if (!state.operations?.defs?.[operationName]) {
-      console.warn(`Cannot update sections for operation "${operationName}" - not found`);
-      return state;
-    }
-    state.operations.defs[operationName].sections = sections;
-    state.operations._version = (state.operations._version ?? 0) + 1;
-    state._rev = (state._rev ?? 0) + 1;
-    return state;
-  });
-}
-
-/**
- * Update the sections for the currently selected operation
- */
-export function updateCurrentOperationSections(sections: Section[]): void {
-  const state = get(appState);
-  const selectedName = state.uiSettings?.selectedOperationName;
-  if (!selectedName) {
-    console.warn('Cannot update sections - no operation selected');
-    return;
-  }
-  updateOperationSections(selectedName, sections);
-}
-
-/**
- * Helper to update sections using an updater function (similar to store.update())
- */
-export function updateCurrentOperationSectionsWithFn(
-  updater: (sections: Section[]) => Section[]
-): void {
-  const state = get(appState);
-  const selectedName = state.uiSettings?.selectedOperationName;
-  if (!selectedName) {
-    console.warn('Cannot update sections - no operation selected');
-    return;
-  }
-
-  appState.update(s => {
-    if (!s.operations?.defs?.[selectedName]) {
-      console.warn(`Cannot update sections for operation "${selectedName}" - not found`);
-      return s;
-    }
-    const currentSections = s.operations.defs[selectedName].sections ?? [];
-    s.operations.defs[selectedName].sections = updater(currentSections);
-    s.operations._version = (s.operations._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
-    return s;
-  });
-}
-
-/**
- * Add a source (folder) to the currently selected operation
- * This is the operation-scoped version of addSource()
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
  */
 export async function addSourceToCurrentOperation(paths?: string | string[]) {
-  const state = get(appState);
-  const selectedName = state.uiSettings?.selectedOperationName;
-
-  if (!selectedName) {
-    console.warn('Cannot add source - no operation selected');
-    return;
-  }
-
-  const defaultSectionColor = getDefaultColor();
-  const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
-
-  try {
-    // Get file paths for each folder
-    const folderFilesResult = await invokeWithPerf<Record<string, string[]>>(
-      'get_file_paths_in_folder',
-      {
-        folderPaths: selectedFolderPaths,
-      }
-    );
-
-    if (folderFilesResult.ok === true) {
-      // Flatten all file paths to request metadata at once
-      const allDiscoveredFilePaths: string[] = Object.values(folderFilesResult.value).flat();
-
-      // Get metadata for all discovered files
-      const fileMetadataResult = await invokeWithPerf<FileMetadata[]>('get_metadata', {
-        titles: allDiscoveredFilePaths,
-      });
-
-      if (fileMetadataResult.ok === true) {
-        appState.update(currentState => {
-          if (!currentState.operations?.defs?.[selectedName]) {
-            return currentState;
-          }
-
-          const operation = currentState.operations.defs[selectedName];
-          const currentSections = operation.sections ?? [];
-
-          // Calculate starting index for new files
-          let nextIndex = 0;
-          const allExistingFiles = getAllFiles(currentSections);
-          if (allExistingFiles.length > 0) {
-            nextIndex = Math.max(...allExistingFiles.map(f => f.index)) + 1;
-          }
-
-          const newSourceSections: Section[] = Object.entries(folderFilesResult.value).map(
-            ([folderPath, discoveredFiles]) => {
-              const filesWithMetadata: AudioFileItem[] = discoveredFiles
-                .map(filePath => {
-                  const fileMetadata = fileMetadataResult.value.find(
-                    metadata => metadata.path === filePath
-                  );
-
-                  const properIndex = nextIndex++;
-
-                  return fileMetadata
-                    ? {
-                        ...fileMetadata,
-                        color: defaultSectionColor,
-                        index: properIndex,
-                        active: true,
-                      }
-                    : null;
-                })
-                .filter(Boolean) as AudioFileItem[];
-
-              return {
-                folderPath,
-                files: filesWithMetadata,
-                errors: [],
-                metaData: [],
-                color: defaultSectionColor,
-              };
-            }
-          );
-
-          // Update the operation's sections
-          currentState.operations!.defs[selectedName].sections = [
-            ...newSourceSections,
-            ...currentSections,
-          ];
-          currentState.operations!._version = (currentState.operations!._version ?? 0) + 1;
-          currentState._rev = (currentState._rev ?? 0) + 1;
-
-          return currentState;
-        });
-
-        // Send updated sections to backend/input processor
-        const updatedState = get(appState);
-        const updatedSections = updatedState.operations?.defs?.[selectedName]?.sections ?? [];
-        updateInputs(updatedSections);
-      }
-    }
-  } catch (error) {
-    console.error('Error in addSourceToCurrentOperation:', error);
-  }
+  console.warn('addSourceToCurrentOperation is deprecated - operations no longer have sections');
+  // No-op for now
 }
 
 /**
- * Delete a section from the currently selected operation
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
  */
 export function deleteSectionFromCurrentOperation(index: number) {
-  const state = get(appState);
-  const selectedName = state.uiSettings?.selectedOperationName;
-
-  if (!selectedName) {
-    console.warn('Cannot delete section - no operation selected');
-    return;
-  }
-
-  appState.update(s => {
-    if (!s.operations?.defs?.[selectedName]) {
-      return s;
-    }
-
-    const sections = s.operations.defs[selectedName].sections ?? [];
-    sections.splice(index, 1);
-    console.log(`%cHERE LINE :1202 %c`, 'color: yellow; font-weight: bold', '');
-
-    if (sections.length === 0) {
-      invokeWithPerf('clear_audio_files');
-      s.operations.defs[selectedName].sections = [];
-    } else {
-      s.operations.defs[selectedName].sections = sections;
-      updateInputs(sections);
-    }
-
-    s.operations._version = (s.operations._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
-
-    return s;
-  });
+  console.warn(
+    'deleteSectionFromCurrentOperation is deprecated - operations no longer have sections'
+  );
+  // No-op for now
 }
 
 // Call site tracking functions

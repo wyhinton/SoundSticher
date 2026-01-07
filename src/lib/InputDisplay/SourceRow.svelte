@@ -1,8 +1,6 @@
 <script lang="ts">
   import { toCssRgb } from '../utils/colors';
   import {
-    updatePath,
-    deleteSection,
     addToFavorites,
     isFavorite,
     deleteSectionFromCurrentOperation,

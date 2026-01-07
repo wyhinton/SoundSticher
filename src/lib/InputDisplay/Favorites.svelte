@@ -2,7 +2,6 @@
   import {
     appState,
     removeFromFavorites,
-    addSource,
     addSourceToCurrentOperation,
   } from '../state/state.svelte';
 

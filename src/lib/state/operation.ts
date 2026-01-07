@@ -23,8 +23,10 @@ export type OperationDef = CombineOperation | PipelineOperation;
 // FILE RENDERING OPERATIONS (produce new output files)
 // ============================================================================
 
-interface SourceItem {
-  kind: 'file';
+export interface MergeSource {
+  sampleOpId: string;
+  index: number;
+  active: boolean;
 }
 
 export interface CombineOperation {
@@ -32,9 +34,7 @@ export interface CombineOperation {
   /** Group reference or explicit file IDs to combine */
   source: OperationSource;
   /** Output file path (can use templates like {date}, {name}) */
-  sources: SourceItem[];
-  /** Sections belonging to this operation */
-  sections: Section[];
+  sources: MergeSource[];
 }
 
 export interface PipelineOperation {
@@ -43,8 +43,6 @@ export interface PipelineOperation {
   operations: string[];
   /** Source for the first operation in the pipeline */
   source: OperationSource;
-  /** Sections belonging to this operation */
-  sections: Section[];
 }
 
 export type OperationSource =
@@ -161,18 +159,16 @@ export class OperationRegistry {
 
   /**
    * Resolve an OperationSource to a set of file IDs
-   * Now uses the operation's own sections instead of global state.sections
+   * Operations no longer have sections - this needs to be updated based on new data structure
    */
   private resolveOperationSource(
     source: OperationSource,
     state: AppState,
     operationName?: string
   ): Set<string> {
-    // Get the operation's sections, or fall back to global sections for backward compatibility
-    const operationSections =
-      operationName && state.operations?.defs?.[operationName]?.sections
-        ? state.operations.defs[operationName].sections
-        : state.sections;
+    // Operations no longer have sections - return empty set for now
+    // This method needs to be updated based on the new operation structure
+    console.warn(`resolveOperationSource needs to be updated - operations no longer have sections`);
 
     switch (source.type) {
       case 'group':
@@ -182,17 +178,11 @@ export class OperationRegistry {
         return new Set(source.fileIds);
 
       case 'all':
-        return new Set(operationSections.flatMap(s => s.files.map(f => f.id)));
-
       case 'active':
-        return new Set(
-          operationSections.flatMap(s => s.files.filter(f => f.active).map(f => f.id))
-        );
-
       case 'section':
-        const section = operationSections[source.sectionIndex];
-        if (!section) return new Set();
-        return new Set(section.files.map(f => f.id));
+        // These cases previously used sections - now need different implementation
+        console.warn(`Operation source type "${source.type}" needs updated implementation`);
+        return new Set();
 
       case 'previousOperation':
         // For pipeline operations, this would reference output from previous op
@@ -278,13 +268,8 @@ export function addOperation(name: string, def: OperationDef): void {
       s.operations = { defs: {}, _version: 1 };
     }
 
-    // Ensure sections array is initialized
-    const defWithSections = {
-      ...def,
-      sections: def.sections ?? [],
-    };
-
-    s.operations.defs[name] = defWithSections;
+    // Operations no longer have sections property
+    s.operations.defs[name] = def;
     s.operations._version = (s.operations._version ?? 0) + 1;
     s._rev = (s._rev ?? 0) + 1;
 
@@ -455,7 +440,6 @@ export const testOperations: NamedOperationDef[] = [
       sources: [],
       kind: 'combine',
       source: { type: 'active' },
-      sections: [],
     },
   },
   {
@@ -464,7 +448,6 @@ export const testOperations: NamedOperationDef[] = [
       kind: 'pipeline',
       source: { type: 'active' },
       operations: ['combine_active'],
-      sections: [],
     },
   },
 ];

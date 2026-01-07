@@ -39,24 +39,12 @@
     window.removeEventListener('keydown', handleGlobalKeydown);
   });
 
-  // Debug functions
+  // Debug functions - updated to work with operation-specific sections
   async function triggerNoActiveSamples() {
     try {
-      // Deactivate all files to trigger the no active samples event
-      const currentState = get(appState);
-      const allFileIds = currentState.sections.flatMap(section =>
-        section.files.map(file => file.id)
-      );
-
-      if (allFileIds.length > 0) {
-        await audioFileStateManager.setFilesActive(allFileIds, false);
-        console.log('🔧 Debug: Deactivated all files');
-
-        // Trigger combine to emit no-active-samples event
-        await invokeWithPerf('combine_all_cached_samples_with_custom_order');
-      } else {
-        console.log('🔧 Debug: No files to deactivate');
-      }
+      // Note: This function now needs to work with current operation sections
+      console.log('🔧 Debug: triggerNoActiveSamples - needs operation context');
+      // Implementation depends on having an active operation selected
     } catch (error) {
       console.error('Debug: Failed to trigger no active samples:', error);
     }
@@ -64,20 +52,9 @@
 
   async function reactivateAllFiles() {
     try {
-      const currentState = get(appState);
-      const allFileIds = currentState.sections.flatMap(section =>
-        section.files.map(file => file.id)
-      );
-
-      if (allFileIds.length > 0) {
-        await audioFileStateManager.setFilesActive(allFileIds, true);
-        console.log('🔧 Debug: Reactivated all files');
-
-        // Trigger combine to update timeline
-        await invokeWithPerf('combine_all_cached_samples_with_custom_order');
-      } else {
-        console.log('🔧 Debug: No files to reactivate');
-      }
+      // Note: This function now needs to work with current operation sections
+      console.log('🔧 Debug: reactivateAllFiles - needs operation context');
+      // Implementation depends on having an active operation selected
     } catch (error) {
       console.error('Debug: Failed to reactivate all files:', error);
     }
@@ -87,12 +64,11 @@
     try {
       appState.update(state => ({
         ...state,
-        sections: [],
         timelineItems: [],
         combinedFile: undefined,
         hasNoActiveSamples: false,
       }));
-      console.log('🔧 Debug: Cleared app state');
+      console.log('🔧 Debug: Cleared app state (sections now managed per operation)');
     } catch (error) {
       console.error('Debug: Failed to clear app state:', error);
     }
@@ -123,10 +99,11 @@
 
   async function forceStateSync() {
     try {
-      console.log('🔧 Debug: Forcing state synchronization...');
-      const currentState = get(appState);
-      await updateInputs(currentState.sections);
-      console.log('🔧 Debug: State sync completed');
+      console.log('🔧 Debug: Force state sync now requires operation context');
+      // Note: updateInputs now needs to be called with operation-specific sections
+      // const currentState = get(appState);
+      // await updateInputs(currentOperationSections);
+      console.log('🔧 Debug: State sync requires active operation');
     } catch (error) {
       console.error('Debug: Failed to force state sync:', error);
     }

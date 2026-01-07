@@ -3,11 +3,8 @@
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
   import { stat } from '@tauri-apps/plugin-fs';
   import {
-    addSource,
     appState,
     getAllFiles,
-    updatePath,
-    applySyncIndexes,
     currentOperationSections,
     addSourceToCurrentOperation,
     deleteSectionFromCurrentOperation,

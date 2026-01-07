@@ -2,7 +2,6 @@
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
   import {
-    addSource,
     appState,
     getAllFiles,
     hoveredTimelineItem,

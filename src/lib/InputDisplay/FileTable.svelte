@@ -9,7 +9,6 @@
     pause_sample_preview,
     play_sample_preview,
     setHoveredItem,
-    applySyncIndexes,
     currentOperationSections,
     type Section,
   } from '../state/state.svelte';
@@ -26,83 +25,6 @@
     // Always sort by index since index syncing updates the actual indices
     return files.sort((a, b) => a.index - b.index);
   }
-  function toggleSort(key: keyof ReturnType<typeof getAllFiles>[0]) {
-    if ($appState.sortKey === key) {
-      appState.update(s => ({
-        ...s,
-        sortDirection: s.sortDirection === 'asc' ? 'desc' : 'asc',
-      }));
-    } else {
-      appState.update(s => ({
-        ...s,
-        sortKey: key,
-        sortDirection: 'asc',
-      }));
-    }
-
-    // After updating sort, sync the indexes with the new sorted order
-    setTimeout(() => {
-      // Compute the sorted order based on the current sort key and direction
-      let files = getAllFiles($currentOperationSections);
-
-      // If no sort key is set, sort by index
-      if (!$appState.sortKey) {
-        files = files.sort((a, b) => a.index - b.index);
-      } else {
-        // Sort by the specified key and direction
-        files = [...files].sort((a, b) => {
-          let valA = a[$appState.sortKey!];
-          let valB = b[$appState.sortKey!];
-
-          if (typeof valA === 'string' && typeof valB === 'string') {
-            return $appState.sortDirection === 'asc'
-              ? valA.localeCompare(valB)
-              : valB.localeCompare(valA);
-          } else {
-            return $appState.sortDirection === 'asc'
-              ? (valA as number) - (valB as number)
-              : (valB as number) - (valA as number);
-          }
-        });
-      }
-
-      console.log('FileTable sort - new order:', files);
-
-      // Build array for Rust backend: { id, index }
-      const updates = files.map((file, index) => ({
-        id: file.id, // UUID string
-        index,
-      }));
-
-      console.log('FileTable sort updates:', updates);
-
-      const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-        started: () => {
-          console.log('FileTable sort started');
-        },
-        progress: data => {
-          console.log('FileTable sort progress:', data);
-        },
-        finished: () => {
-          console.log('FileTable sort finished');
-        },
-      });
-
-      invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
-        .then(newOrder => {
-          updateInputs($currentOperationSections);
-          console.log('FileTable sort - received new order from backend:', newOrder);
-
-          // Use the reusable index syncing function if newOrder has value
-          if (newOrder.ok && newOrder.value) {
-            applySyncIndexes(newOrder.value);
-          }
-        })
-        .catch(error => {
-          console.error('Failed to update sorting from FileTable:', error);
-        });
-    }, 10); // Small delay to ensure state update has propagated
-  }
 </script>
 
 <div class="w-fill-available card d-flex flex-column position-relative">
@@ -118,7 +40,7 @@
           <tr class="">
             <th class="number-column"> # </th>
             {#snippet sortableHeader(key, label, classes = 'text-center')}
-              <th class={classes} onclick={() => toggleSort(key)}>
+              <th class={classes}>
                 {label}
                 {#if $appState.sortKey === key}
                   {#if $appState.sortDirection === 'asc'}
