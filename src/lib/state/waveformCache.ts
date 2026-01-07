@@ -524,7 +524,29 @@ export const operationWaveformsLoading: Readable<boolean> = derived(
 // ============================================================================
 
 let lastSelectedOperationName: string | null = null;
+let lastOperationRevision: string | null = null;
 let unsubscribe: (() => void) | null = null;
+
+/**
+ * Create a revision key for an operation based on its content
+ */
+function createOperationRevisionKey(
+  operationName: string,
+  operation: OperationDef | undefined,
+  globalRev: number
+): string {
+  if (!operation) return `${operationName}:empty:${globalRev}`;
+
+  // Create a hash based on the operation's sections and key properties
+  const sectionsHash = JSON.stringify(
+    operation.sections?.map(s => ({
+      folderPath: s.folderPath,
+      files: s.files.map(f => ({ id: f.id, path: f.path, active: f.active })),
+    })) || []
+  );
+
+  return `${operationName}:${sectionsHash}:${globalRev}`;
+}
 
 /**
  * Initialize the waveform service to react to operation changes
@@ -534,13 +556,37 @@ export function initWaveformService(): () => void {
 
   unsubscribe = appState.subscribe($appState => {
     const selectedOpName = $appState.uiSettings?.selectedOperationName || null;
+    const globalRev = $appState._rev || 0;
+    const operation =
+      selectedOpName && $appState.operations?.defs
+        ? $appState.operations.defs[selectedOpName]
+        : undefined;
 
-    // Only react if the selected operation changed
-    if (selectedOpName !== lastSelectedOperationName) {
-      logger.waveform.operation(
-        `Operation changed: "${lastSelectedOperationName}" → "${selectedOpName}"`
-      );
+    // Create revision key that includes both operation name and content
+    const currentRevision = createOperationRevisionKey(
+      selectedOpName || 'none',
+      operation,
+      globalRev
+    );
+
+    // React if either the operation name or its content changed
+    if (currentRevision !== lastOperationRevision) {
+      const operationNameChanged = selectedOpName !== lastSelectedOperationName;
+      const operationContentChanged =
+        !operationNameChanged && currentRevision !== lastOperationRevision;
+
+      if (operationNameChanged) {
+        logger.waveform.operation(
+          `Operation changed: "${lastSelectedOperationName}" → "${selectedOpName}"`
+        );
+      } else if (operationContentChanged) {
+        logger.waveform.operation(
+          `Operation "${selectedOpName}" content changed, reloading waveforms`
+        );
+      }
+
       lastSelectedOperationName = selectedOpName;
+      lastOperationRevision = currentRevision;
 
       if (!selectedOpName || !$appState.operations?.defs) {
         logger.waveform.operation('No operation selected, clearing waveforms');
@@ -548,7 +594,6 @@ export function initWaveformService(): () => void {
         return;
       }
 
-      const operation = $appState.operations.defs[selectedOpName];
       if (operation) {
         const filePaths = getOperationFilePaths(operation);
         if (filePaths.length > 0) {
@@ -572,6 +617,8 @@ export function initWaveformService(): () => void {
       unsubscribe();
       unsubscribe = null;
     }
+    lastSelectedOperationName = null;
+    lastOperationRevision = null;
   };
 }
 

@@ -1199,6 +1199,7 @@ export function deleteSectionFromCurrentOperation(index: number) {
 
     const sections = s.operations.defs[selectedName].sections ?? [];
     sections.splice(index, 1);
+    console.log(`%cHERE LINE :1202 %c`, 'color: yellow; font-weight: bold', '');
 
     if (sections.length === 0) {
       invokeWithPerf('clear_audio_files');

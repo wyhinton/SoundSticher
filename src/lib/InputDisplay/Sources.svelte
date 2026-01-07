@@ -5,13 +5,9 @@
   import {
     addSource,
     appState,
-    combine_audio_files,
-    deleteSection,
     getAllFiles,
     updatePath,
     applySyncIndexes,
-    setActiveTab,
-    setTabContentHeight,
     currentOperationSections,
     addSourceToCurrentOperation,
     deleteSectionFromCurrentOperation,

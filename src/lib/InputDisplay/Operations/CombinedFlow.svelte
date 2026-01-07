@@ -20,7 +20,17 @@
   }>();
 
   $: opInfo = OperationInfoDictionary[operation.kind];
-  operation.source;
+
+  // Create a reactive key that includes sections data to ensure re-rendering
+  $: sectionsRevision = JSON.stringify(
+    operation.sections?.map(s => ({
+      folderPath: s.folderPath,
+      fileCount: s.files.length,
+      activeFiles: s.files.filter(f => f.active).length,
+      fileIds: s.files.map(f => f.id).sort(),
+    })) || []
+  );
+
   // Debug state
   let showDebugInfo = false;
   let debugInfo = { x: 0, y: 0, zoom: 1 };
@@ -34,7 +44,7 @@
   };
 
   // Generate flow for this specific combine operation
-  function generateCombineFlow(): { nodes: Node[]; edges: Edge[] } {
+  function generateCombineFlow(_sectionsRevision?: string): { nodes: Node[]; edges: Edge[] } {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
@@ -211,7 +221,7 @@
     }
   }
 
-  $: flowData = generateCombineFlow();
+  $: flowData = generateCombineFlow(sectionsRevision);
 </script>
 
 <div class="combined-flow">

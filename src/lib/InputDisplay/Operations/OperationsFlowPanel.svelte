@@ -46,6 +46,7 @@
   let combineOperations: Array<{
     name: string;
     operation: any;
+    revisionKey: string;
   }> = [];
 
   // Generate flow diagram from operations state
@@ -59,6 +60,7 @@
     const foundCombineOps: Array<{
       name: string;
       operation: any;
+      revisionKey: string;
     }> = [];
 
     // Layout configuration
@@ -165,9 +167,19 @@
 
       // Track combine operations for separate rendering
       if (def.kind === 'combine') {
+        // Create a revision key that includes sections data to ensure re-rendering
+        const sectionsHash = JSON.stringify(
+          def.sections?.map(s => ({
+            folderPath: s.folderPath,
+            fileIds: s.files.map(f => f.id),
+            activeFiles: s.files.filter(f => f.active).length,
+          })) || []
+        );
+
         foundCombineOps.push({
           name,
           operation: def,
+          revisionKey: `${name}-${sectionsHash}-${$appState._rev || 0}`,
         });
       }
 
@@ -417,7 +429,7 @@
         {#if $appState.operations?.defs && Object.keys($appState.operations.defs).some(name => $appState.operations?.defs[name].kind === 'combine')}
           <!-- Show individual CombinedFlow components for each combine operation -->
           <div class="combined-flows-row h-100 d-flex">
-            {#each combineOperations as combineOp (combineOp.name)}
+            {#each combineOperations as combineOp (combineOp.revisionKey)}
               <CombinedFlow
                 operation={combineOp.operation}
                 operationName={combineOp.name}

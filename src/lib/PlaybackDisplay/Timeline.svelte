@@ -89,6 +89,10 @@
   let arrowHeadSize = 6;
   const debugShowDropLine = false;
 
+  // Track if we're currently scrolling to prevent keyboard events during scroll
+  let isScrolling = false;
+  let scrollTimeout: number | null = null;
+
   // ✅ reactive drag-drop state (now driven by store subscription)
   let dragDropState: DragDropState = DEFAULT_DD;
 
@@ -281,7 +285,16 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    console.log(timelineItems);
+    // Prevent repeated calls when key is held down
+    if (event.repeat) {
+      return;
+    }
+
+    // Don't process keyboard events if we're currently dragging or scrolling
+    if (isDragging || isScrolling) {
+      return;
+    }
+
     // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
     if (
       typeof import.meta !== 'undefined' &&
@@ -322,6 +335,22 @@
     }
   }
 
+  function handleWheel(event: WheelEvent) {
+    // Set scrolling flag when wheel events occur
+    isScrolling = true;
+
+    // Clear any existing timeout
+    if (scrollTimeout !== null) {
+      clearTimeout(scrollTimeout);
+    }
+
+    // Reset scrolling flag after a short delay
+    scrollTimeout = setTimeout(() => {
+      isScrolling = false;
+      scrollTimeout = null;
+    }, 150) as unknown as number;
+  }
+
   onMount(() => {
     // DEBUG: Log component mount state
     console.log('🔧 Timeline: Component mounted with:', {
@@ -359,6 +388,12 @@
   onDestroy(() => {
     // in case the component is destroyed without onMount cleanup firing as expected
     unsubscribeDragDrop?.();
+
+    // Clear any pending scroll timeout
+    if (scrollTimeout !== null) {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = null;
+    }
   });
 
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
@@ -416,6 +451,7 @@
       handleClick(e);
     }}
     on:keydown={handleKeyDown}
+    on:wheel={handleWheel}
     bind:this={container}
     role="application"
     aria-label="Timeline"
@@ -551,9 +587,6 @@
 </div>
 
 <style>
-  .waveform-svg-parent {
-    /* Timeline waveform container */
-  }
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
   }
@@ -562,7 +595,7 @@
     height: auto;
   }
 
-  g.axis text {
+  :global(g.axis text) {
     font-family: monospace;
     font-size: 10px; /* optional: adjust as needed */
   }
