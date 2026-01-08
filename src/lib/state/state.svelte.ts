@@ -5,7 +5,7 @@ import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
 import { GroupsState } from './groups';
-import type { OperationsState, OperationSource } from './operation';
+import type { OperationsState, OperationSource, SampleOp } from './operation';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -959,6 +959,94 @@ export function deleteSectionFromCurrentOperation(index: number) {
     'deleteSectionFromCurrentOperation is deprecated - operations no longer have sections'
   );
   // No-op for now
+}
+
+/**
+ * Create SampleOps for each file in a directory and add them to the current MergeOp
+ * This function will scan the directory, create a SampleOp for each audio file,
+ * and add those operations as sources to the currently selected MergeOp
+ */
+export async function addSampleOpsFromDirectory(directoryPath: string) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  try {
+    // TODO: This would need to be implemented to get files from directory
+    // For now, we'll use a placeholder that simulates getting files
+    const files = await getFilesFromDirectory(directoryPath);
+
+    appState.update(state => {
+      const operation = state.operations?.defs?.[selectedOperationName];
+      if (!operation || operation.kind !== 'merge') {
+        console.warn('Current operation is not a MergeOp');
+        return state;
+      }
+
+      if (!state.operations) {
+        state.operations = { defs: {}, _version: 1 };
+      }
+
+      // Create a SampleOp for each file and add it to the current MergeOp
+      files.forEach((filePath, index) => {
+        // Generate a unique operation name
+        const fileName =
+          filePath
+            .split(/[/\\]/)
+            .pop()
+            ?.replace(/\.[^/.]+$/, '') || `file_${index}`;
+        const sampleOpName = `sample_${fileName}_${Date.now()}_${index}`;
+
+        // Create the SampleOp
+        const sampleOp: SampleOp = {
+          kind: 'sample',
+          sources: [{ type: 'file', fileId: filePath }],
+        };
+
+        // Add the SampleOp to operations
+        state.operations.defs[sampleOpName] = sampleOp;
+
+        // Add the SampleOp reference to the current MergeOp's sources
+        const operationSource: OperationSource = { type: 'operation', operationRef: sampleOpName };
+        operation.sources.push(operationSource);
+      });
+
+      // Update versions
+      state.operations._version = (state.operations._version ?? 0) + 1;
+      state._rev = (state._rev ?? 0) + 1;
+      console.log(state.operations);
+      console.log(`Created ${files.length} SampleOps from directory: ${directoryPath}`);
+      return state;
+    });
+  } catch (error) {
+    console.error('Failed to add SampleOps from directory:', error);
+  }
+}
+
+/**
+ * Get files from a directory using Tauri backend
+ */
+async function getFilesFromDirectory(directoryPath: string): Promise<string[]> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+
+    // Use the existing Tauri command to get files from the directory
+    const result: Record<string, string[]> = await invoke('get_file_paths_in_folder', {
+      folderPaths: [directoryPath],
+    });
+
+    // Extract the files array for our directory
+    return result[directoryPath] || [];
+  } catch (error) {
+    console.error('Failed to get files from directory:', error);
+
+    // Fallback to empty array if the operation fails
+    return [];
+  }
 }
 
 // Call site tracking functions

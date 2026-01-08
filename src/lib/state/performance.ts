@@ -224,73 +224,68 @@ export async function invokeWithPerf<T = string, E = CommandError>(
 }
 
 export async function updateInputs(sections: Section[]) {
-  const newSends: SectionSend[] = sections.map(s => ({
-    folderPath: s.folderPath,
-    paths: s.files.map(f => ({ path: f.path })),
-  }));
-  const onCombineAudioEvent = createTypedEventChannel<CombineAudioEvent>({
-    onStarted: data => {
-      appState.update(state => {
-        state.isCombiningFile = true;
-        state.combinedFileLength = data.duration;
-        state.timelineItems = [];
-        return state;
-      });
-    },
-    onProgress: data => {
-      appState.update(s => {
-        const curwaveform = document.getElementById('waveform-path')?.getAttribute('d');
-        s.combinedFile = { svgPath: data.svgPath };
-        if (curwaveform) {
-          s.combinedFile.svgPath = curwaveform + data.svgPath;
-        }
-        let timelineItemToUpdate = s.timelineItems.find(clip => clip.id == data.id);
-        if (!timelineItemToUpdate) {
-          s.timelineItems.push({ type: 'audio-file', ...data });
-        } else {
-          timelineItemToUpdate = { type: 'audio-file', ...data };
-        }
-        const toGiveId = getAllFiles(s.sections).find(f => f.path === data.fileName);
-        if (toGiveId) {
-          toGiveId.id = data.id;
-        }
-        s.sections = s.sections;
-        return s;
-      });
-    },
-    onFinished: data => {
-      appState.update(s => {
-        s.isCombiningFile = false;
-        s.combinedFile = { svgPath: data.svgPath };
-        s.hasNoActiveSamples = data.empty;
-        console.log(data.empty);
-        return s;
-      });
-    },
-  });
-
-  const onBufferAudioEvent = new Channel<BufferAudioEvent>();
-  onBufferAudioEvent.onmessage = message => {
-    if (message.event === 'finished') {
-      console.log(`%cHERE LINE :166 %c`, 'color: brown; font-weight: bold', '');
-
-      invokeWithPerf<CombineAudioResult>('combine_all_cached_samples_with_custom_order', {
-        onEvent: onCombineAudioEvent,
-      });
-    }
-  };
-
-  const updateInputsResult = await invokeWithPerf('update_inputs', {
-    sections: newSends,
-    onEvent: onBufferAudioEvent,
-  });
-
-  // Bump the content revision after updateInputs completes
-  if (updateInputsResult.ok) {
-    bumpRevision();
-  }
-
-  return updateInputsResult;
+  // const newSends: SectionSend[] = sections.map(s => ({
+  //   folderPath: s.folderPath,
+  //   paths: s.files.map(f => ({ path: f.path })),
+  // }));
+  // const onCombineAudioEvent = createTypedEventChannel<CombineAudioEvent>({
+  //   onStarted: data => {
+  //     appState.update(state => {
+  //       state.isCombiningFile = true;
+  //       state.combinedFileLength = data.duration;
+  //       state.timelineItems = [];
+  //       return state;
+  //     });
+  //   },
+  //   onProgress: data => {
+  //     appState.update(s => {
+  //       const curwaveform = document.getElementById('waveform-path')?.getAttribute('d');
+  //       s.combinedFile = { svgPath: data.svgPath };
+  //       if (curwaveform) {
+  //         s.combinedFile.svgPath = curwaveform + data.svgPath;
+  //       }
+  //       let timelineItemToUpdate = s.timelineItems.find(clip => clip.id == data.id);
+  //       if (!timelineItemToUpdate) {
+  //         s.timelineItems.push({ type: 'audio-file', ...data });
+  //       } else {
+  //         timelineItemToUpdate = { type: 'audio-file', ...data };
+  //       }
+  //       const toGiveId = getAllFiles(s.sections).find(f => f.path === data.fileName);
+  //       if (toGiveId) {
+  //         toGiveId.id = data.id;
+  //       }
+  //       s.sections = s.sections;
+  //       return s;
+  //     });
+  //   },
+  //   onFinished: data => {
+  //     appState.update(s => {
+  //       s.isCombiningFile = false;
+  //       s.combinedFile = { svgPath: data.svgPath };
+  //       s.hasNoActiveSamples = data.empty;
+  //       console.log(data.empty);
+  //       return s;
+  //     });
+  //   },
+  // });
+  // const onBufferAudioEvent = new Channel<BufferAudioEvent>();
+  // onBufferAudioEvent.onmessage = message => {
+  //   if (message.event === 'finished') {
+  //     console.log(`%cHERE LINE :166 %c`, 'color: brown; font-weight: bold', '');
+  //     invokeWithPerf<CombineAudioResult>('combine_all_cached_samples_with_custom_order', {
+  //       onEvent: onCombineAudioEvent,
+  //     });
+  //   }
+  // };
+  // const updateInputsResult = await invokeWithPerf('update_inputs', {
+  //   sections: newSends,
+  //   onEvent: onBufferAudioEvent,
+  // });
+  // // Bump the content revision after updateInputs completes
+  // if (updateInputsResult.ok) {
+  //   bumpRevision();
+  // }
+  // return updateInputsResult;
 }
 
 export async function exportAudio(settings: ExportSettings, outputPath: string) {

@@ -116,7 +116,7 @@
         <div class="d-flex flex-column w-100">
           <OperationsFlowPanel></OperationsFlowPanel>
         </div>
-        <div class="d-flex w-100" style:max-height="500px">
+        <div class="d-flex w-100 h-fill-available">
           <Sources></Sources>
           <FileTable></FileTable>
         </div>

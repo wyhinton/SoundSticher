@@ -218,23 +218,25 @@
     }
   }
 
-  function formatOperationSource(source: OperationDef['source']): string {
-    switch (source.type) {
-      case 'group':
-        return 'Group: ' + source.groupRef;
-      case 'files':
-        return source.fileIds.length + ' specific files';
-      case 'all':
-        return 'All files';
-      case 'active':
-        return 'Active files';
-      case 'section':
-        return 'Section ' + source.sectionIndex;
-      case 'previousOperation':
-        return 'Output from: ' + source.operationRef;
-      default:
-        return 'Unknown source';
-    }
+  function formatOperationSource(sources: OperationDef['sources']): string[] {
+    return sources.map(source => {
+      switch (source.type) {
+        case 'group':
+          return 'Group: ' + source.groupRef;
+        case 'files':
+          return source.fileIds.length + ' specific files';
+        case 'all':
+          return 'All files';
+        case 'active':
+          return 'Active files';
+        case 'section':
+          return 'Section ' + source.sectionIndex;
+        case 'previousOperation':
+          return 'Output from: ' + source.operationRef;
+        default:
+          return 'Unknown source';
+      }
+    });
   }
 </script>
 
@@ -262,7 +264,9 @@
       <div class="operation-info">
         <div class="info-section">
           <span class="info-label">Source:</span>
-          <span class="info-value">{formatOperationSource(selectedOperation.source)}</span>
+          <span class="info-value"
+            >{JSON.stringify(formatOperationSource(selectedOperation.sources))}</span
+          >
         </div>
       </div>
 

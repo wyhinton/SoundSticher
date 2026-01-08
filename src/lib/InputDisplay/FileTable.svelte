@@ -11,9 +11,6 @@
     currentOperationFileList,
     type Section,
   } from '../state/state.svelte';
-  import { generateProgressChannel, type SortAudioEvent } from '../state/events';
-  import { Channel } from '@tauri-apps/api/core';
-  import { invokeWithPerf, updateInputs } from '../state/performance';
 
   // Local sorting function - now uses currentOperationFileList
   function getSortedFiles(state: typeof $appState) {

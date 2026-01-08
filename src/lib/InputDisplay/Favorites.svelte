@@ -4,17 +4,20 @@
     removeFromFavorites,
     addToFavorites,
     addOperationSourceToCurrent,
+    addSampleOpsFromDirectory,
   } from '../state/state.svelte';
 
   function handleRemoveFromFavorites(path: string) {
     removeFromFavorites(path);
   }
 
-  function handleAddFavoriteAsSource(path: string) {
-    // TODO: For now, just add to favorites. In the future, we could create a SampleOp
-    // and then add that operation reference to the current MergeOp
-    console.log('Add favorite as source not yet implemented for new operation structure');
-    // addToFavorites(path);
+  async function handleAddFavoriteAsSource(path: string) {
+    try {
+      await addSampleOpsFromDirectory(path);
+      console.log(`Added all files from directory as SampleOps: ${path}`);
+    } catch (error) {
+      console.error('Failed to add favorite as source:', error);
+    }
   }
 
   function getDirectoryName(path: string): string {

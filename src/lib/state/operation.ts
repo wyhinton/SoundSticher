@@ -23,7 +23,7 @@ export type OperationDef = MergeOp | PipelineOp | SampleOp;
 // FILE RENDERING OPERATIONS (produce new output files)
 // ============================================================================
 
-interface SampleOp {
+export interface SampleOp {
   kind: 'sample';
   sources: OperationSource[];
 }

@@ -1,30 +1,13 @@
 <script lang="ts">
-  import { SvelteFlow, Controls, Background } from '@xyflow/svelte';
-  import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
-  import '@xyflow/svelte/dist/style.css';
-
   import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
   import {
-    type OperationDef,
-    type OperationsState,
-    OperationInfoDictionary,
+    type MergeOp,
     addOperation,
-    deleteOperation,
     deleteAllOperations,
     addTestOperations,
   } from '$lib/state/operation';
 
-  import OperationNode from './OperationNode.svelte';
-  import SourceNode from './SourceNode.svelte';
-  import OutputNode from './OutputNode.svelte';
   import MergeOpFlow from './MergeOpFlow.svelte';
-
-  // Custom node types
-  const nodeTypes: NodeTypes = {
-    operation: OperationNode,
-    source: SourceNode,
-    output: OutputNode,
-  };
 
   // Panel visibility
   export let isExpanded = true;
@@ -38,284 +21,34 @@
   let resizeStartY = 0;
   let resizeStartHeight = 0;
 
-  // Flow state
-  let nodes: Node[] = [];
-  let edges: Edge[] = [];
+  // Get MergeOp operations with revision tracking
+  $: mergeOperations = $appState.operations?.defs 
+    ? Object.entries($appState.operations.defs)
+        .filter(([name, def]) => def.kind === 'merge')
+        .map(([name, def]) => {
+          // Create a revision key that includes sources data to ensure re-rendering
+          const sourcesHash = JSON.stringify(def.sources || []);
+          return {
+            name,
+            operation: def as MergeOp,
+            revisionKey: `${name}-${sourcesHash}-${$appState._rev || 0}`,
+          };
+        })
+    : [];
 
-  // Combined flows state
-  let combineOperations: Array<{
-    name: string;
-    operation: any;
-    revisionKey: string;
-  }> = [];
+  // Stats for MergeOps only
+  $: stats = {
+    total: mergeOperations.length,
+    merge: mergeOperations.length,
+  };
 
-  // Generate flow diagram from operations state
-  function generateFlowFromOperations(operations: OperationsState | undefined): {
-    nodes: Node[];
-    edges: Edge[];
-  } {
-    const generatedNodes: Node[] = [];
-    const generatedEdges: Edge[] = [];
-    const nodePositions = new Map<string, { x: number; y: number }>();
-    const foundCombineOps: Array<{
-      name: string;
-      operation: any;
-      revisionKey: string;
-    }> = [];
-
-    // Layout configuration
-    const HORIZONTAL_SPACING = 280;
-    const VERTICAL_SPACING = 60;
-    const START_X = 50;
-    const START_Y = 50;
-
-    // Create source nodes for timeline items
-    const timelineItems = $appState.timelineItems;
-    let currentY = START_Y;
-
-    timelineItems.forEach((item, index) => {
-      if (item.type === 'audio-file') {
-        const sourceNodeId = `timeline-source-${item.id}`;
-
-        generatedNodes.push({
-          id: sourceNodeId,
-          type: 'source',
-          position: { x: START_X, y: currentY },
-          data: {
-            source: { type: 'timeline-item', itemId: item.id },
-            label: item.fileName || `Timeline Item ${index + 1}`,
-          },
-          draggable: false,
-          selectable: false,
-        });
-
-        nodePositions.set(sourceNodeId, { x: START_X, y: currentY });
-        currentY += VERTICAL_SPACING;
-      }
-    });
-
-    // If no operations are defined, just return the timeline source nodes
-    if (!operations?.defs || Object.keys(operations.defs).length === 0) {
-      combineOperations = [];
-      return { nodes: generatedNodes, edges: generatedEdges };
-    }
-
-    // Group operations by their source type for layout
-    const operationEntries = Object.entries(operations.defs);
-
-    // First pass: create source nodes and operation nodes
-    const sourceNodes = new Map<string, string>(); // source key -> node id
-
-    operationEntries.forEach(([name, def], index) => {
-      const sourceKey = getSourceKey(def.source);
-      const opInfo = OperationInfoDictionary[def.kind];
-
-      if (!opInfo) return; // Skip if operation info not found
-
-      // Create source node if not exists
-      if (!sourceNodes.has(sourceKey)) {
-        const sourceNodeId = `source-${sourceKey}`;
-        const sourceY = START_Y + sourceNodes.size * VERTICAL_SPACING;
-
-        generatedNodes.push({
-          id: sourceNodeId,
-          type: 'source',
-          position: { x: START_X, y: sourceY },
-          data: {
-            source: def.source,
-            label: getSourceLabel(def.source),
-          },
-          draggable: false,
-          selectable: false,
-        });
-
-        nodePositions.set(sourceNodeId, { x: START_X, y: sourceY });
-        sourceNodes.set(sourceKey, sourceNodeId);
-      }
-
-      // Create operation node
-      const opNodeId = `op-${name}`;
-      const sourceNodeId = sourceNodes.get(sourceKey)!;
-      const sourcePos = nodePositions.get(sourceNodeId)!;
-
-      // Calculate position based on how many ops share this source
-      const opsWithSameSource = operationEntries.filter(
-        ([, d]) => getSourceKey(d.source) === sourceKey
-      );
-      const opIndex = opsWithSameSource.findIndex(([n]) => n === name);
-
-      const opX = START_X + HORIZONTAL_SPACING;
-      const opY = sourcePos.y + opIndex * (VERTICAL_SPACING * 0.8);
-
-      generatedNodes.push({
-        id: opNodeId,
-        type: 'operation',
-        position: { x: opX, y: opY },
-        data: {
-          name,
-          kind: def.kind,
-          icon: opInfo.icon,
-          label: opInfo.label,
-          category: opInfo.category,
-          def,
-        },
-        draggable: false,
-        selectable: true,
-      });
-
-      nodePositions.set(opNodeId, { x: opX, y: opY });
-
-      // Track combine operations for separate rendering
-      if (def.kind === 'combine') {
-        // Create a revision key that includes sections data to ensure re-rendering
-        const sectionsHash = JSON.stringify(
-          def.sections?.map(s => ({
-            folderPath: s.folderPath,
-            fileIds: s.files.map(f => f.id),
-            activeFiles: s.files.filter(f => f.active).length,
-          })) || []
-        );
-
-        foundCombineOps.push({
-          name,
-          operation: def,
-          revisionKey: `${name}-${sectionsHash}-${$appState._rev || 0}`,
-        });
-      }
-
-      // Create edge from source to operation
-      generatedEdges.push({
-        id: `edge-${sourceNodeId}-${opNodeId}`,
-        source: sourceNodeId,
-        target: opNodeId,
-        type: 'smoothstep',
-        animated: false,
-        style: 'stroke: #64748b; stroke-width: 2px;',
-      });
-
-      // For render operations, create output node
-      if (opInfo.category === 'render') {
-        const outputNodeId = `output-${name}`;
-        const outputX = opX + HORIZONTAL_SPACING;
-
-        generatedNodes.push({
-          id: outputNodeId,
-          type: 'output',
-          position: { x: outputX, y: opY },
-          data: {
-            operationName: name,
-            format: (def as any).format || 'wav',
-          },
-          draggable: false,
-          selectable: false,
-        });
-
-        generatedEdges.push({
-          id: `edge-${opNodeId}-${outputNodeId}`,
-          source: opNodeId,
-          target: outputNodeId,
-          type: 'smoothstep',
-          animated: false,
-          style: 'stroke: #22c55e; stroke-width: 2px;',
-        });
-      }
-    });
-
-    // Handle pipeline operations - connect them
-    operationEntries.forEach(([name, def]) => {
-      if (def.kind === 'pipeline') {
-        const pipelineOps = def.operations;
-        for (let i = 0; i < pipelineOps.length - 1; i++) {
-          const fromOp = pipelineOps[i];
-          const toOp = pipelineOps[i + 1];
-
-          generatedEdges.push({
-            id: `pipeline-edge-${fromOp}-${toOp}`,
-            source: `op-${fromOp}`,
-            target: `op-${toOp}`,
-            type: 'smoothstep',
-            animated: true,
-            style: 'stroke: #8b5cf6; stroke-width: 2px;',
-            label: 'pipeline',
-          });
-        }
-      }
-    });
-
-    // Update combine operations state
-    combineOperations = foundCombineOps;
-
-    return { nodes: generatedNodes, edges: generatedEdges };
-  }
-
-  function getSourceKey(
-    source: OperationDef['source'] | { type: 'timeline-item'; itemId: string }
-  ): string {
-    switch (source.type) {
-      case 'group':
-        return `group:${source.groupRef}`;
-      case 'files':
-        return `files:${source.fileIds.sort().join(',')}`;
-      case 'all':
-        return 'all';
-      case 'active':
-        return 'active';
-      case 'section':
-        return `section:${source.sectionIndex}`;
-      case 'previousOperation':
-        return `prev:${source.operationRef}`;
-      case 'timeline-item':
-        return `timeline:${(source as any).itemId}`;
-      default:
-        return 'unknown';
-    }
-  }
-
-  function getSourceLabel(
-    source: OperationDef['source'] | { type: 'timeline-item'; itemId: string }
-  ): string {
-    switch (source.type) {
-      case 'group':
-        return `Group: ${source.groupRef}`;
-      case 'files':
-        return `${source.fileIds.length} Files`;
-      case 'all':
-        return 'All Files';
-      case 'active':
-        return 'Active Files';
-      case 'section':
-        return `Section ${source.sectionIndex}`;
-      case 'previousOperation':
-        return `From: ${source.operationRef}`;
-      case 'timeline-item':
-        return `Timeline: ${(source as any).itemId}`;
-      default:
-        return 'Unknown Source';
-    }
-  }
-
-  // Stats
-  function getOperationStats() {
-    const ops = $appState.operations;
-    if (!ops) return { total: 0, render: 0, edit: 0, meta: 0 };
-
-    const defs = Object.values(ops.defs);
-    return {
-      total: defs.length,
-      render: defs.filter(d => OperationInfoDictionary[d.kind]?.category === 'render').length,
-      edit: defs.filter(d => OperationInfoDictionary[d.kind]?.category === 'edit').length,
-      meta: defs.filter(d => OperationInfoDictionary[d.kind]?.category === 'meta').length,
-    };
-  }
-
-  // Add combine operation
-  function addCombineOperation() {
+  // Add merge operation
+  function addMergeOperation() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const operationName = `combine_${timestamp}`;
+    const operationName = `merge_${timestamp}`;
 
     addOperation(operationName, {
       kind: 'merge',
-      source: { type: 'active' },
       sources: [],
       outputPath: `output/combined_${timestamp}.wav`,
       gapSeconds: 0,
@@ -360,15 +93,6 @@
     document.removeEventListener('mousemove', handleResize);
     document.removeEventListener('mouseup', stopResize);
   }
-
-  // Reactive updates
-  $: {
-    const flow = generateFlowFromOperations($appState.operations);
-    nodes = flow.nodes;
-    edges = flow.edges;
-  }
-
-  $: stats = getOperationStats();
 </script>
 
 <div class="operations-flow-panel" class:collapsed={!isExpanded}>
@@ -389,18 +113,12 @@
         <i class="fa fa-project-diagram"></i>
         Operations
       </span>
-      <!-- <div class="stats-badges">
-        <span class="badge badge-total" title="Total operations">{stats.total}</span>
-        {#if stats.render > 0}
-          <span class="badge badge-render" title="Render operations">🔗 {stats.render}</span>
+      <div class="stats-badges">
+        <span class="badge badge-total" title="Total MergeOp operations">{stats.total}</span>
+        {#if stats.merge > 0}
+          <span class="badge badge-merge" title="Merge operations">� {stats.merge}</span>
         {/if}
-        {#if stats.edit > 0}
-          <span class="badge badge-edit" title="Edit operations">✂️ {stats.edit}</span>
-        {/if}
-        {#if stats.meta > 0}
-          <span class="badge badge-meta" title="Meta operations">🔀 {stats.meta}</span>
-        {/if}
-      </div> -->
+      </div>
     </div>
     <div class="header-actions">
       <button
@@ -427,45 +145,26 @@
   {#if isExpanded}
     <div class="panel-content" style="height: {panelHeight}px;">
       <div class="flow-container">
-        {#if $appState.operations?.defs && Object.keys($appState.operations.defs).some(name => $appState.operations?.defs[name].kind === 'merge')}
-          <!-- Show individual CombinedFlow components for each combine operation -->
-          <div class="combined-flows-row h-100 d-flex">
-            {#each combineOperations as combineOp (combineOp.revisionKey)}
+        {#if mergeOperations.length > 0}
+          <!-- Show MergeOpFlow components for each merge operation -->
+          <div class="merge-flows-row h-100 d-flex">
+            {#each mergeOperations as mergeOp (mergeOp.revisionKey)}
               <MergeOpFlow
-                operation={combineOp.operation}
-                operationName={combineOp.name}
-                isSelected={selectedOperationName === combineOp.name}
+                operation={mergeOp.operation}
+                operationName={mergeOp.name}
+                isSelected={selectedOperationName === mergeOp.name}
                 on:operationSelect={handleOperationSelect}
               />
             {/each}
           </div>
-        {:else if nodes.length === 0}
+        {:else}
           <div class="empty-state">
             <i class="fa fa-project-diagram fa-3x"></i>
-            <p>No operations defined</p>
-            <button class="btn btn-sm btn-primary" onclick={addTestOperations}>
-              <i class="fa fa-plus"></i> Add Test Operations
+            <p>No merge operations defined</p>
+            <button class="btn btn-sm btn-primary" onclick={addMergeOperation}>
+              <i class="fa fa-plus"></i> Add Merge Operation
             </button>
           </div>
-        {:else}
-          <!-- Show main flow diagram for non-combine operations -->
-          <SvelteFlow
-            {nodes}
-            {edges}
-            {nodeTypes}
-            fitView
-            minZoom={0.1}
-            maxZoom={2}
-            panOnScroll
-            zoomOnScroll
-            preventScrolling={false}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={true}
-          >
-            <Background gap={0} size={0} />
-            <Controls />
-          </SvelteFlow>
         {/if}
       </div>
 
@@ -479,11 +178,11 @@
         <div class="operation-buttons">
           <button
             class="operation-add-btn"
-            onclick={addCombineOperation}
-            title="Add combine operation"
+            onclick={addMergeOperation}
+            title="Add merge operation"
           >
             <span class="operation-icon">🔗</span>
-            <span class="operation-label">Combine</span>
+            <span class="operation-label">Merge</span>
             <i class="fa fa-plus"></i>
           </button>
         </div>
@@ -579,7 +278,7 @@
     color: var(--text-primary, #cdd6f4);
   }
 
-  .badge-render {
+  .badge-merge {
     background: rgba(245, 158, 11, 0.2);
     color: #f59e0b;
   }
@@ -648,7 +347,7 @@
     border-right: 1px solid var(--border-color, #313244);
   }
 
-  .combined-flows-row {
+  .merge-flows-row {
     height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
@@ -736,30 +435,5 @@
   .empty-state p {
     margin: 0;
     font-size: 0.9rem;
-  }
-
-  /* SvelteFlow style overrides */
-  :global(.svelte-flow) {
-    background: #000000 !important;
-  }
-
-  :global(.svelte-flow__background) {
-    background: #000000 !important;
-  }
-
-  :global(.svelte-flow__controls) {
-    background: var(--panel-bg, #1e1e2e) !important;
-    border: 1px solid var(--border-color, #313244) !important;
-    border-radius: 4px !important;
-  }
-
-  :global(.svelte-flow__controls-button) {
-    background: var(--panel-bg, #1e1e2e) !important;
-    border-color: var(--border-color, #313244) !important;
-    color: var(--text-muted, #a6adc8) !important;
-  }
-
-  :global(.svelte-flow__controls-button:hover) {
-    background: var(--hover-bg, #313244) !important;
   }
 </style>
