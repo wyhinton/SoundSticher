@@ -1,6 +1,6 @@
 // Timeline source - Rodio-compatible source that pulls from operations
 //
-// This implements Rodio's Source trait to integrate with the Rodio audio
+
 // playback library. The TimelineSource pulls samples from the PlaybackGraph
 // on demand, mixing active operations together.
 //
@@ -13,6 +13,7 @@
 use super::context::PlaybackContext;
 use super::timeline::{PlaybackGraph, PlaybackTimeline};
 use super::types::{AudioSpec, PlaybackOpId, SampleTime};
+use crate::logging::LoggingService;
 use rodio::Source;
 use std::sync::Arc;
 use std::time::Duration;
@@ -117,6 +118,15 @@ impl TimelineSource {
     /// Fill the internal buffer by rendering from the graph
     fn fill_buffer(&mut self) {
         let duration = self.graph.duration();
+
+        // TODO: Add proper timeline logging integration
+        #[cfg(debug_assertions)]
+        {
+            println!(
+                "Timeline: Filling buffer at position: {:.3}s",
+                self.position.to_seconds(self.spec.sample_rate)
+            );
+        }
 
         // Check if we've reached the end
         if self.position >= duration {

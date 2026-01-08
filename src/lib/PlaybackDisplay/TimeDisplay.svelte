@@ -1,39 +1,21 @@
 <script lang="ts">
-  import { listen } from '@tauri-apps/api/event';
-  import { appState, durationSeconds } from '../state/state.svelte';
   import { formatMilliseconds } from '../utils/format';
   import { opPlaybackState, opIsPlaying, opIsPaused } from '../state/opPlaybackService';
   import { operationDuration } from '../state/waveformCache';
 
-  // Props to control which system to use
-  export let useOperationSystem = true;
-
   let playHeadPosition = 0;
 
-  // Listen to legacy timeline progress
-  listen<number>('timeline-progress', event => {
-    if (!useOperationSystem) {
-      playHeadPosition = event.payload * $durationSeconds;
-    }
-  });
+  // Update playhead position from operation playback state
+  $: playHeadPosition = $opPlaybackState.positionSeconds;
 
-  // Listen to operation playback state when using operation system
-  $: if (useOperationSystem) {
-    playHeadPosition = $opPlaybackState.positionSeconds;
-  }
+  // Reactive current duration from operation system
+  $: currentDuration = $operationDuration;
 
-  // Reactive current duration based on active system
-  $: currentDuration = useOperationSystem ? $operationDuration : $durationSeconds;
+  // Reactive total length from operation system
+  $: totalLength = $opPlaybackState.durationSeconds;
 
-  // Reactive total length
-  $: totalLength = useOperationSystem
-    ? $opPlaybackState.durationSeconds
-    : $appState.combinedFileLength || 0;
-
-  // Reactive play state
-  $: isCurrentlyPlaying = useOperationSystem
-    ? $opIsPlaying && !$opIsPaused
-    : $appState.playingCombined;
+  // Reactive play state from operation system
+  $: isCurrentlyPlaying = $opIsPlaying && !$opIsPaused;
 </script>
 
 <!-- Current Time Display -->

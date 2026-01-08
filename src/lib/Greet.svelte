@@ -21,9 +21,6 @@
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { opPlaybackService } from './state/opPlaybackService';
 
-  // Feature flag: Set to true to use the new operation-based waveform system
-  const USE_OPERATION_SYSTEM = true; // Change to true when ready to switch
-
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
     .then(v => {
@@ -48,23 +45,10 @@
       ev.preventDefault(); // optional, if you want to prevent default scrolling
       console.log('Spacebar pressed');
 
-      if (USE_OPERATION_SYSTEM) {
-        // Use the new operation playback service
-        opPlaybackService.togglePlayPause().catch(err => {
-          console.error('Error toggling playback:', err);
-        });
-      } else {
-        // Legacy playback system
-        appState.update(s => {
-          s.playingCombined = !s.playingCombined;
-          if (s.playingCombined) {
-            invokeWithPerf('play_timeline_audio');
-          } else {
-            invokeWithPerf('pause_timeline_audio');
-          }
-          return s;
-        });
-      }
+      // Use the operation playback service
+      opPlaybackService.togglePlayPause().catch(err => {
+        console.error('Error toggling playback:', err);
+      });
     }
   };
 
@@ -73,9 +57,7 @@
     initializeStateSynchronization();
 
     // Initialize waveform service (handles loading waveforms when operation changes)
-    if (USE_OPERATION_SYSTEM) {
-      cleanupWaveformService = initWaveformService();
-    }
+    cleanupWaveformService = initWaveformService();
 
     window.addEventListener('keyup', handleSpaceBar);
     exportState.update(s => {
@@ -84,7 +66,7 @@
       s.error = undefined;
       return s;
     });
-    updateInputs(get(appState).sections);
+    // updateInputs(get(appState).sections); // Legacy code - no longer needed
   });
 
   // Sync timeline selection with context menu
@@ -124,7 +106,7 @@
     </div>
     <!-- <Waveform></Waveform> -->
     <div style:height="30vh">
-      <PlottedInfo useOperationSystem={USE_OPERATION_SYSTEM}></PlottedInfo>
+      <PlottedInfo></PlottedInfo>
       <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
       ></Plotted>
       <Export></Export>

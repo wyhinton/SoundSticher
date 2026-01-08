@@ -1,8 +1,4 @@
 <script lang="ts">
-  import { appState, durationSeconds } from '$lib/state/state.svelte';
-  import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
-  import { invokeWithPerf } from '$lib/state/performance';
   import {
     opPlaybackService,
     opPlaybackState,
@@ -12,54 +8,28 @@
   } from '$lib/state/opPlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
 
-  // Props to control which system to use
-  export let useOperationSystem = true;
-
   let bufferingProgress = 0;
   let playHeadPosition = 0;
 
-  listen<number>('buffering-progress', e => {
-    bufferingProgress = e.payload;
-  });
-
-  // Listen to legacy timeline progress for the legacy system
-  listen<number>('timeline-progress', event => {
-    if (!useOperationSystem) {
-      playHeadPosition = event.payload * $durationSeconds;
-    }
-  });
-
   // Listen to operation playback progress when using operation system
-  $: if (useOperationSystem && $opPlaybackProgress !== undefined) {
-    playHeadPosition = $opPlaybackState.positionSeconds;
-  }
+  $: playHeadPosition = $opPlaybackState.positionSeconds;
 
-  // Reactive current duration based on active system
-  $: currentDuration = useOperationSystem ? $operationDuration : $durationSeconds;
+  // Reactive current duration based on operation system
+  $: currentDuration = $operationDuration;
 
   // Reactive play state
-  $: isCurrentlyPlaying = useOperationSystem
-    ? $opIsPlaying && !$opIsPaused
-    : $appState.playingCombined;
+  $: isCurrentlyPlaying = $opIsPlaying && !$opIsPaused;
 
   // Reactive pause state
-  $: isCurrentlyPaused = useOperationSystem
-    ? $opIsPaused
-    : !$appState.playingCombined && playHeadPosition > 0;
+  $: isCurrentlyPaused = $opIsPaused;
 
   // Reactive loop state
-  $: isLoopEnabled = useOperationSystem
-    ? $opPlaybackState.loopEnabled
-    : $appState.isLoopingTimelineAudio;
+  $: isLoopEnabled = $opPlaybackState.loopEnabled;
 
   // Transport control functions
   async function handlePlay() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.play(playHeadPosition);
-      } else {
-        await invoke('play_timeline_audio', { start_seconds: playHeadPosition });
-      }
+      await opPlaybackService.play(playHeadPosition);
     } catch (error) {
       console.error('Error playing audio:', error);
     }
@@ -67,11 +37,7 @@
 
   async function handlePause() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.pause();
-      } else {
-        await invoke('pause_timeline_audio');
-      }
+      await opPlaybackService.pause();
     } catch (error) {
       console.error('Error pausing audio:', error);
     }
@@ -79,12 +45,7 @@
 
   async function handleResume() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.resume();
-      } else {
-        // Legacy system doesn't have explicit resume, just play from current position
-        await invoke('play_timeline_audio', { start_seconds: playHeadPosition });
-      }
+      await opPlaybackService.resume();
     } catch (error) {
       console.error('Error resuming audio:', error);
     }
@@ -92,11 +53,7 @@
 
   async function handleStop() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.stop();
-      } else {
-        await invoke('stop_timeline_audio');
-      }
+      await opPlaybackService.stop();
     } catch (error) {
       console.error('Error stopping audio:', error);
     }
@@ -104,11 +61,7 @@
 
   async function handleSkipToStart() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.seek(0);
-      } else {
-        await invoke('set_timeline_play_position', { position: 0.0 });
-      }
+      await opPlaybackService.seek(0);
     } catch (error) {
       console.error('Error skipping to start:', error);
     }
@@ -116,11 +69,7 @@
 
   async function handleSkipToEnd() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.seek(currentDuration);
-      } else {
-        await invoke('set_timeline_play_position', { position: 1.0 });
-      }
+      await opPlaybackService.seek(currentDuration);
     } catch (error) {
       console.error('Error skipping to end:', error);
     }
@@ -128,29 +77,9 @@
 
   async function toggleLoop() {
     try {
-      if (useOperationSystem) {
-        await opPlaybackService.setLoop(!$opPlaybackState.loopEnabled);
-      } else {
-        // Toggle the frontend state
-        appState.update(s => {
-          s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
-          return s;
-        });
-
-        // Communicate with backend to toggle the actual LoopingSamplesBuffer
-        await invoke('set_timeline_loop_enabled', {
-          loop_enabled: $appState.isLoopingTimelineAudio,
-        });
-      }
+      await opPlaybackService.setLoop(!$opPlaybackState.loopEnabled);
     } catch (error) {
       console.error('Error toggling loop:', error);
-      // Revert the state change if backend call fails (legacy system only)
-      if (!useOperationSystem) {
-        appState.update(s => {
-          s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
-          return s;
-        });
-      }
     }
   }
 
@@ -158,21 +87,15 @@
   async function handlePlayPause() {
     if (isCurrentlyPlaying) {
       await handlePause();
-    } else if (isCurrentlyPaused && useOperationSystem) {
+    } else if (isCurrentlyPaused) {
       await handleResume();
     } else {
       await handlePlay();
     }
   }
 
-  listen('audio-playback-ended', e => {
-    // Only handle for legacy system - operation system handles looping internally
-    if (!useOperationSystem && $appState.isLoopingTimelineAudio) {
-      invokeWithPerf('stop_timeline_audio', { start_seconds: 0 }).then(() => {
-        invokeWithPerf('play_timeline_audio');
-      });
-    }
-  });
+  // No longer need to listen for legacy audio playback events
+  // The operation system handles looping internally
 </script>
 
 {#snippet transportButton(

@@ -22,6 +22,8 @@ pub enum LogSystem {
     Cook,
     Graph,
     Waveform,
+    Timeline,  // Add timeline system
+    Operation, // Add operation system
 }
 
 /// A log message that will be sent to the frontend
@@ -44,7 +46,9 @@ pub struct LoggingConfig {
     pub playback_enabled: bool,
     pub sorting_enabled: bool,
     pub waveform_enabled: bool,
-    pub console_output: bool, // Whether to also print to console
+    pub timeline_enabled: bool,  // Add timeline logging
+    pub operation_enabled: bool, // Add operation logging
+    pub console_output: bool,    // Whether to also print to console
 }
 
 impl Default for LoggingConfig {
@@ -55,6 +59,8 @@ impl Default for LoggingConfig {
             playback_enabled: false,
             sorting_enabled: false,
             waveform_enabled: false,
+            timeline_enabled: false,  // Default off for timeline
+            operation_enabled: false, // Default off for operations
             console_output: true,
         }
     }
@@ -111,6 +117,8 @@ impl LoggingService {
             LogSystem::Graph => false, // Future system, default to off
             LogSystem::Sorting => config.sorting_enabled,
             LogSystem::Waveform => config.waveform_enabled,
+            LogSystem::Timeline => config.timeline_enabled, // Add timeline check
+            LogSystem::Operation => config.operation_enabled, // Add operation check
         };
 
         if !should_log {
@@ -146,6 +154,8 @@ impl LoggingService {
                 LogSystem::Cook => "COOK",
                 LogSystem::Graph => "GRAPH",
                 LogSystem::Waveform => "WAVEFORM",
+                LogSystem::Timeline => "TIMELINE",
+                LogSystem::Operation => "OPERATION",
             };
 
             let category_str = category.map(|c| format!("[{}] ", c)).unwrap_or_default();
@@ -238,5 +248,119 @@ macro_rules! log_error {
     };
     ($logger:expr, $system:expr, $category:expr, $message:expr) => {
         $logger.error($system, $message, Some($category));
+    };
+}
+
+// Timeline-specific logging macros
+#[macro_export]
+macro_rules! timeline_debug {
+    ($logger:expr, $message:expr) => {
+        $logger.debug(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.debug(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! timeline_info {
+    ($logger:expr, $message:expr) => {
+        $logger.info(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.info(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! timeline_warning {
+    ($logger:expr, $message:expr) => {
+        $logger.warning(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.warning(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! timeline_error {
+    ($logger:expr, $message:expr) => {
+        $logger.error(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.error(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+// Operation-specific logging macros
+#[macro_export]
+macro_rules! operation_debug {
+    ($logger:expr, $message:expr) => {
+        $logger.debug(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.debug(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! operation_info {
+    ($logger:expr, $message:expr) => {
+        $logger.info(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.info(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! operation_warning {
+    ($logger:expr, $message:expr) => {
+        $logger.warning(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.warning(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! operation_error {
+    ($logger:expr, $message:expr) => {
+        $logger.error(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.error(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
     };
 }

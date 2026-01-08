@@ -3,19 +3,19 @@
   import Progress from '../Progress.svelte';
   import TransportControls from './TransportControls.svelte';
 
-  import { appState } from '../state/state.svelte';
   import TimeDisplay from './TimeDisplay.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
 
-  // Props to control which system to use
-  export let useOperationSystem = true;
+  // For now, we'll show a static progress or could link to operation buffering
+  // This was previously used for file combining progress in the legacy system
+  let operationProgress = 1; // Set to 1 (100%) since operations are loaded instantly
 </script>
 
 <div class="d-flex flex-column text-success">
-  <Progress value={$appState.combineAudioFileProgress}></Progress>
+  <Progress value={operationProgress}></Progress>
   <div class="d-flex gap-1">
-    <TransportControls {useOperationSystem} />
-    <TimeDisplay {useOperationSystem} />
+    <TransportControls />
+    <TimeDisplay />
   </div>
   <TimelineInfo></TimelineInfo>
 </div>

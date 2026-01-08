@@ -72,7 +72,7 @@
   );
 
   // Handle logging toggle changes
-  const handleLoggingChange = async (category: keyof typeof $loggingState, enabled: boolean) => {
+  const handleLoggingChange = async (category: keyof typeof loggingConfigs, enabled: boolean) => {
     loggingState.update(state => ({
       ...state,
       [category]: enabled,

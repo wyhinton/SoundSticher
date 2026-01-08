@@ -11,6 +11,7 @@ export interface LoggingState {
   operationsLog: boolean;
   waveformLog: boolean;
   opPlaybackLog: boolean;
+  timelineLog: boolean;
   // Backend logging system toggles
   encoderLog: boolean;
   combineLog: boolean;
@@ -44,6 +45,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   playbackLog: false,
   sortingLog: false,
   waveformBackendLog: false,
+  timelineLog: false,
 });
 
 // Store for backend log messages
@@ -126,6 +128,8 @@ export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) 
       sorting_enabled: config.sortingLog ?? false,
       waveform_enabled: config.waveformBackendLog ?? false,
       console_output: true,
+      timeline_enabled: config.timelineLog ?? false,
+      operation_enabled: config.operationsLog ?? false,
     };
 
     await invoke('update_logging_config', { config: backendConfig });
