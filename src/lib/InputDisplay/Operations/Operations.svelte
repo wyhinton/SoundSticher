@@ -149,8 +149,8 @@
     switch (operation.kind) {
       case 'pipeline':
         return 'master_pipeline';
-      case 'combine':
-        return 'combine';
+      case 'merge':
+        return 'merge';
       default:
         return operation.kind;
     }

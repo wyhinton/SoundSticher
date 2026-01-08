@@ -3,35 +3,42 @@
   import {
     animatedIds,
     appState,
-    getAllFiles,
     hoveredSourceItem,
     hoveredTimelineItem,
     pause_sample_preview,
     play_sample_preview,
     setHoveredItem,
-    currentOperationSections,
+    currentOperationFileList,
     type Section,
   } from '../state/state.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs } from '../state/performance';
 
-  export let sections: Section[];
-
-  // Local sorting function - moved from store
+  // Local sorting function - now uses currentOperationFileList
   function getSortedFiles(state: typeof $appState) {
-    let files = getAllFiles($currentOperationSections);
-
-    // Always sort by index since index syncing updates the actual indices
-    return files.sort((a, b) => a.index - b.index);
+    // For now, just return the file IDs as simple display items
+    // TODO: Need to resolve these file IDs to actual AudioFileItem objects with metadata
+    return $currentOperationFileList.map((fileId, index) => ({
+      id: fileId,
+      index: index,
+      path: fileId, // Using fileId as path for now
+      active: true,
+      size: 0,
+      bitRate: 0,
+      channels: 0,
+      bitDepth: 0,
+      duration: 0,
+      color: { rgb: { r: 128, g: 128, b: 128 } },
+    }));
   }
 </script>
 
 <div class="w-fill-available card d-flex flex-column position-relative">
   <div class="d-flex flex-column h-fill-available" style:background-color="#080808">
     <div class="d-flex flex-column"></div>
-    {#if sections.length === 0}
-      <div class="position-absolute no-inputs-warning">No inputs</div>
+    {#if $currentOperationFileList.length === 0}
+      <div class="position-absolute no-inputs-warning">No files in current operation</div>
     {/if}
 
     <div class="table-responsive section-table dot-grid-background">

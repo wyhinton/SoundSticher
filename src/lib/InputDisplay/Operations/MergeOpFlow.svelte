@@ -22,14 +22,7 @@
   $: opInfo = OperationInfoDictionary[operation.kind];
 
   // Create a reactive key that includes sections data to ensure re-rendering
-  $: sectionsRevision = JSON.stringify(
-    operation.sources?.map(s => ({
-      folderPath: s.folderPath,
-      fileCount: s.files.length,
-      activeFiles: s.files.filter(f => f.active).length,
-      fileIds: s.files.map(f => f.id).sort(),
-    })) || []
-  );
+  $: mergeOpSources = JSON.stringify(operation.sources?.map(s => {}) || []);
 
   // Debug state
   let showDebugInfo = false;
@@ -221,7 +214,7 @@
     }
   }
 
-  $: flowData = generateCombineFlow(sectionsRevision);
+  $: flowData = generateCombineFlow(mergeOpSources);
 </script>
 
 <div class="combined-flow">

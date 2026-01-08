@@ -2,7 +2,7 @@
   import { tick } from 'svelte';
   import {
     appState,
-    currentOperationSections,
+    currentOperationSources,
     addSourceToCurrentOperation,
   } from '../state/state.svelte';
   import { addNewFolderOnDrop } from '../state/position';
@@ -69,7 +69,7 @@
   bind:this={tableContainer}
   class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
 >
-  {#if $currentOperationSections.length === 0 && !$addNewFolderOnDrop}
+  {#if $currentOperationSources.length === 0 && !$addNewFolderOnDrop}
     <!-- <SineWaveShader></SineWaveShader> -->
     <div class="position-absolute no-inputs-warning">
       <div
@@ -94,7 +94,7 @@
     </div>
   {/if}
 
-  {#if $currentOperationSections.length > 0}
+  {#if $currentOperationSources.length > 0}
     <!-- <SourceToolbar
     selectedRowCount={selectedRows.size}
     onSelectAll={handleSelectAll}
@@ -112,7 +112,7 @@
       </tr>
     </thead>
     <tbody bind:this={container}>
-      {#each $currentOperationSections as item, sectionIndex}
+      {#each $currentOperationSources as item, sectionIndex}
         <SourceRow
           {item}
           {sectionIndex}

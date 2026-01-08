@@ -17,7 +17,7 @@
   import OperationNode from './OperationNode.svelte';
   import SourceNode from './SourceNode.svelte';
   import OutputNode from './OutputNode.svelte';
-  import CombinedFlow from './CombinedFlow.svelte';
+  import MergeOpFlow from './MergeOpFlow.svelte';
 
   // Custom node types
   const nodeTypes: NodeTypes = {
@@ -431,7 +431,7 @@
           <!-- Show individual CombinedFlow components for each combine operation -->
           <div class="combined-flows-row h-100 d-flex">
             {#each combineOperations as combineOp (combineOp.revisionKey)}
-              <CombinedFlow
+              <MergeOpFlow
                 operation={combineOp.operation}
                 operationName={combineOp.name}
                 isSelected={selectedOperationName === combineOp.name}

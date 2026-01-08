@@ -2,7 +2,8 @@
   import {
     appState,
     removeFromFavorites,
-    addSourceToCurrentOperation,
+    addToFavorites,
+    addOperationSourceToCurrent,
   } from '../state/state.svelte';
 
   function handleRemoveFromFavorites(path: string) {
@@ -10,7 +11,10 @@
   }
 
   function handleAddFavoriteAsSource(path: string) {
-    addSourceToCurrentOperation([path]);
+    // TODO: For now, just add to favorites. In the future, we could create a SampleOp
+    // and then add that operation reference to the current MergeOp
+    console.log('Add favorite as source not yet implemented for new operation structure');
+    // addToFavorites(path);
   }
 
   function getDirectoryName(path: string): string {

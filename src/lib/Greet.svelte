@@ -1,7 +1,7 @@
 <script lang="ts">
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
-  import { appState, currentOperationSections } from './state/state.svelte';
+  import { appState, currentOperationSources } from './state/state.svelte';
   import FileTable from './InputDisplay/FileTable.svelte';
   import Plotted from './PlaybackDisplay/Timeline.svelte';
   import Sources from './InputDisplay/Sources.svelte';
@@ -118,7 +118,7 @@
         </div>
         <div class="d-flex w-100" style:max-height="500px">
           <Sources></Sources>
-          <FileTable sections={$currentOperationSections}></FileTable>
+          <FileTable></FileTable>
         </div>
       </div>
     </div>

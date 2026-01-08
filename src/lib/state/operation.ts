@@ -25,20 +25,11 @@ export type OperationDef = MergeOp | PipelineOp | SampleOp;
 
 interface SampleOp {
   kind: 'sample';
-  source: OperationSource;
-}
-
-export interface MergeSource {
-  sampleOpId: string;
-  index: number;
-  active: boolean;
+  sources: OperationSource[];
 }
 
 export interface MergeOp {
   kind: 'merge';
-  /** Group reference or explicit file IDs to combine */
-  source: OperationSource;
-  /** Output file path (can use templates like {date}, {name}) */
   sources: OperationSource[];
   outputPath: string;
   gapSeconds: number;
@@ -49,16 +40,18 @@ export interface PipelineOp {
   kind: 'pipeline';
   /** Ordered list of operation references to execute in sequence */
   operations: string[];
-  /** Source for the first operation in the pipeline */
-  source: OperationSource;
+  /** Sources for the first operation in the pipeline */
+  sources: OperationSource[];
 }
 
 export type OperationSource =
   | { type: 'group'; groupRef: string }
+  | { type: 'file'; fileId: string }
   | { type: 'files'; fileIds: string[] }
   | { type: 'all' }
   | { type: 'active' }
   | { type: 'section'; sectionIndex: number }
+  | { type: 'operation'; operationRef: string }
   | { type: 'previousOperation'; operationRef: string };
 
 export type AudioFormat = 'wav' | 'mp3' | 'flac' | 'ogg' | 'aiff';
@@ -101,7 +94,7 @@ export const OperationInfoDictionary: Record<OperationDef['kind'], OperationInfo
     label: 'Pipeline',
     description: 'Chain multiple operations together in sequence',
     category: 'meta',
-    params: ['source', 'operations'],
+    params: ['sources', 'operations'],
   },
   sample: {
     icon: '🔊',
@@ -155,10 +148,20 @@ export class OperationRegistry {
 
     if (isLogging) {
       console.log(`🔍 Operations: Resolving source for "${name}"`, def);
-    }
+    } // Pass the operation name to resolve from operation's sources
+    let fileIds: Set<string>;
 
-    // Pass the operation name to resolve from operation's own sections
-    const fileIds = this.resolveOperationSource(def.source, state, name);
+    if (def.kind === 'merge' || def.kind === 'sample' || def.kind === 'pipeline') {
+      // All operations now have sources array
+      const allFileIds = new Set<string>();
+      for (const source of def.sources) {
+        const sourceFileIds = this.resolveOperationSource(source, state, name);
+        sourceFileIds.forEach(id => allFileIds.add(id));
+      }
+      fileIds = allFileIds;
+    } else {
+      fileIds = new Set();
+    }
 
     this.cache.set(name, { version, fileIds });
 
@@ -189,8 +192,16 @@ export class OperationRegistry {
       case 'group':
         return groupRegistry.eval(source.groupRef, state);
 
+      case 'file':
+        return new Set([source.fileId]);
+
       case 'files':
         return new Set(source.fileIds);
+
+      case 'operation':
+        // Reference to another operation's output
+        console.warn('operation source type requires execution context');
+        return new Set();
 
       case 'all':
       case 'active':
@@ -203,6 +214,9 @@ export class OperationRegistry {
         // For pipeline operations, this would reference output from previous op
         // For now, return empty set as this requires execution context
         console.warn('previousOperation source type requires execution context');
+        return new Set();
+
+      default:
         return new Set();
     }
   }
@@ -456,16 +470,15 @@ export const testOperations: NamedOperationDef[] = [
         'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\static\\tests\\test.wav',
       gapSeconds: 0,
       format: 'wav',
-      sources: [],
+      sources: [{ type: 'active' }],
       kind: 'merge',
-      source: { type: 'active' },
     },
   },
   {
     name: 'master_pipeline',
     def: {
       kind: 'pipeline',
-      source: { type: 'active' },
+      sources: [{ type: 'active' }],
       operations: ['combine_active'],
     },
   },

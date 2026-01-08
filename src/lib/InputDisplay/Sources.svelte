@@ -4,10 +4,10 @@
   import { stat } from '@tauri-apps/plugin-fs';
   import {
     appState,
-    getAllFiles,
-    currentOperationSections,
-    addSourceToCurrentOperation,
-    deleteSectionFromCurrentOperation,
+    currentOperationSources,
+    addOperationSourceToCurrent,
+    removeSourceFromCurrentOperation,
+    addToFavorites,
   } from '../state/state.svelte';
   import { onMount, tick } from 'svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -26,31 +26,22 @@
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
+  import type { OperationSource } from '../state/operation';
 
-  // Local sorting function - moved from store
-  function getSortedFiles(state: typeof $appState) {
-    let files = getAllFiles($currentOperationSections);
+  // Get sample op files for display
+  function getSampleOpFiles(operationRef: string) {
+    const operations = $appState.operations?.defs;
+    if (!operations) return [];
 
-    // If no sort key is set, return files sorted by index
-    if (!state.sortKey) {
-      return files.sort((a, b) => a.index - b.index);
+    const sampleOp = operations[operationRef];
+    if (!sampleOp || sampleOp.kind !== 'sample') return [];
+
+    // For sample ops, there should be exactly one source with type 'file'
+    if (sampleOp.sources.length > 0 && sampleOp.sources[0].type === 'file') {
+      return [sampleOp.sources[0].fileId];
     }
 
-    // Sort by the specified key and direction
-    let sorted = [...files].sort((a, b) => {
-      let valA = a[state.sortKey!];
-      let valB = b[state.sortKey!];
-
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return state.sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      } else {
-        return state.sortDirection === 'asc'
-          ? (valA as number) - (valB as number)
-          : (valB as number) - (valA as number);
-      }
-    });
-
-    return sorted;
+    return [];
   }
 
   WebviewWindow.getCurrent()
@@ -158,7 +149,7 @@
   // Toolbar functions
   function handleSelectAll() {
     selectedRows.clear();
-    for (let i = 0; i < $currentOperationSections.length; i++) {
+    for (let i = 0; i < $currentOperationSources.length; i++) {
       selectedRows.add(i);
     }
     selectedRows = new Set(selectedRows);
@@ -176,9 +167,9 @@
     // Convert to array and sort in descending order to delete from end to start
     const indicesToDelete = Array.from(selectedRows).sort((a, b) => b - a);
 
-    // Delete sections from current operation
+    // Delete sources from current operation
     indicesToDelete.forEach(index => {
-      deleteSectionFromCurrentOperation(index);
+      removeSourceFromCurrentOperation(index);
     });
 
     // Clear selection
@@ -252,23 +243,56 @@
             }
           });
           if (event.payload.type === 'drop') {
-            console.log(event.payload.paths);
+            console.log('Drop event detected:', event.payload.paths);
             const paths = event.payload.paths;
-            console.log(atDrop);
+            const dropX = event.payload.position.x / scaleFactor;
+            const dropY = event.payload.position.y / scaleFactor;
+
+            // Use elementFromPoint to get the topmost element at drop coordinates
+            const elementAtPoint = document.elementFromPoint(dropX, dropY);
+
+            // Check if we're dropping on the favorites area or sources area
+            const favoritesElement = elementAtPoint?.closest('.favorites-container');
+            const sourcesElement = elementAtPoint?.closest('.sources-container');
+
+            console.log('Drop coordinates:', { dropX, dropY });
+            console.log('Element at point:', elementAtPoint);
+            console.log('Is favorites area:', !!favoritesElement);
+            console.log('Is sources area:', !!sourcesElement);
+
             if (atDrop.length > 0) {
               Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
-                v.forEach(v => {
-                  if (v.isDirectory) {
-                    updatePath(atDrop[0], paths[0]);
+                v.forEach((filestat, index) => {
+                  const path = paths[index];
+                  if (filestat.isDirectory) {
+                    // If dropped on favorites area, add to favorites
+                    if (favoritesElement) {
+                      console.log('Adding folder to favorites:', path);
+                      addToFavorites(path);
+                    } else {
+                      // TODO: Implement drag-drop for operation sources
+                      console.log('Drag-drop needs to be reimplemented for operation sources');
+                    }
                   }
                 });
                 positionStore.reset();
                 clearUnderMouse();
               });
               inputsUnderMouse = [];
-            }
-            if (addNewFolderOnDrop && atDrop.length === 0) {
-              // addSource(paths);
+            } else if (addNewFolderOnDrop) {
+              // Handle drop when not over specific input areas
+              Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
+                v.forEach((filestat, index) => {
+                  const path = paths[index];
+                  if (filestat.isDirectory) {
+                    // If dropped on favorites area (even outside specific inputs), add to favorites
+                    if (favoritesElement) {
+                      console.log('Adding folder to favorites (general area):', path);
+                      addToFavorites(path);
+                    }
+                  }
+                });
+              });
             }
             positionStore.reset();
             clearUnderMouse();
@@ -307,54 +331,54 @@
   let prevSortDirection: 'asc' | 'desc' | null = null;
   let debounceTimeout: number | undefined;
 
-  appState.subscribe($appState => {
-    // Clear the previous timeout if it exists
-    if (debounceTimeout) clearTimeout(debounceTimeout);
+  // appState.subscribe($appState => {
+  //   // Clear the previous timeout if it exists
+  //   if (debounceTimeout) clearTimeout(debounceTimeout);
 
-    debounceTimeout = window.setTimeout(() => {
-      if (!$appState.sortKey || !$appState.sortDirection) return;
+  //   debounceTimeout = window.setTimeout(() => {
+  //     if (!$appState.sortKey || !$appState.sortDirection) return;
 
-      // Only proceed if sortKey or sortDirection changed
-      if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
-        return;
-      }
+  //     // Only proceed if sortKey or sortDirection changed
+  //     if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
+  //       return;
+  //     }
 
-      prevSortKey = $appState.sortKey;
-      prevSortDirection = $appState.sortDirection;
+  //     prevSortKey = $appState.sortKey;
+  //     prevSortDirection = $appState.sortDirection;
 
-      // Compute new sorted order
-      const files = getSortedFiles($appState);
+  //     // Compute new sorted order
+  //     const files = getSortedFiles($appState);
 
-      // Build array for Rust: { id, index }
-      const updates = files.map((file, index) => ({
-        id: file.id, // UUID string
-        index,
-      }));
+  //     // Build array for Rust: { id, index }
+  //     const updates = files.map((file, index) => ({
+  //       id: file.id, // UUID string
+  //       index,
+  //     }));
 
-      console.log(updates);
+  //     console.log(updates);
 
-      const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-        started: data => {
-          console.log('STARTED SORT');
-        },
-        progress: data => {},
-        finished: data => {
-          console.log('FINISHED SORT');
-        },
-      });
+  //     const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
+  //       started: data => {
+  //         console.log('STARTED SORT');
+  //       },
+  //       progress: data => {},
+  //       finished: data => {
+  //         console.log('FINISHED SORT');
+  //       },
+  //     });
 
-      invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
-        .then(newOrder => {
-          updateInputs($currentOperationSections);
-          // Use the reusable index syncing function if newOrder has value
-          if (newOrder.ok && newOrder.value) {
-            applySyncIndexes(newOrder.value);
-            console.log(`%cHERE LINE :227 %c`, 'color: yellow; font-weight: bold', '');
-          }
-        })
-        .catch(err => console.error('Tauri invoke failed', err));
-    }, 100); // 100ms debounce
-  });
+  //     invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
+  //       .then(newOrder => {
+  //         updateInputs($currentOperationSections);
+  //         // Use the reusable index syncing function if newOrder has value
+  //         if (newOrder.ok && newOrder.value) {
+  //           // applySyncIndexes(newOrder.value);
+  //           console.log(`%cHERE LINE :227 %c`, 'color: yellow; font-weight: bold', '');
+  //         }
+  //       })
+  //       .catch(err => console.error('Tauri invoke failed', err));
+  //   }, 100); // 100ms debounce
+  // });
 
   // Add tab state at the end of script section
 
@@ -369,7 +393,7 @@
   onkeydown={handleKeyDown}
   tabindex="0"
   role="region"
-  aria-label="Source sections"
+  aria-label="Operation sources"
 >
   <div
     class="sources-container"
@@ -384,7 +408,7 @@
         bind:this={tableContainer}
         class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
       >
-        {#if $currentOperationSections.length === 0 && !$addNewFolderOnDrop}
+        {#if $currentOperationSources.length === 0 && !$addNewFolderOnDrop}
           <!-- <SineWaveShader></SineWaveShader> -->
           <div class="position-absolute no-inputs-warning d-flex flex-column">
             <div
@@ -394,10 +418,14 @@
               bind:this={lottieContainer}
             ></div>
             <div class="text-center font-size-12px">
-              No inputs! Drag and Drop a folder of samples or add a section
+              No sources! Add sample operation sources to the current merge operation
             </div>
-            <button class="btn btn-sm m-auto mt-2" onclick={() => addSourceToCurrentOperation()}
-              ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
+            <button
+              class="btn btn-sm m-auto mt-2"
+              onclick={() => {
+                // TODO: Implement adding a new sample operation source
+                console.log('Add source clicked - need to implement');
+              }}><i class="me-1 fas fa-plus-circle text-success"></i>Add source</button
             >
           </div>
           {@html (() => {
@@ -411,33 +439,43 @@
           </div>
         {/if}
 
-        {#if $currentOperationSections.length > 0}
-          <!-- <SourceToolbar
-        selectedRowCount={selectedRows.size}
-        onSelectAll={handleSelectAll}
-        onClearSelection={handleClearSelection}
-        onDeleteSelected={handleDeleteSelected}
-      /> -->
-        {/if}
-
         <table class="w-100 table m-0">
           <thead>
             <tr>
-              <th class="file-column">Source</th>
-              <th class="file-column text-center">Samples</th>
+              <th class="file-column">Source Operation</th>
+              <th class="file-column text-center">File</th>
               <th class="file-column text-center">Actions</th>
             </tr>
           </thead>
           <tbody bind:this={container}>
-            {#each $currentOperationSections as item, sectionIndex}
-              <SourceRow
-                {item}
-                {sectionIndex}
-                {inputsUnderMouse}
-                isSelected={selectedRows.has(sectionIndex)}
-                onRowSelect={selectRow}
-                onRowToggle={toggleRowSelection}
-              />
+            {#each $currentOperationSources as source, sourceIndex}
+              {#if source.type === 'operation'}
+                <tr class:table-warning={selectedRows.has(sourceIndex)}>
+                  <td class="px-2 py-1">
+                    <small class="text-muted">{source.operationRef}</small>
+                  </td>
+                  <td class="text-center px-2 py-1">
+                    {#each getSampleOpFiles(source.operationRef) as fileId}
+                      <small class="text-info">{fileId}</small>
+                    {/each}
+                  </td>
+                  <td class="text-center px-2 py-1">
+                    <button
+                      class="btn btn-sm btn-outline-danger"
+                      onclick={() => removeSourceFromCurrentOperation(sourceIndex)}
+                      title="Remove source"
+                    >
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </td>
+                </tr>
+              {:else}
+                <tr class:table-warning={selectedRows.has(sourceIndex)}>
+                  <td class="px-2 py-1" colspan="3">
+                    <small class="text-muted">Unsupported source type: {source.type}</small>
+                  </td>
+                </tr>
+              {/if}
             {/each}
           </tbody>
         </table>

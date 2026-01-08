@@ -5,7 +5,7 @@ import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
 import { GroupsState } from './groups';
-import type { OperationsState } from './operation';
+import type { OperationsState, OperationSource } from './operation';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -795,14 +795,52 @@ export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
 // Removed deleteSectionFromCurrentOperation() - operations no longer have sections
 
 /**
- * DEPRECATED: Operations no longer have sections
- * This is kept temporarily for compatibility until UI is updated
+ * Current operation sources - gets the sources array from the currently selected MergeOp
+ * For MergeOps, all sources are operation references to SampleOps
  */
-export const currentOperationSections = derived(appState, $appState => {
-  console.warn('currentOperationSections is deprecated - operations no longer have sections');
-  return [];
+export const currentOperationSources = derived(appState, $appState => {
+  const selectedOperationName = $appState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) return [];
+
+  const operation = $appState.operations?.defs?.[selectedOperationName];
+  if (!operation || operation.kind !== 'merge') return [];
+
+  return operation.sources;
 });
 
+/**
+ * Current operation file list - gets all file IDs from SampleOps referenced by the current MergeOp
+ * Returns an array of file ID strings extracted from the SampleOps
+ */
+export const currentOperationFileList = derived(appState, $appState => {
+  const selectedOperationName = $appState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) return [];
+
+  const operation = $appState.operations?.defs?.[selectedOperationName];
+  if (!operation || operation.kind !== 'merge') return [];
+
+  const fileIds: string[] = [];
+
+  // For each source in the MergeOp (which should be operation references)
+  for (const source of operation.sources) {
+    if (source.type === 'operation') {
+      // Get the referenced SampleOp
+      const sampleOp = $appState.operations?.defs?.[source.operationRef];
+      if (sampleOp && sampleOp.kind === 'sample') {
+        // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
+        for (const sampleSource of sampleOp.sources) {
+          if (sampleSource.type === 'file') {
+            fileIds.push(sampleSource.fileId);
+          }
+        }
+      }
+    }
+  }
+
+  return fileIds;
+});
+
+// Right now in here for when we have a given mergeOp selected, what we want to do is display the list of filenames that are the sources for all of the sampleOps which are referenced in that mergeOp. Don't worry about the metadata columns right now, but we want to display just the file names we can get via #
 /**
  * DEPRECATED: Operations no longer have sections
  * This is kept temporarily for compatibility until UI is updated
@@ -810,6 +848,21 @@ export const currentOperationSections = derived(appState, $appState => {
 export function getOperationSections(operationName: string): Section[] {
   console.warn('getOperationSections is deprecated - operations no longer have sections');
   return [];
+}
+
+/**
+ * Get the sources array from the currently selected MergeOp
+ * For MergeOps, all sources are operation references to SampleOps
+ */
+export function getCurrentOperationSources(): OperationSource[] {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) return [];
+
+  const operation = currentState.operations?.defs?.[selectedOperationName];
+  if (!operation || operation.kind !== 'merge') return [];
+
+  return operation.sources;
 }
 
 /**
@@ -822,11 +875,78 @@ export function getCurrentOperationSections(): Section[] {
 }
 
 /**
+ * Add a source to the current MergeOp
+ * For now, all sources are operation references to SampleOps
+ */
+export function addOperationSourceToCurrent(operationRef: string) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  appState.update(state => {
+    const operation = state.operations?.defs?.[selectedOperationName];
+    if (!operation || operation.kind !== 'merge') {
+      console.warn('Current operation is not a MergeOp');
+      return state;
+    }
+
+    // Add the new operation source
+    const newSource: OperationSource = { type: 'operation', operationRef };
+    operation.sources.push(newSource);
+
+    // Update the operations version
+    if (state.operations) {
+      state.operations._version = (state.operations._version ?? 0) + 1;
+    }
+    state._rev = (state._rev ?? 0) + 1;
+
+    return state;
+  });
+}
+
+/**
+ * Remove a source from the current MergeOp by index
+ */
+export function removeSourceFromCurrentOperation(index: number) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  appState.update(state => {
+    const operation = state.operations?.defs?.[selectedOperationName];
+    if (!operation || operation.kind !== 'merge') {
+      console.warn('Current operation is not a MergeOp');
+      return state;
+    }
+
+    if (index >= 0 && index < operation.sources.length) {
+      operation.sources.splice(index, 1);
+
+      // Update the operations version
+      if (state.operations) {
+        state.operations._version = (state.operations._version ?? 0) + 1;
+      }
+      state._rev = (state._rev ?? 0) + 1;
+    }
+
+    return state;
+  });
+}
+
+/**
  * DEPRECATED: Operations no longer have sections
  * This is kept temporarily for compatibility until UI is updated
  */
 export async function addSourceToCurrentOperation(paths?: string | string[]) {
-  console.warn('addSourceToCurrentOperation is deprecated - operations no longer have sections');
+  console.warn(
+    'addSourceToCurrentOperation is deprecated - use addOperationSourceToCurrent() instead'
+  );
   // No-op for now
 }
 
