@@ -141,8 +141,10 @@ async function initProgressListener(): Promise<void> {
 
   progressUnlisten = await listen<number>('op-timeline-progress', event => {
     const progress = event.payload;
+    console.log(`prog: ${progress}`);
     const state = get(internalState);
     const newPositionSeconds = progress * state.durationSeconds;
+
     console.log(newPositionSeconds);
     console.log(state.positionSeconds);
     // Add detailed progress logging

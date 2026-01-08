@@ -67,7 +67,7 @@ export class D3TimelineManager {
     if (this.options.width <= 0 || this.options.durationSeconds <= 0) {
       logger.d3timelinemanager.warning('Invalid options for scale update', {
         width: this.options.width,
-        duration: this.options.durationSeconds
+        duration: this.options.durationSeconds,
       });
       return;
     }
@@ -75,7 +75,7 @@ export class D3TimelineManager {
     logger.d3timelinemanager.scale('Updating scales', {
       width: this.options.width,
       duration: this.options.durationSeconds,
-      originalPathWidth: this.options.originalPathWidth
+      originalPathWidth: this.options.originalPathWidth,
     });
 
     this.xScale = d3
@@ -92,7 +92,7 @@ export class D3TimelineManager {
     logger.d3timelinemanager.scale('Scales updated successfully', {
       scaleX: this.scaleX,
       xScaleDomain: this.xScale?.domain(),
-      xScaleRange: this.xScale?.range()
+      xScaleRange: this.xScale?.range(),
     });
   }
 
@@ -181,7 +181,7 @@ export class D3TimelineManager {
 
         logger.d3timelinemanager.transform('Zoom transform applied', {
           x: event.transform.x,
-          k: event.transform.k
+          k: event.transform.k,
         });
 
         // Update path group transform
@@ -231,11 +231,11 @@ export class D3TimelineManager {
 
     const clickedTime = this.currentTransform.rescaleX(this.xScale).invert(relativeX);
     const clampedTime = Math.max(0, Math.min(clickedTime, this.options.durationSeconds));
-    
+
     logger.d3timelinemanager.click('Click converted to time', {
       relativeX,
       clickedTime,
-      clampedTime
+      clampedTime,
     });
 
     return clampedTime;
@@ -248,7 +248,7 @@ export class D3TimelineManager {
     const x = this.xScale?.(playHeadPosition) ?? 0;
     logger.d3timelinemanager.playhead('Playhead position calculated', {
       playHeadPosition,
-      x
+      x,
     });
     return x;
   }
@@ -257,7 +257,10 @@ export class D3TimelineManager {
    * Check if a click position intersects with any timeline segments
    */
   findClickedSegment(relativeX: number, timelineItems: TimelineItem[]): number | null {
-    logger.d3timelinemanager.segment('Searching for clicked segment', { relativeX, itemCount: timelineItems.length });
+    logger.d3timelinemanager.segment('Searching for clicked segment', {
+      relativeX,
+      itemCount: timelineItems.length,
+    });
 
     for (let i = 0; i < timelineItems.length; i++) {
       const item = timelineItems[i];
@@ -274,11 +277,16 @@ export class D3TimelineManager {
         item.size * this.options.originalPathWidth * this.scaleX * this.currentTransform.k;
 
       if (relativeX >= itemStartX && relativeX <= itemEndX) {
-        logger.d3timelinemanager.segment('Found clicked segment', { index: i, item, itemStartX, itemEndX });
+        logger.d3timelinemanager.segment('Found clicked segment', {
+          index: i,
+          item,
+          itemStartX,
+          itemEndX,
+        });
         return i;
       }
     }
-    
+
     logger.d3timelinemanager.segment('No segment found at click position');
     return null;
   }
@@ -290,7 +298,10 @@ export class D3TimelineManager {
     mouseX: number,
     timelineItems: TimelineItem[]
   ): { index: number; x: number } {
-    logger.d3timelinemanager.info('Calculating drop position', { mouseX, itemCount: timelineItems.length });
+    logger.d3timelinemanager.info('Calculating drop position', {
+      mouseX,
+      itemCount: timelineItems.length,
+    });
 
     const timelineX = this.screenToTimeline(mouseX);
 
@@ -300,14 +311,14 @@ export class D3TimelineManager {
     for (let i = 0; i < timelineItems.length; i++) {
       const item = timelineItems[i];
       if (!item) {
-        logger.d3timelinemanager.warning(`Timeline item at index ${i} is undefined in calculateDropPosition`);
+        logger.d3timelinemanager.warning(
+          `Timeline item at index ${i} is undefined in calculateDropPosition`
+        );
         continue;
       }
 
-      const itemStartX =
-        item.startOffset * this.options.originalPathWidth * this.scaleX;
-      const itemEndX =
-        itemStartX + item.size * this.options.originalPathWidth * this.scaleX;
+      const itemStartX = item.startOffset * this.options.originalPathWidth * this.scaleX;
+      const itemEndX = itemStartX + item.size * this.options.originalPathWidth * this.scaleX;
 
       if (timelineX >= itemStartX && timelineX <= itemEndX) {
         const midPoint = itemStartX + (itemEndX - itemStartX) / 2;
@@ -368,7 +379,7 @@ export class D3TimelineManager {
    */
   destroy() {
     logger.d3timelinemanager.info('Destroying D3TimelineManager');
-    
+
     if (this.svgElement && this.zoom) {
       d3.select(this.svgElement).on('.zoom', null);
     }
@@ -376,7 +387,7 @@ export class D3TimelineManager {
     this.axisGroup = null;
     this.pathGroup = null;
     this.zoom = null;
-    
+
     logger.d3timelinemanager.success('D3TimelineManager destroyed successfully');
   }
 }

@@ -8,7 +8,7 @@ use crate::ops::sample::SampleOp;
 use crate::playback::op_playback::{
     AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
 };
-use crate::{log_debug, log_info};
+use crate::{emit_logged, log_debug, log_info};
 use rodio::{OutputStream, Sink};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -457,7 +457,8 @@ pub fn op_playback_play(
 
             // Update state and emit progress
             *state_clone.progress.lock().unwrap() = progress;
-            let _ = app_clone.emit("op-timeline-progress", progress);
+            println!("p: {}", progress);
+            emit_logged!(app_clone, "op-timeline-progress", progress);
 
             thread::sleep(Duration::from_millis(16)); // ~60 FPS
         }
@@ -511,7 +512,7 @@ pub fn op_playback_pause(
 
         // Emit current progress
         let progress = *state.progress.lock().unwrap();
-        let _ = app.emit("op-timeline-progress", progress);
+        emit_logged!(app, logging_service, "op-timeline-progress", progress);
     }
 
     Ok(())
@@ -618,7 +619,7 @@ pub fn op_playback_stop(
 
     stop_current_playback(&state);
     *state.progress.lock().unwrap() = 0.0;
-    let _ = app.emit("op-timeline-progress", 0.0f32);
+    emit_logged!(app, "op-timeline-progress", 0.0f32);
 
     Ok(())
 }
@@ -662,7 +663,7 @@ pub fn op_playback_seek(
     *state.seek_position.lock().unwrap() = position_seconds as f32;
 
     // Emit progress
-    let _ = app.emit("op-timeline-progress", progress);
+    emit_logged!(app, "op-timeline-progress", progress);
 
     // If currently playing, we need to restart playback from the new position
     // because rodio doesn't support seeking on existing sources
@@ -792,7 +793,7 @@ pub fn op_playback_seek(
 
                 // Update state and emit progress
                 *state_clone.progress.lock().unwrap() = progress;
-                let _ = app_clone.emit("op-timeline-progress", progress);
+                emit_logged!(app_clone, "op-timeline-progress", progress);
 
                 thread::sleep(Duration::from_millis(16)); // ~60 FPS
             }

@@ -15,3 +15,18 @@ macro_rules! send_channel_event {
         }
     };
 }
+
+#[macro_export]
+macro_rules! emit_logged {
+    ($app:expr, $logger:expr, $event:expr, $payload:expr) => {{
+        log::debug!(
+            "Emit event='{}' from {}:{} ({})",
+            $event,
+            file!(),
+            line!(),
+            module_path!()
+        );
+
+        let _ = $app.emit($event, $payload);
+    }};
+}
