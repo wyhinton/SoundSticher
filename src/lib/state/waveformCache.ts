@@ -274,6 +274,17 @@ export class WaveformCache {
   }
 
   /**
+   * Get a cached waveform if available
+   */
+  getCached(
+    filePath: string,
+    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+  ): Waveform | undefined {
+    const key = createCacheKey(filePath, spec.width, spec.height);
+    return this.cache.get(key);
+  }
+
+  /**
    * Evict oldest entries if over max size
    */
   private evictIfNeeded(): void {
@@ -355,8 +366,8 @@ function createOperationWaveformStore() {
           `Operation "${operationName}" waveforms loaded successfully (${waveforms.size}/${filePaths.length})`
         );
 
-        // Build playback graph with the loaded waveforms
-        await buildPlaybackGraphFromWaveforms(operationName, filePaths, waveforms);
+        // Build playback graph from the MergeOp
+        await buildPlaybackGraphFromMergeOp();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         update(state => ({
@@ -393,39 +404,75 @@ function createOperationWaveformStore() {
 }
 
 /**
- * Build a playback graph from loaded waveforms
+ * Build a playback graph from the currently selected MergeOp
  */
-async function buildPlaybackGraphFromWaveforms(
-  operationName: string,
-  filePaths: string[],
-  waveforms: Map<string, Waveform>
-): Promise<void> {
+async function buildPlaybackGraphFromMergeOp(): Promise<void> {
+  const appStateValue = get(appState);
+  const selectedOpName = appStateValue.uiSettings?.selectedOperationName;
+
+  if (!selectedOpName) {
+    logger.waveform.operation('No operation selected, cannot build playback graph');
+    return;
+  }
+
+  const operation = appStateValue.operations?.defs?.[selectedOpName];
+  if (!operation || operation.kind !== 'merge') {
+    logger.waveform.operation(
+      `Operation "${selectedOpName}" is not a MergeOp, cannot build playback graph`
+    );
+    return;
+  }
+
   logger.waveform.operation(
-    `Building playback graph for operation "${operationName}" (${filePaths.length} files)`
+    `Building playback graph for MergeOp "${selectedOpName}" (${operation.sources.length} sources)`
   );
 
-  // Build operations list for the playback graph
-  // Files are scheduled sequentially (one after another)
-  let currentTime = 0;
   const operations: AddOpRequest[] = [];
+  const operationDefs = appStateValue.operations?.defs;
 
-  for (let i = 0; i < filePaths.length; i++) {
-    const filePath = filePaths[i];
-    if (!filePath) continue;
+  if (!operationDefs) {
+    logger.waveform.warning('No operation definitions available');
+    return;
+  }
 
-    const waveform = waveforms.get(filePath);
+  let currentTime = 0;
 
-    if (waveform) {
-      operations.push({
-        name: `file_${i}`,
-        filePath,
-        startTime: currentTime,
-        endTime: currentTime + waveform.duration,
-        gain: 1.0,
-      });
-      currentTime += waveform.duration;
-    } else {
-      logger.waveform.warning(`No waveform for file ${filePath}, skipping in playback graph`);
+  // Iterate through the MergeOp's sources
+  for (let i = 0; i < operation.sources.length; i++) {
+    const source = operation.sources[i];
+    if (!source) continue;
+
+    if (source.type === 'operation') {
+      // Get the referenced SampleOp
+      const sampleOp = operationDefs[source.operationRef];
+      if (sampleOp && sampleOp.kind === 'sample') {
+        // Get the file path from the SampleOp's sources
+        const fileSource = sampleOp.sources.find(s => s.type === 'file');
+        if (fileSource && fileSource.type === 'file') {
+          // Try to get duration from waveform cache, or use a default
+          const waveform = waveformCache.getCached(fileSource.fileId);
+          const duration = waveform?.duration || 30; // Default duration if no waveform
+
+          operations.push({
+            name: source.operationRef, // Use the operation reference name
+            filePath: fileSource.fileId,
+            startTime: currentTime,
+            endTime: currentTime + duration,
+            gain: 1.0,
+          });
+
+          currentTime += duration;
+
+          // Add gap if specified in MergeOp
+          if (operation.gapSeconds > 0) {
+            currentTime += operation.gapSeconds;
+          }
+        }
+      }
+    }
+    // Handle other source types if needed in the future
+    else {
+      logger.waveform.warning(`Unsupported source type "${source.type}" in MergeOp, skipping`);
     }
   }
 
@@ -470,7 +517,7 @@ function getOperationFilePaths(operation: OperationDef | undefined): string[] {
     // Need to access the operations state to resolve operation references
     const appStateValue = get(appState);
     const operations = appStateValue.operations?.defs;
-    
+
     if (!operations) return [];
 
     // For each source in the MergeOp (which should be operation references)
@@ -488,7 +535,7 @@ function getOperationFilePaths(operation: OperationDef | undefined): string[] {
         }
       }
     }
-  } 
+  }
   // For SampleOp, directly get file from sources
   else if (operation.kind === 'sample') {
     for (const source of operation.sources) {
@@ -524,7 +571,7 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
     // Need to access the operations state to resolve operation references
     const appStateValue = get(appState);
     const operations = appStateValue.operations?.defs;
-    
+
     if (!operations) return [];
 
     let index = 0;
@@ -548,7 +595,7 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
         }
       }
     }
-  } 
+  }
   // For SampleOp, directly get file items from sources
   else if (operation.kind === 'sample') {
     let index = 0;
