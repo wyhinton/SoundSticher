@@ -16,13 +16,6 @@
     }
   });
 
-  // listen<number>('timeline-progress', e => {
-  //   if ($appState.playingCombined) {
-  //     statusMessage = 'Playing';
-  //     lastActivity = new Date().toLocaleTimeString();
-  //   }
-  // });
-
   // Watch for app state changes
   $: {
     if ($exportState && $exportState.progress > 0 && $exportState.progress < 1) {

@@ -143,7 +143,8 @@ async function initProgressListener(): Promise<void> {
     const progress = event.payload;
     const state = get(internalState);
     const newPositionSeconds = progress * state.durationSeconds;
-
+    console.log(newPositionSeconds);
+    console.log(state.positionSeconds);
     // Add detailed progress logging
     if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
       logger.opPlayback.info(

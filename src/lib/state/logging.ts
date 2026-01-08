@@ -13,6 +13,7 @@ export interface LoggingState {
   opPlaybackLog: boolean;
   timelineLog: boolean;
   listenersLog: boolean;
+  d3timelinemanagerLog: boolean;
   // Backend logging system toggles
   encoderLog: boolean;
   combineLog: boolean;
@@ -43,6 +44,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   opPlaybackLog: false,
   timelineLog: false,
   listenersLog: false,
+  d3timelinemanagerLog: false,
   encoderLog: false,
   combineLog: false,
   playbackLog: false,
@@ -552,6 +554,250 @@ export const logger = {
           `%c⏩ OpPlayback-Seek %c${message}`,
           'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
           'color: #FF5722; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
+  d3timelinemanager: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c📊 D3TimelineManager %c${message}`,
+          'background: #3F51B5; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #3F51B5; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    success: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c✅ D3TimelineManager %c${message}`,
+          'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #4CAF50; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    warning: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.warn(
+          `%c⚠️ D3TimelineManager %c${message}`,
+          'background: #FF9800; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF9800; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.error(
+          `%c❌ D3TimelineManager %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    zoom: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c🔍 D3TimelineManager-Zoom %c${message}`,
+          'background: #2196F3; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #2196F3; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    axis: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c📏 D3TimelineManager-Axis %c${message}`,
+          'background: #607D8B; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #607D8B; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    transform: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c🔄 D3TimelineManager-Transform %c${message}`,
+          'background: #9C27B0; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #9C27B0; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    click: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c👆 D3TimelineManager-Click %c${message}`,
+          'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF5722; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    segment: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c📊 D3TimelineManager-Segment %c${message}`,
+          'background: #795548; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #795548; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    playhead: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c▶️ D3TimelineManager-Playhead %c${message}`,
+          'background: #E91E63; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #E91E63; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    initialization: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c🚀 D3TimelineManager-Init %c${message}`,
+          'background: #00BCD4; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #00BCD4; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    scale: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('d3timelinemanagerLog')) {
+        console.log(
+          `%c📐 D3TimelineManager-Scale %c${message}`,
+          'background: #CDDC39; color: black; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #689F38; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
+  timeline: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c⏰ Timeline %c${message}`,
+          'background: #3F51B5; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #3F51B5; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    success: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c✅ Timeline %c${message}`,
+          'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #4CAF50; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    warning: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.warn(
+          `%c⚠️ Timeline %c${message}`,
+          'background: #FF9800; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF9800; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.error(
+          `%c❌ Timeline %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    zoom: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c🔍 Timeline-Zoom %c${message}`,
+          'background: #2196F3; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #2196F3; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    axis: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c📏 Timeline-Axis %c${message}`,
+          'background: #607D8B; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #607D8B; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    transform: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c🔄 Timeline-Transform %c${message}`,
+          'background: #9C27B0; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #9C27B0; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    click: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c👆 Timeline-Click %c${message}`,
+          'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF5722; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    segment: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c📊 Timeline-Segment %c${message}`,
+          'background: #795548; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #795548; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    playhead: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c▶️ Timeline-Playhead %c${message}`,
+          'background: #E91E63; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #E91E63; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    initialization: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c🚀 Timeline-Init %c${message}`,
+          'background: #00BCD4; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #00BCD4; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    scale: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('timelineLog')) {
+        console.log(
+          `%c📐 Timeline-Scale %c${message}`,
+          'background: #CDDC39; color: black; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #689F38; font-weight: normal;',
           ...args
         );
       }
