@@ -176,7 +176,7 @@ export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraph
 
   try {
     const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', { request });
-    
+
     if (!result.ok) {
       throw new Error(`Failed to build graph: ${result.error.message}`);
     }
@@ -257,7 +257,7 @@ export async function play(startSeconds?: number): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_play', { startSeconds: startSeconds ?? null });
-    
+
     if (!result.ok) {
       throw new Error(`Failed to start playback: ${result.error.message}`);
     }
@@ -283,7 +283,7 @@ export async function pause(): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_pause');
-    
+
     if (!result.ok) {
       throw new Error(`Failed to pause playback: ${result.error.message}`);
     }
@@ -308,7 +308,7 @@ export async function resume(): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_resume');
-    
+
     if (!result.ok) {
       throw new Error(`Failed to resume playback: ${result.error.message}`);
     }
@@ -333,7 +333,7 @@ export async function stop(): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_stop');
-    
+
     if (!result.ok) {
       throw new Error(`Failed to stop playback: ${result.error.message}`);
     }
@@ -361,14 +361,14 @@ export async function seek(positionSeconds: number): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_seek', { positionSeconds });
-    
+
     if (!result.ok) {
       throw new Error(`Failed to seek: ${result.error.message}`);
     }
 
     const state = get(internalState);
     const progress = state.durationSeconds > 0 ? positionSeconds / state.durationSeconds : 0;
-
+    console.log(progress);
     internalState.update(s => ({
       ...s,
       progress: Math.max(0, Math.min(1, progress)),
@@ -399,7 +399,7 @@ export async function setVolume(volume: number): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_set_volume', { volume });
-    
+
     if (!result.ok) {
       throw new Error(`Failed to set volume: ${result.error.message}`);
     }
@@ -424,7 +424,7 @@ export async function setLoop(enabled: boolean): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_set_loop', { loopPlayback: enabled });
-    
+
     if (!result.ok) {
       throw new Error(`Failed to set loop mode: ${result.error.message}`);
     }
@@ -453,11 +453,11 @@ export function getProgress(): number {
  */
 export async function getProgressAsync(): Promise<number> {
   const result = await invokeWithPerf<number>('op_playback_get_progress');
-  
+
   if (!result.ok) {
     throw new Error(`Failed to get progress: ${result.error.message}`);
   }
-  
+
   return result.value;
 }
 
@@ -469,7 +469,7 @@ export async function clearGraph(): Promise<void> {
 
   try {
     const result = await invokeWithPerf('op_playback_clear_graph');
-    
+
     if (!result.ok) {
       throw new Error(`Failed to clear graph: ${result.error.message}`);
     }

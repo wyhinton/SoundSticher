@@ -3,9 +3,8 @@
   import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
-  import type { MergeOp } from '$lib/state/operation';
+  import type { MergeOp, OperationSource } from '$lib/state/operation';
   import { OperationInfoDictionary } from '$lib/state/operation';
-  import { type Section, type AudioFileItem } from '$lib/state/state.svelte';
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
@@ -21,8 +20,8 @@
 
   $: opInfo = OperationInfoDictionary[operation.kind];
 
-  // Create a reactive key that includes sections data to ensure re-rendering
-  $: mergeOpSources = JSON.stringify(operation.sources?.map(s => {}) || []);
+  // Create a reactive key that includes sources data to ensure re-rendering
+  $: mergeOpSources = JSON.stringify(operation.sources || []);
 
   // Debug state
   let showDebugInfo = false;
@@ -36,8 +35,8 @@
     source: SourceNode,
   };
 
-  // Generate flow for this specific combine operation
-  function generateCombineFlow(_sectionsRevision?: string): { nodes: Node[]; edges: Edge[] } {
+  // Generate flow for this specific merge operation
+  function generateCombineFlow(_sourcesRevision?: string): { nodes: Node[]; edges: Edge[] } {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
@@ -48,46 +47,43 @@
     const START_X = 50;
     const START_Y = 50;
 
-    // Create source nodes for each file in each section
-    const sections = operation.sections || [];
+    // Create source nodes for each source in the operation
+    const sources = operation.sources || [];
     const sourceNodeIds: string[] = [];
     let nodeIndex = 0;
 
-    sections.forEach((section, sectionIndex) => {
-      section.files.forEach((file, fileIndex) => {
-        const sourceNodeId = `combine-source-${operationName}-${sectionIndex}-${fileIndex}`;
-        sourceNodeIds.push(sourceNodeId);
+    sources.forEach((source, sourceIndex) => {
+      const sourceNodeId = `merge-source-${operationName}-${sourceIndex}`;
+      sourceNodeIds.push(sourceNodeId);
 
-        // Calculate grid position
-        const column = nodeIndex % GRID_COLUMNS;
-        const row = Math.floor(nodeIndex / GRID_COLUMNS);
-        const xPosition = START_X + column * 150; // Reduced spacing for grid
-        const yPosition = START_Y + row * VERTICAL_SPACING;
+      // Calculate grid position
+      const column = nodeIndex % GRID_COLUMNS;
+      const row = Math.floor(nodeIndex / GRID_COLUMNS);
+      const xPosition = START_X + column * 150; // Reduced spacing for grid
+      const yPosition = START_Y + row * VERTICAL_SPACING;
 
-        nodes.push({
-          id: sourceNodeId,
-          type: 'source',
-          position: { x: xPosition, y: yPosition },
-          data: {
-            source: { type: 'files', fileIds: [file.id] },
-            label: getFileLabel(file, section),
-            file: file,
-            section: section,
-          },
-          draggable: false,
-          selectable: false,
-        });
-
-        nodeIndex++;
+      nodes.push({
+        id: sourceNodeId,
+        type: 'source',
+        position: { x: xPosition, y: yPosition },
+        data: {
+          source: source,
+          label: getSourceLabel(source),
+          sourceIndex: sourceIndex,
+        },
+        draggable: false,
+        selectable: false,
       });
+
+      nodeIndex++;
     });
 
     // Create operation node - position it to the right of the grid
-    const totalFiles = sections.reduce((total, section) => total + section.files.length, 0);
-    const gridRows = Math.ceil(totalFiles / GRID_COLUMNS);
+    const totalSources = sources.length;
+    const gridRows = Math.ceil(totalSources / GRID_COLUMNS);
     const gridCenterY = START_Y + ((gridRows - 1) * VERTICAL_SPACING) / 2;
     const gridWidth = (GRID_COLUMNS - 1) * 150;
-    const opNodeId = `combine-op-${operationName}`;
+    const opNodeId = `merge-op-${operationName}`;
 
     nodes.push({
       id: opNodeId,
@@ -97,10 +93,10 @@
         name: operationName,
         kind: operation.kind,
         icon: opInfo?.icon || '🔗',
-        label: opInfo?.label || 'Combine',
+        label: opInfo?.label || 'Merge',
         category: opInfo?.category || 'render',
         def: operation,
-        // Custom styling for combine operation
+        // Custom styling for merge operation
         customStyle: {
           background: '#3b82f6',
           borderRadius: '50%',
@@ -118,7 +114,7 @@
     // Create edges from each source node to the operation node
     sourceNodeIds.forEach((sourceNodeId, index) => {
       edges.push({
-        id: `combine-edge-${index}-${operationName}`,
+        id: `merge-edge-${index}-${operationName}`,
         source: sourceNodeId,
         target: opNodeId,
         type: 'bezier',
@@ -130,10 +126,12 @@
     return { nodes, edges };
   }
 
-  function getSourceLabel(source: MergeOp['source']): string {
+  function getSourceLabel(source: OperationSource): string {
     switch (source.type) {
       case 'group':
         return `Group: ${source.groupRef}`;
+      case 'file':
+        return `File: ${source.fileId}`;
       case 'files':
         return `${source.fileIds.length} Files`;
       case 'all':
@@ -142,23 +140,13 @@
         return 'Active Files';
       case 'section':
         return `Section ${source.sectionIndex}`;
+      case 'operation':
+        return `From: ${source.operationRef}`;
       case 'previousOperation':
         return `From: ${source.operationRef}`;
       default:
         return 'Unknown Source';
     }
-  }
-
-  function getSectionLabel(section: Section): string {
-    const fileCount = section.files.length;
-    const folderName = section.folderPath.split(/[/\\]/).pop() || 'Unknown Folder';
-    return `${folderName} (${fileCount} files)`;
-  }
-
-  function getFileLabel(file: AudioFileItem, section: Section): string {
-    const fileName = file.path.split(/[/\\]/).pop() || 'Unknown File';
-    const sectionName = section.folderPath.split(/[/\\]/).pop() || 'Unknown Folder';
-    return `${fileName} (${sectionName})`;
   }
 
   // Handle keyboard events for debug toggle
@@ -217,7 +205,7 @@
   $: flowData = generateCombineFlow(mergeOpSources);
 </script>
 
-<div class="combined-flow">
+<div class="merge-op-flow">
   <div class="flow-content">
     <SvelteFlow
       bind:this={flowInstance}
@@ -265,7 +253,7 @@
 </div>
 
 <style>
-  .combined-flow {
+  .merge-op-flow {
     background: var(--panel-bg, #1e1e2e);
     overflow: hidden;
     min-width: 480px;
@@ -349,15 +337,15 @@
   }
 
   /* Override SvelteFlow styles for this specific instance */
-  :global(.combined-flow .svelte-flow) {
+  :global(.merge-op-flow .svelte-flow) {
     background: #000000 !important;
   }
 
-  :global(.combined-flow .svelte-flow__background) {
+  :global(.merge-op-flow .svelte-flow__background) {
     background: #000000 !important;
   }
 
-  :global(.combined-flow .svelte-flow__viewport) {
+  :global(.merge-op-flow .svelte-flow__viewport) {
     background: #000000 !important;
   }
 </style>
