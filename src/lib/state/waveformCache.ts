@@ -458,18 +458,51 @@ export const operationWaveforms = createOperationWaveformStore();
 // ============================================================================
 
 /**
- * Get file paths from an operation's sections
+ * Get file paths from an operation's sources
  */
 function getOperationFilePaths(operation: OperationDef | undefined): string[] {
   if (!operation) return [];
 
-  // Operations have their own sections array
-  const sections = operation.sections || [];
-  return sections.flatMap(section => section.files.filter(f => f.active).map(f => f.path));
+  const fileIds: string[] = [];
+
+  // For MergeOp, we need to get file paths from referenced SampleOps
+  if (operation.kind === 'merge') {
+    // Need to access the operations state to resolve operation references
+    const appStateValue = get(appState);
+    const operations = appStateValue.operations?.defs;
+    
+    if (!operations) return [];
+
+    // For each source in the MergeOp (which should be operation references)
+    for (const source of operation.sources) {
+      if (source.type === 'operation') {
+        // Get the referenced SampleOp
+        const sampleOp = operations[source.operationRef];
+        if (sampleOp && sampleOp.kind === 'sample') {
+          // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
+          for (const sampleSource of sampleOp.sources) {
+            if (sampleSource.type === 'file') {
+              fileIds.push(sampleSource.fileId);
+            }
+          }
+        }
+      }
+    }
+  } 
+  // For SampleOp, directly get file from sources
+  else if (operation.kind === 'sample') {
+    for (const source of operation.sources) {
+      if (source.type === 'file') {
+        fileIds.push(source.fileId);
+      }
+    }
+  }
+
+  return fileIds;
 }
 
 /**
- * Get file items from an operation's sections (with metadata)
+ * Get file items from an operation's sources (with metadata)
  */
 function getOperationFileItems(operation: OperationDef | undefined): Array<{
   id: string;
@@ -479,15 +512,59 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
 }> {
   if (!operation) return [];
 
-  const sections = operation.sections || [];
-  return sections.flatMap(section =>
-    section.files.map(f => ({
-      id: f.id,
-      path: f.path,
-      active: f.active,
-      index: f.index,
-    }))
-  );
+  const fileItems: Array<{
+    id: string;
+    path: string;
+    active: boolean;
+    index: number;
+  }> = [];
+
+  // For MergeOp, we need to get file items from referenced SampleOps
+  if (operation.kind === 'merge') {
+    // Need to access the operations state to resolve operation references
+    const appStateValue = get(appState);
+    const operations = appStateValue.operations?.defs;
+    
+    if (!operations) return [];
+
+    let index = 0;
+    // For each source in the MergeOp (which should be operation references)
+    for (const source of operation.sources) {
+      if (source.type === 'operation') {
+        // Get the referenced SampleOp
+        const sampleOp = operations[source.operationRef];
+        if (sampleOp && sampleOp.kind === 'sample') {
+          // Extract file items from the SampleOp's sources
+          for (const sampleSource of sampleOp.sources) {
+            if (sampleSource.type === 'file') {
+              fileItems.push({
+                id: sampleSource.fileId,
+                path: sampleSource.fileId,
+                active: true, // Assume active since it's in the operation
+                index: index++,
+              });
+            }
+          }
+        }
+      }
+    }
+  } 
+  // For SampleOp, directly get file items from sources
+  else if (operation.kind === 'sample') {
+    let index = 0;
+    for (const source of operation.sources) {
+      if (source.type === 'file') {
+        fileItems.push({
+          id: source.fileId,
+          path: source.fileId,
+          active: true,
+          index: index++,
+        });
+      }
+    }
+  }
+
+  return fileItems;
 }
 
 /**
@@ -520,11 +597,11 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
       return [];
     }
 
-    // Get active file items from the operation
-    const fileItems = getOperationFileItems(operation).filter(f => f.active);
+    // Get file items from the operation sources
+    const fileItems = getOperationFileItems(operation);
 
     if (fileItems.length === 0) {
-      logger.waveform.info(`No active files in operation "${selectedOpName}"`);
+      logger.waveform.info(`No files found in operation "${selectedOpName}"`);
       return [];
     }
 
@@ -615,18 +692,13 @@ function createOperationRevisionKey(
 ): string {
   if (!operation) return `${operationName}:empty:${globalRev}`;
 
-  // Create a hash based on the operation's sections and key properties
-  const sectionsHash = JSON.stringify(
-    operation.sections?.map(s => ({
-      folderPath: s.folderPath,
-      files: s.files.map(f => ({ id: f.id, path: f.path, active: f.active })),
-    })) || []
-  );
+  // Create a hash based on the operation's sources and key properties
+  const sourcesHash = JSON.stringify(operation.sources || []);
 
-  return `${operationName}:${sectionsHash}:${globalRev}`;
+  return `${operationName}:${sourcesHash}:${globalRev}`;
 }
 
-/**
+/**ope
  * Initialize the waveform service to react to operation changes
  */
 export function initWaveformService(): () => void {
@@ -681,7 +753,7 @@ export function initWaveformService(): () => void {
           operationWaveforms.loadForOperation(selectedOpName, filePaths);
         } else {
           logger.waveform.operation(
-            `No active files in operation "${selectedOpName}", clearing waveforms`
+            `No files found in operation "${selectedOpName}", clearing waveforms`
           );
           operationWaveforms.clear();
         }

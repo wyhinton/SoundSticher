@@ -11,23 +11,69 @@
     currentOperationFileList,
     type Section,
   } from '../state/state.svelte';
+  import { invoke } from '@tauri-apps/api/core';
 
-  // Local sorting function - now uses currentOperationFileList
+  // Define interface for file metadata from Tauri
+  interface FileMetadata {
+    path: string;
+    size: number | null;
+    bitRate: number | null;
+    channels: number | null;
+    bitDepth: number | null;
+    duration: number;
+  }
+
+  // Store for file metadata
+  let fileMetadata: Map<string, FileMetadata> = new Map();
+  let metadataLoading = false;
+
+  // Function to fetch metadata for current file list
+  async function fetchMetadata() {
+    if (metadataLoading || $currentOperationFileList.length === 0) return;
+
+    metadataLoading = true;
+    try {
+      const metadataResults: FileMetadata[] = await invoke('get_metadata', {
+        titles: $currentOperationFileList,
+      });
+
+      // Update our metadata map
+      fileMetadata.clear();
+      metadataResults.forEach(metadata => {
+        fileMetadata.set(metadata.path, metadata);
+      });
+
+      // Trigger reactivity
+      fileMetadata = new Map(fileMetadata);
+    } catch (error) {
+      console.error('Failed to fetch file metadata:', error);
+    } finally {
+      metadataLoading = false;
+    }
+  }
+
+  // Local sorting function - now uses currentOperationFileList with real metadata
   function getSortedFiles(state: typeof $appState) {
-    // For now, just return the file IDs as simple display items
-    // TODO: Need to resolve these file IDs to actual AudioFileItem objects with metadata
-    return $currentOperationFileList.map((fileId, index) => ({
-      id: fileId,
-      index: index,
-      path: fileId, // Using fileId as path for now
-      active: true,
-      size: 0,
-      bitRate: 0,
-      channels: 0,
-      bitDepth: 0,
-      duration: 0,
-      color: { rgb: { r: 128, g: 128, b: 128 } },
-    }));
+    return $currentOperationFileList.map((fileId, index) => {
+      const metadata = fileMetadata.get(fileId);
+      return {
+        id: fileId,
+        index: index,
+        path: fileId,
+        active: true,
+        size: metadata?.size || 0,
+        bitRate: metadata?.bitRate || 0,
+        channels: metadata?.channels || 0,
+        bitDepth: metadata?.bitDepth || 0,
+        duration: metadata?.duration || 0,
+        color: { rgb: { r: 128, g: 128, b: 128 } },
+      };
+    });
+  }
+
+  // Reactive statement to fetch metadata when file list changes
+  $: if ($currentOperationFileList.length > 0) {
+    fetchMetadata();
   }
 </script>
 
@@ -36,6 +82,10 @@
     <div class="d-flex flex-column"></div>
     {#if $currentOperationFileList.length === 0}
       <div class="position-absolute no-inputs-warning">No files in current operation</div>
+    {:else if metadataLoading}
+      <div class="position-absolute no-inputs-warning">
+        <i class="fas fa-spinner fa-spin"></i> Loading file metadata...
+      </div>
     {/if}
 
     <div class="table-responsive section-table dot-grid-background">

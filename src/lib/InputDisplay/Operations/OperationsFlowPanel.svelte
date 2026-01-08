@@ -22,7 +22,7 @@
   let resizeStartHeight = 0;
 
   // Get MergeOp operations with revision tracking
-  $: mergeOperations = $appState.operations?.defs 
+  $: mergeOperations = $appState.operations?.defs
     ? Object.entries($appState.operations.defs)
         .filter(([name, def]) => def.kind === 'merge')
         .map(([name, def]) => {
@@ -176,11 +176,7 @@
           <h4>Add Operations</h4>
         </div>
         <div class="operation-buttons">
-          <button
-            class="operation-add-btn"
-            onclick={addMergeOperation}
-            title="Add merge operation"
-          >
+          <button class="operation-add-btn" onclick={addMergeOperation} title="Add merge operation">
             <span class="operation-icon">🔗</span>
             <span class="operation-label">Merge</span>
             <i class="fa fa-plus"></i>

@@ -451,15 +451,17 @@
             {#each $currentOperationSources as source, sourceIndex}
               {#if source.type === 'operation'}
                 <tr class:table-warning={selectedRows.has(sourceIndex)}>
-                  <td class="px-2 py-1">
-                    <small class="text-muted">{source.operationRef}</small>
+                  <td>
+                    <small class="text-muted" title={source.operationRef}
+                      >{source.operationRef}</small
+                    >
                   </td>
-                  <td class="text-center px-2 py-1">
+                  <td class="text-center">
                     {#each getSampleOpFiles(source.operationRef) as fileId}
-                      <small class="text-info">{fileId}</small>
+                      <small class="text-info" title={fileId}>{fileId}</small>
                     {/each}
                   </td>
-                  <td class="text-center px-2 py-1">
+                  <td class="text-center">
                     <button
                       class="btn btn-sm btn-outline-danger"
                       onclick={() => removeSourceFromCurrentOperation(sourceIndex)}
@@ -471,8 +473,10 @@
                 </tr>
               {:else}
                 <tr class:table-warning={selectedRows.has(sourceIndex)}>
-                  <td class="px-2 py-1" colspan="3">
-                    <small class="text-muted">Unsupported source type: {source.type}</small>
+                  <td colspan="3">
+                    <small class="text-muted" title="Unsupported source type: {source.type}"
+                      >Unsupported source type: {source.type}</small
+                    >
                   </td>
                 </tr>
               {/if}
@@ -511,5 +515,24 @@
 
   th {
     font-size: 12px;
+  }
+
+  /* Table cell styling for compact, non-wrapping text with ellipsis */
+  td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120ch; /* Maximum of 120 characters */
+    padding: 2px 8px !important; /* More compact padding */
+    font-size: 11px; /* Slightly smaller font */
+    line-height: 1.2; /* Tighter line height */
+  }
+
+  td small {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block; /* Make sure the ellipsis works with small tags */
+    max-width: 100%; /* Inherit parent width constraint */
   }
 </style>
