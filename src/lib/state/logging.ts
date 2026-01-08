@@ -12,6 +12,7 @@ export interface LoggingState {
   waveformLog: boolean;
   opPlaybackLog: boolean;
   timelineLog: boolean;
+  listenersLog: boolean;
   // Backend logging system toggles
   encoderLog: boolean;
   combineLog: boolean;
@@ -40,16 +41,45 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   operationsLog: false,
   waveformLog: false,
   opPlaybackLog: false,
+  timelineLog: false,
+  listenersLog: false,
   encoderLog: false,
   combineLog: false,
   playbackLog: false,
   sortingLog: false,
   waveformBackendLog: false,
-  timelineLog: false,
 });
 
 // Store for backend log messages
 export const backendLogs = writable<BackendLogMessage[]>([]);
+
+// Interface for frontend listener log messages
+export interface ListenerLogMessage {
+  timestamp: number;
+  elementType: string;
+  eventType: string;
+  action: 'attach' | 'detach' | 'event';
+  elementId?: string;
+  elementClass?: string;
+  details?: any;
+}
+
+// Store for frontend listener log messages
+export const listenerLogs = writable<ListenerLogMessage[]>([]);
+
+// Helper function to add listener log
+export const addListenerLog = (log: Omit<ListenerLogMessage, 'timestamp'>) => {
+  const logMessage: ListenerLogMessage = {
+    ...log,
+    timestamp: Date.now(),
+  };
+
+  listenerLogs.update(logs => {
+    const newLogs = [...logs, logMessage];
+    // Keep only the last 1000 messages
+    return newLogs.slice(-1000);
+  });
+};
 
 // Initialize backend log listener
 let isListenerInitialized = false;
@@ -522,6 +552,58 @@ export const logger = {
           `%c⏩ OpPlayback-Seek %c${message}`,
           'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
           'color: #FF5722; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
+  listeners: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('listenersLog')) {
+        console.log(
+          `%c👂 Listeners %c${message}`,
+          'background: #00BCD4; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #00BCD4; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    attach: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('listenersLog')) {
+        console.log(
+          `%c🔗 Listeners-Attach %c${message}`,
+          'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #4CAF50; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    detach: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('listenersLog')) {
+        console.log(
+          `%c🔓 Listeners-Detach %c${message}`,
+          'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF5722; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    event: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('listenersLog')) {
+        console.log(
+          `%c⚡ Listeners-Event %c${message}`,
+          'background: #9C27B0; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #9C27B0; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('listenersLog')) {
+        console.error(
+          `%c❌ Listeners %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
           ...args
         );
       }

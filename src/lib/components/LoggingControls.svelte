@@ -35,6 +35,21 @@
       label: 'Waveform',
       icon: 'fa-wave-square',
     },
+    opPlaybackLog: {
+      category: 'frontend',
+      label: 'Op Playback',
+      icon: 'fa-play-circle',
+    },
+    timelineLog: {
+      category: 'frontend',
+      label: 'Timeline',
+      icon: 'fa-timeline',
+    },
+    listenersLog: {
+      category: 'frontend',
+      label: 'Event Listeners',
+      icon: 'fa-ear-listen',
+    },
     // Backend logging systems
     encoderLog: {
       category: 'backend',
@@ -118,8 +133,9 @@
           <label class="toggle-label">
             <input
               type="checkbox"
-              bind:checked={$loggingState[key]}
-              on:change={e => handleLoggingChange(key, e.currentTarget.checked)}
+              bind:checked={$loggingState[key as keyof typeof loggingConfigs]}
+              on:change={e =>
+                handleLoggingChange(key as keyof typeof loggingConfigs, e.currentTarget.checked)}
             />
             <i class="fa {config.icon}"></i>
             {config.label}
@@ -136,8 +152,9 @@
           <label class="toggle-label">
             <input
               type="checkbox"
-              bind:checked={$loggingState[key]}
-              on:change={e => handleLoggingChange(key, e.currentTarget.checked)}
+              bind:checked={$loggingState[key as keyof typeof loggingConfigs]}
+              on:change={e =>
+                handleLoggingChange(key as keyof typeof loggingConfigs, e.currentTarget.checked)}
             />
             <i class="fa {config.icon}"></i>
             {config.label}

@@ -142,11 +142,19 @@ async function initProgressListener(): Promise<void> {
   progressUnlisten = await listen<number>('op-timeline-progress', event => {
     const progress = event.payload;
     const state = get(internalState);
+    const newPositionSeconds = progress * state.durationSeconds;
+
+    // Add detailed progress logging
+    if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
+      logger.opPlayback.info(
+        `Progress update: ${(progress * 100).toFixed(1)}% -> ${newPositionSeconds.toFixed(2)}s (was ${state.positionSeconds.toFixed(2)}s)`
+      );
+    }
 
     internalState.update(s => ({
       ...s,
       progress,
-      positionSeconds: progress * s.durationSeconds,
+      positionSeconds: newPositionSeconds,
     }));
   });
 
@@ -251,12 +259,18 @@ export async function buildGraphFromFiles(
  * Start playback
  */
 export async function play(startSeconds?: number): Promise<void> {
+  const currentState = get(internalState);
+  const actualStartSeconds = startSeconds ?? currentState.positionSeconds;
+
   logger.opPlayback.info(
-    `Starting playback${startSeconds !== undefined ? ` at ${startSeconds.toFixed(2)}s` : ''}`
+    `Starting playback at ${actualStartSeconds.toFixed(2)}s (${startSeconds !== undefined ? 'explicit' : 'current position'})`
+  );
+  logger.opPlayback.info(
+    `Current state - position: ${currentState.positionSeconds.toFixed(2)}s, progress: ${(currentState.progress * 100).toFixed(1)}%, isPaused: ${currentState.isPaused}`
   );
 
   try {
-    const result = await invokeWithPerf('op_playback_play', { startSeconds: startSeconds ?? null });
+    const result = await invokeWithPerf('op_playback_play', { startSeconds: actualStartSeconds });
 
     if (!result.ok) {
       throw new Error(`Failed to start playback: ${result.error.message}`);
@@ -268,7 +282,7 @@ export async function play(startSeconds?: number): Promise<void> {
       isPaused: false,
     }));
 
-    logger.opPlayback.success('Playback started');
+    logger.opPlayback.success(`Playback started at ${actualStartSeconds.toFixed(2)}s`);
   } catch (error) {
     logger.opPlayback.error('Failed to start playback:', error);
     throw error;
@@ -279,7 +293,10 @@ export async function play(startSeconds?: number): Promise<void> {
  * Pause playback
  */
 export async function pause(): Promise<void> {
-  logger.opPlayback.info('Pausing playback');
+  const currentState = get(internalState);
+  logger.opPlayback.info(
+    `Pausing playback at position ${currentState.positionSeconds.toFixed(2)}s (progress: ${(currentState.progress * 100).toFixed(1)}%)`
+  );
 
   try {
     const result = await invokeWithPerf('op_playback_pause');
@@ -293,7 +310,10 @@ export async function pause(): Promise<void> {
       isPaused: true,
     }));
 
-    logger.opPlayback.success('Playback paused');
+    const newState = get(internalState);
+    logger.opPlayback.success(
+      `Playback paused - Position preserved: ${newState.positionSeconds.toFixed(2)}s`
+    );
   } catch (error) {
     logger.opPlayback.error('Failed to pause playback:', error);
     throw error;
@@ -304,7 +324,10 @@ export async function pause(): Promise<void> {
  * Resume playback
  */
 export async function resume(): Promise<void> {
-  logger.opPlayback.info('Resuming playback');
+  const currentState = get(internalState);
+  logger.opPlayback.info(
+    `Resuming playback from position ${currentState.positionSeconds.toFixed(2)}s (progress: ${(currentState.progress * 100).toFixed(1)}%)`
+  );
 
   try {
     const result = await invokeWithPerf('op_playback_resume');
@@ -318,7 +341,10 @@ export async function resume(): Promise<void> {
       isPaused: false,
     }));
 
-    logger.opPlayback.success('Playback resumed');
+    const newState = get(internalState);
+    logger.opPlayback.success(
+      `Playback resumed from position ${newState.positionSeconds.toFixed(2)}s`
+    );
   } catch (error) {
     logger.opPlayback.error('Failed to resume playback:', error);
     throw error;
@@ -368,7 +394,11 @@ export async function seek(positionSeconds: number): Promise<void> {
 
     const state = get(internalState);
     const progress = state.durationSeconds > 0 ? positionSeconds / state.durationSeconds : 0;
-    console.log(progress);
+
+    logger.opPlayback.info(
+      `Seek - calculated progress: ${(progress * 100).toFixed(1)}%, clamped position: ${Math.max(0, positionSeconds).toFixed(2)}s`
+    );
+
     internalState.update(s => ({
       ...s,
       progress: Math.max(0, Math.min(1, progress)),
@@ -502,11 +532,18 @@ export async function togglePlayPause(): Promise<void> {
     return;
   }
 
+  logger.opPlayback.info(
+    `Toggle play/pause - Current state: playing=${state.isPlaying}, paused=${state.isPaused}, position=${state.positionSeconds.toFixed(2)}s`
+  );
+
   if (state.isPlaying && !state.isPaused) {
+    logger.opPlayback.info('Currently playing -> pausing');
     await pause();
   } else if (state.isPaused) {
+    logger.opPlayback.info('Currently paused -> resuming');
     await resume();
   } else {
+    logger.opPlayback.info('Currently stopped -> playing from current position');
     await play();
   }
 }

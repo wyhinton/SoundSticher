@@ -33,6 +33,7 @@
     initializeBackendLogListener,
     updateBackendLoggingConfig,
     loggingState,
+    listenerLogs,
   } from '$lib/state/logging';
 
   // Helper function to process svg_path properties based on display mode
@@ -269,6 +270,7 @@
     { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
+    { id: 'listeners', label: 'Listeners', icon: 'fa-ear-listen' },
     { id: 'debug', label: 'Debug Info', icon: 'fa-bug' },
   ];
 
@@ -539,7 +541,6 @@
                       hour: '2-digit',
                       minute: '2-digit',
                       second: '2-digit',
-                      fractionalSecondDigits: 3,
                     })}
                   </td>
                   <td class="command">
@@ -582,6 +583,105 @@
     <!-- Logging Tab -->
     <div slot="logging">
       <LoggingControls />
+    </div>
+
+    <!-- Listeners Tab -->
+    <div slot="listeners">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Event Listeners</h3>
+        <div class="listeners-controls">
+          {@render actionButton(
+            () => listenerLogs.set([]),
+            'fa-trash',
+            'Clear Logs',
+            false,
+            'danger'
+          )}
+        </div>
+      </div>
+
+      {#if $listenerLogs.length === 0}
+        <div class="empty-state">
+          <i class="fa fa-ear-listen"></i>
+          <p>
+            No event listener logs yet. Enable Listeners logging and interact with the UI to see
+            logs here.
+          </p>
+          <small class="text-muted">
+            Event listeners that use the <code>listenWithLogging</code> utility will appear here.
+          </small>
+        </div>
+      {:else}
+        <div class="listeners-table-container">
+          <table class="listeners-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Element</th>
+                <th>Event</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each $listenerLogs.slice().reverse() as log}
+                <tr class="listener-log-{log.action}">
+                  <td class="timestamp">
+                    {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </td>
+                  <td class="action">
+                    <span class="action-badge action-{log.action}">
+                      {#if log.action === 'attach'}
+                        <i class="fa fa-link"></i>
+                      {:else if log.action === 'detach'}
+                        <i class="fa fa-unlink"></i>
+                      {:else if log.action === 'event'}
+                        <i class="fa fa-bolt"></i>
+                      {/if}
+                      {log.action}
+                    </span>
+                  </td>
+                  <td class="element">
+                    <code class="element-info">
+                      {log.elementType}
+                      {#if log.elementId}
+                        <span class="element-id">#{log.elementId}</span>
+                      {/if}
+                      {#if log.elementClass}
+                        <span class="element-class"
+                          >.{log.elementClass.split(' ').slice(0, 2).join('.')}</span
+                        >
+                      {/if}
+                    </code>
+                  </td>
+                  <td class="event-type">
+                    <code>{log.eventType}</code>
+                  </td>
+                  <td class="details">
+                    {#if log.details}
+                      <details class="details-dropdown">
+                        <summary class="details-summary">
+                          <i class="fa fa-info-circle"></i>
+                        </summary>
+                        <div class="details-content">
+                          <PrismWrapper data={log.details} maxHeight="150px" fontSize="10px" />
+                        </div>
+                      </details>
+                    {:else}
+                      <span class="no-details">-</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     </div>
 
     <!-- Debug Info Tab -->
@@ -1012,6 +1112,155 @@
 
   .svg-path-select {
     min-width: 100px;
+  }
+
+  /* Listeners Tab Styles */
+  .listeners-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .listeners-table-container {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+
+  .listeners-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .listeners-table th {
+    background-color: rgba(0, 188, 212, 0.2);
+    color: #00bcd4;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .listeners-table td {
+    padding: 6px 12px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    vertical-align: top;
+  }
+
+  .listeners-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Row styling based on action */
+  .listener-log-attach {
+    background-color: rgba(76, 175, 80, 0.05);
+  }
+
+  .listener-log-detach {
+    background-color: rgba(255, 87, 34, 0.05);
+  }
+
+  .listener-log-event {
+    background-color: rgba(156, 39, 176, 0.05);
+  }
+
+  /* Action badge styling */
+  .action-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .action-attach {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+  }
+
+  .action-detach {
+    background-color: rgba(255, 87, 34, 0.2);
+    color: #ff5722;
+  }
+
+  .action-event {
+    background-color: rgba(156, 39, 176, 0.2);
+    color: #9c27b0;
+  }
+
+  /* Element info styling */
+  .element-info {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .element-id {
+    color: #81c784;
+    font-weight: 600;
+  }
+
+  .element-class {
+    color: #64b5f6;
+    font-weight: 500;
+  }
+
+  /* Details dropdown */
+  .details-dropdown {
+    display: inline-block;
+  }
+
+  .details-summary {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 10px;
+    list-style: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+  }
+
+  .details-summary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .details-content {
+    margin-top: 4px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .no-details {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+  }
+
+  /* Timestamp styling */
+  .timestamp {
+    font-family: 'Fira Code', monospace;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 10px;
+  }
+
+  .event-type {
+    font-family: 'Fira Code', monospace;
+    color: #ffb74d;
+    font-weight: 500;
   }
 
   /* Responsive Design */

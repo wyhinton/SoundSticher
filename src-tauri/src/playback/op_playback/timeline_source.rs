@@ -11,9 +11,8 @@
 // - Seamless seeking
 
 use super::context::PlaybackContext;
-use super::timeline::{PlaybackGraph, PlaybackTimeline};
-use super::types::{AudioSpec, PlaybackOpId, SampleTime};
-use crate::logging::LoggingService;
+use super::timeline::PlaybackGraph;
+use super::types::{AudioSpec, SampleTime};
 use rodio::Source;
 use std::sync::Arc;
 use std::time::Duration;
@@ -309,6 +308,10 @@ impl TimelineSourceBuilder {
         };
 
         if self.start_position.samples() > 0 {
+            println!(
+                "DEBUG: TimelineSource seeking to start position: {:.3}s",
+                self.start_position.to_seconds(self.spec.sample_rate)
+            );
             source.seek(self.start_position);
         }
 
