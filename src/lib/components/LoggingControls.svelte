@@ -190,7 +190,7 @@
   // Open file in VS Code
   async function openFileInEditor(filePath: string | undefined, lineNumber: number | undefined) {
     if (!filePath) return;
-    
+
     try {
       await invoke('open_file_in_editor', {
         filePath,
@@ -291,7 +291,7 @@
 
     <!-- Backend Logs Display -->
     <div class="backend-logs">
-      {#each filteredLogs.slice(-logLimit) as log (log.timestamp)}
+      {#each filteredLogs.slice(-logLimit) as log, index (log.timestamp + '-' + index)}
         <div class="log-entry log-{log.level}">
           <span class="log-timestamp">{new Date(log.timestamp).toLocaleTimeString()}</span>
           <span class="log-level">{log.level.toUpperCase()}</span>
@@ -305,8 +305,10 @@
               {log.message}
               <button
                 class="file-link"
-                on:click={() => openFileInEditor(log.fileLocation?.filePath, log.fileLocation?.lineNumber)}
-                title="Click to open {log.fileLocation.filePath}:{log.fileLocation.lineNumber || 1} in VS Code"
+                on:click={() =>
+                  openFileInEditor(log.fileLocation?.filePath, log.fileLocation?.lineNumber)}
+                title="Click to open {log.fileLocation.filePath}:{log.fileLocation.lineNumber ||
+                  1} in VS Code"
               >
                 [{log.fileLocation.filePath}:{log.fileLocation.lineNumber || 1}]
               </button>
