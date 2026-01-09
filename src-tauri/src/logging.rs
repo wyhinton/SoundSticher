@@ -24,6 +24,7 @@ pub enum LogSystem {
     Waveform,
     Timeline,  // Add timeline system
     Operation, // Add operation system
+    EventEmits,
 }
 
 /// A log message that will be sent to the frontend
@@ -49,6 +50,7 @@ pub struct LoggingConfig {
     pub timeline_enabled: bool,  // Add timeline logging
     pub operation_enabled: bool, // Add operation logging
     pub console_output: bool,    // Whether to also print to console
+    pub event_emits_enabled: bool,
 }
 
 impl Default for LoggingConfig {
@@ -62,6 +64,7 @@ impl Default for LoggingConfig {
             timeline_enabled: false,  // Default off for timeline
             operation_enabled: false, // Default off for operations
             console_output: true,
+            event_emits_enabled: false,
         }
     }
 }
@@ -119,6 +122,7 @@ impl LoggingService {
             LogSystem::Waveform => config.waveform_enabled,
             LogSystem::Timeline => config.timeline_enabled, // Add timeline check
             LogSystem::Operation => config.operation_enabled, // Add operation check
+            LogSystem::EventEmits => config.event_emits_enabled,
         };
 
         if !should_log {
@@ -156,6 +160,7 @@ impl LoggingService {
                 LogSystem::Waveform => "WAVEFORM",
                 LogSystem::Timeline => "TIMELINE",
                 LogSystem::Operation => "OPERATION",
+                LogSystem::EventEmits => "EVENT EMITS",
             };
 
             let category_str = category.map(|c| format!("[{}] ", c)).unwrap_or_default();

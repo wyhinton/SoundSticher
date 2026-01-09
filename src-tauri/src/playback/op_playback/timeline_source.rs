@@ -252,6 +252,12 @@ impl Source for TimelineSource {
             ))
         }
     }
+
+    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
+        let target_seconds = pos.as_secs_f64();
+        self.seek_to_seconds(target_seconds);
+        Ok(())
+    }
 }
 
 /// Builder for creating TimelineSource with common configurations

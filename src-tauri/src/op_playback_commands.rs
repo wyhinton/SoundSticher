@@ -512,7 +512,7 @@ pub fn op_playback_pause(
 
         // Emit current progress
         let progress = *state.progress.lock().unwrap();
-        emit_logged!(app, logging_service, "op-timeline-progress", progress);
+        emit_logged!(app, "op-timeline-progress", progress);
     }
 
     Ok(())
@@ -623,7 +623,7 @@ pub fn op_playback_stop(
 
     Ok(())
 }
-// In op_playback_seek function, we need to actually seek the timeline source
+/// Seek to a position in the current playback graph
 #[tauri::command]
 pub fn op_playback_seek(
     position_seconds: f64,
@@ -665,144 +665,173 @@ pub fn op_playback_seek(
     // Emit progress
     emit_logged!(app, "op-timeline-progress", progress);
 
-    // If currently playing, we need to restart playback from the new position
-    // because rodio doesn't support seeking on existing sources
+    // If currently playing, try to seek on the active source
     if state.is_playing.load(Ordering::Relaxed) {
-        if let Ok(logger) = logging_service.lock() {
-            log_info!(
-                logger,
-                LogSystem::Playback,
-                "op_seek",
-                "Restarting playback from new position due to active playback"
-            );
+        let seek_duration = Duration::from_secs_f64(position_seconds);
+
+        // Try to seek on the current sink's source
+        let sink = state.sink.lock().unwrap();
+        let seek_supported = if let Some(ref sink) = *sink {
+            match sink.try_seek(seek_duration) {
+                Ok(_) => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Playback,
+                            "op_seek",
+                            &format!(
+                                "Successfully seeked to {:.2}s using try_seek",
+                                position_seconds
+                            )
+                        );
+                    }
+                    true
+                }
+                Err(e) => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Playback,
+                            "op_seek",
+                            &format!(
+                                "Seek not supported by source ({}). Restarting playback from {:.2}s.",
+                                e, position_seconds
+                            )
+                        );
+                    }
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
+        // If seeking wasn't supported, restart playback from new position
+        if !seek_supported {
+            drop(sink); // Release the lock
+
+            let was_paused = state.is_paused.load(Ordering::Relaxed);
+            stop_current_playback(&state);
+
+            state.is_playing.store(true, Ordering::Relaxed);
+            state.is_paused.store(was_paused, Ordering::Relaxed);
+
+            let state_clone = state.inner().clone();
+            let app_clone = app.clone();
+            let loop_playback = state.loop_playback.load(Ordering::Relaxed);
+            let seek_position_time = SampleTime::from_seconds(position_seconds, spec.sample_rate);
+
+            thread::spawn(move || {
+                start_playback_from_position(
+                    state_clone,
+                    app_clone,
+                    graph.clone(),
+                    spec,
+                    loop_playback,
+                    seek_position_time,
+                    was_paused,
+                );
+            });
         }
-
-        // Stop current playback but keep the playing state
-        let was_paused = state.is_paused.load(Ordering::Relaxed);
-        stop_current_playback(&state);
-
-        // Restart from the new position
-        state.is_playing.store(true, Ordering::Relaxed);
-        state.is_paused.store(was_paused, Ordering::Relaxed);
-
-        let state_clone = state.inner().clone();
-        let app_clone = app.clone();
-        let loop_playback = state.loop_playback.load(Ordering::Relaxed);
-        let seek_position_time = SampleTime::from_seconds(position_seconds, spec.sample_rate);
-
-        thread::spawn(move || {
-            // Create audio output
-            let (_stream, stream_handle) = match OutputStream::try_default() {
-                Ok(output) => output,
-                Err(e) => {
-                    eprintln!("Error creating audio output stream during seek: {}", e);
-                    state_clone.is_playing.store(false, Ordering::Relaxed);
-                    return;
-                }
-            };
-
-            let sink = match Sink::try_new(&stream_handle) {
-                Ok(sink) => Arc::new(sink),
-                Err(e) => {
-                    eprintln!("Error creating sink during seek: {}", e);
-                    state_clone.is_playing.store(false, Ordering::Relaxed);
-                    return;
-                }
-            };
-
-            // Create NEW timeline source starting from the seek position
-            let source = TimelineSourceBuilder::new()
-                .spec(spec)
-                .looping(loop_playback)
-                .start_position(seek_position_time)
-                .build(graph.clone());
-
-            println!(
-                "DEBUG: Created new timeline source at position: {:.3}s",
-                position_seconds
-            );
-
-            sink.append(source);
-            sink.set_volume(1.0);
-
-            // If we were paused, start the sink in paused state
-            if was_paused {
-                sink.pause();
-                println!("DEBUG: Started new timeline source in paused state");
-            } else {
-                sink.play();
-                println!("DEBUG: Started new timeline source in playing state");
-            }
-
-            // Store the new sink
-            *state_clone.sink.lock().unwrap() = Some(Arc::clone(&sink));
-
-            // Reset progress tracking to start from the new position
-            let mut tracking_start = Instant::now();
-            let mut pause_start: Option<Instant> = None;
-            let mut total_pause_duration = Duration::from_secs(0);
-            let total_duration_seconds = total_duration;
-
-            // Continue with normal playback loop...
-            loop {
-                // Check if we should stop
-                if !state_clone.is_playing.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                if sink.empty() && !loop_playback {
-                    break;
-                }
-
-                if state_clone.is_paused.load(Ordering::Relaxed) {
-                    // Mark pause start if we just entered pause state
-                    if pause_start.is_none() {
-                        pause_start = Some(Instant::now());
-                        println!("DEBUG: Entering pause state in playback loop (after seek)");
-                    }
-                    thread::sleep(Duration::from_millis(50));
-                    continue;
-                } else if let Some(pause_started_at) = pause_start.take() {
-                    // We just resumed from pause - add pause duration to total
-                    let pause_duration = pause_started_at.elapsed();
-                    total_pause_duration += pause_duration;
-                    println!(
-                        "DEBUG: Resuming from pause (after seek) - pause lasted {:.2}s, total pause time: {:.2}s",
-                        pause_duration.as_secs_f32(),
-                        total_pause_duration.as_secs_f32()
-                    );
-                }
-
-                // Calculate current position (excluding time spent paused)
-                let seek_start = *state_clone.seek_position.lock().unwrap();
-                let total_elapsed = tracking_start.elapsed();
-                let active_elapsed = total_elapsed - total_pause_duration;
-                let current_position = seek_start + active_elapsed.as_secs_f32();
-
-                // Calculate progress (handle looping)
-                let progress = if total_duration_seconds > 0.0 {
-                    if loop_playback {
-                        (current_position % total_duration_seconds as f32)
-                            / total_duration_seconds as f32
-                    } else {
-                        (current_position / total_duration_seconds as f32).min(1.0)
-                    }
-                } else {
-                    0.0
-                };
-
-                // Update state and emit progress
-                *state_clone.progress.lock().unwrap() = progress;
-                emit_logged!(app_clone, "op-timeline-progress", progress);
-
-                thread::sleep(Duration::from_millis(16)); // ~60 FPS
-            }
-
-            println!("DEBUG: Operation playback finished (after seek)");
-        });
     }
 
     Ok(())
+}
+
+/// Helper function to start playback from a specific position
+fn start_playback_from_position(
+    state: Arc<OpPlaybackState>,
+    app: AppHandle,
+    graph: Arc<PlaybackGraph>,
+    spec: AudioSpec,
+    loop_playback: bool,
+    position: SampleTime,
+    was_paused: bool,
+) {
+    // Create audio output
+    let (_stream, stream_handle) = match OutputStream::try_default() {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("Error creating audio output stream: {}", e);
+            state.is_playing.store(false, Ordering::Relaxed);
+            return;
+        }
+    };
+
+    let sink = match Sink::try_new(&stream_handle) {
+        Ok(sink) => Arc::new(sink),
+        Err(e) => {
+            eprintln!("Error creating sink: {}", e);
+            state.is_playing.store(false, Ordering::Relaxed);
+            return;
+        }
+    };
+
+    // Create timeline source from position
+    let source = TimelineSourceBuilder::new()
+        .spec(spec)
+        .looping(loop_playback)
+        .start_position(position)
+        .build(graph.clone());
+
+    sink.append(source);
+    sink.set_volume(1.0);
+
+    if was_paused {
+        sink.pause();
+    } else {
+        sink.play();
+    }
+
+    *state.sink.lock().unwrap() = Some(Arc::clone(&sink));
+
+    // Progress tracking loop
+    let mut tracking_start = Instant::now();
+    let mut pause_start: Option<Instant> = None;
+    let mut total_pause_duration = Duration::from_secs(0);
+    let total_duration_seconds = graph.duration().to_seconds(spec.sample_rate);
+
+    loop {
+        if !state.is_playing.load(Ordering::Relaxed) {
+            break;
+        }
+
+        if sink.empty() && !loop_playback {
+            break;
+        }
+
+        if state.is_paused.load(Ordering::Relaxed) {
+            if pause_start.is_none() {
+                pause_start = Some(Instant::now());
+            }
+            thread::sleep(Duration::from_millis(50));
+            continue;
+        } else if let Some(pause_started_at) = pause_start.take() {
+            total_pause_duration += pause_started_at.elapsed();
+        }
+
+        let seek_start = *state.seek_position.lock().unwrap();
+        let total_elapsed = tracking_start.elapsed();
+        let active_elapsed = total_elapsed - total_pause_duration;
+        let current_position = seek_start + active_elapsed.as_secs_f32();
+
+        let progress = if total_duration_seconds > 0.0 {
+            if loop_playback {
+                (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
+            } else {
+                (current_position / total_duration_seconds as f32).min(1.0)
+            }
+        } else {
+            0.0
+        };
+
+        *state.progress.lock().unwrap() = progress;
+        emit_logged!(app, "op-timeline-progress", progress);
+
+        thread::sleep(Duration::from_millis(16)); // ~60 FPS
+    }
+
+    state.is_playing.store(false, Ordering::Relaxed);
 }
 
 /// Get current playback progress

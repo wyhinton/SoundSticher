@@ -43,8 +43,6 @@
   const handleSpaceBar = (ev: KeyboardEvent) => {
     if (ev.code === 'Space') {
       ev.preventDefault(); // optional, if you want to prevent default scrolling
-      console.log('Spacebar pressed');
-
       // Use the operation playback service
       opPlaybackService.togglePlayPause().catch(err => {
         console.error('Error toggling playback:', err);

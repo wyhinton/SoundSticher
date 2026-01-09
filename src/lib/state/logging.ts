@@ -162,6 +162,7 @@ export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) 
       console_output: true,
       timeline_enabled: config.timelineLog ?? false,
       operation_enabled: config.operationsLog ?? false,
+      event_emits_enabled: config.operationsLog ?? false,
     };
 
     await invoke('update_logging_config', { config: backendConfig });
