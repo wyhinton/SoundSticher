@@ -20,19 +20,28 @@ export interface LoggingState {
   playbackLog: boolean;
   sortingLog: boolean;
   waveformBackendLog: boolean;
+  timelineBackendLog: boolean;
+  operationLog: boolean;
+  eventEmitsLog: boolean;
   // Add future logging categories here
   // performanceLog?: boolean;
   // audioLog?: boolean;
   // uiLog?: boolean;
 }
 
+export interface FileLocation {
+  filePath: string;
+  lineNumber?: number;
+}
+
 export interface BackendLogMessage {
   timestamp: number;
   level: 'debug' | 'info' | 'warning' | 'error';
-  system: 'encoder' | 'combine' | 'playback' | 'sorting' | 'cook' | 'graph';
+  system: 'encoder' | 'combine' | 'playback' | 'sorting' | 'cook' | 'graph' | 'waveform' | 'timeline' | 'operation' | 'eventEmits';
   category?: string;
   message: string;
   data?: any;
+  fileLocation?: FileLocation;
 }
 
 export const loggingState = persisted<LoggingState>('loggingState', {
@@ -50,6 +59,9 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   playbackLog: false,
   sortingLog: false,
   waveformBackendLog: false,
+  timelineBackendLog: false,
+  operationLog: false,
+  eventEmitsLog: false,
 });
 
 // Store for backend log messages
@@ -121,6 +133,9 @@ export const initializeBackendLogListener = () => {
       waveform: { bg: '#9C27B0', color: 'white' },
       cook: { bg: '#607D8B', color: 'white' },
       graph: { bg: '#795548', color: 'white' },
+      timeline: { bg: '#FF6F00', color: 'white' },
+      operation: { bg: '#E91E63', color: 'white' },
+      eventEmits: { bg: '#00BCD4', color: 'white' },
     };
 
     const levelEmojis = {
@@ -160,9 +175,9 @@ export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) 
       sorting_enabled: config.sortingLog ?? false,
       waveform_enabled: config.waveformBackendLog ?? false,
       console_output: true,
-      timeline_enabled: config.timelineLog ?? false,
-      operation_enabled: config.operationsLog ?? false,
-      event_emits_enabled: config.operationsLog ?? false,
+      timeline_enabled: config.timelineBackendLog ?? false,
+      operation_enabled: config.operationLog ?? false,
+      event_emits_enabled: config.eventEmitsLog ?? false,
     };
 
     await invoke('update_logging_config', { config: backendConfig });

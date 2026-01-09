@@ -37,6 +37,15 @@ pub struct LogMessage {
     pub category: Option<String>,
     pub message: String,
     pub data: Option<serde_json::Value>,
+    pub file_location: Option<FileLocation>,
+}
+
+/// File location information for opening in editor
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLocation {
+    pub file_path: String,
+    pub line_number: Option<u32>,
 }
 
 /// Configuration for which systems should log
@@ -109,6 +118,18 @@ impl LoggingService {
         category: Option<&str>,
         data: Option<serde_json::Value>,
     ) {
+        self.log_with_location(system, level, message, category, data, None);
+    }
+
+    pub fn log_with_location(
+        &self,
+        system: LogSystem,
+        level: LogLevel,
+        message: &str,
+        category: Option<&str>,
+        data: Option<serde_json::Value>,
+        file_location: Option<FileLocation>,
+    ) {
         let config = self.get_config();
 
         // Check if this system should log
@@ -139,6 +160,7 @@ impl LoggingService {
             category: category.map(|s| s.to_string()),
             message: message.to_string(),
             data,
+            file_location,
         };
 
         // Print to console if enabled

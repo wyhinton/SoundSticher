@@ -20,7 +20,22 @@ macro_rules! send_channel_event {
 macro_rules! emit_logged {
     ($app:expr, $event:expr, $payload:expr) => {{
         use tauri::Manager;
-        use $crate::logging::{LogLevel, LogSystem};
+        use $crate::logging::{FileLocation, LogLevel, LogSystem};
+
+        // Construct absolute file path
+        let workspace_root = env!("CARGO_MANIFEST_DIR");
+        let relative_path = file!();
+        let abs_path = if relative_path.starts_with("src") {
+            // Path is relative to workspace root
+            format!("{}\\{}", workspace_root, relative_path)
+        } else if std::path::Path::new(relative_path).is_absolute() {
+            relative_path.to_string()
+        } else {
+            // Fallback: try to construct from workspace
+            format!("{}\\{}", workspace_root, relative_path)
+        };
+
+        let line_num = line!();
 
         // Integration with backend logging system
         // Retrieve LoggingService from app state and log the event emission
@@ -31,12 +46,19 @@ macro_rules! emit_logged {
                 // Try to serialize payload for the log data field
                 let data = serde_json::to_value(&$payload).ok();
 
-                logger.log(
+                // Create FileLocation struct with file path and line number
+                let file_location = FileLocation {
+                    file_path: abs_path.clone(),
+                    line_number: Some(line_num),
+                };
+
+                logger.log_with_location(
                     LogSystem::EventEmits,
                     LogLevel::Debug,
-                    &format!("Event emitted: {} at {}:{}", $event, file!(), line!()),
+                    &format!("Event emitted: {}", $event),
                     Some(module_path!()),
                     data,
+                    Some(file_location),
                 );
             }
         }

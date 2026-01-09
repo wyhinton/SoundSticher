@@ -157,6 +157,67 @@ fn get_artifacts_directory() -> String {
     artifacts_dir.to_string_lossy().to_string()
 }
 
+/// Open a file in VS Code at a specific line
+#[tauri::command]
+fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<(), String> {
+    use std::process::Command;
+    
+    let path = file_path.replace('\\', "/");
+    
+    let args = if let Some(line) = line_number {
+        vec!["--goto".to_string(), format!("{}:{}", path, line)]
+    } else {
+        vec![path]
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        // Common VS Code installation paths on Windows
+        let possible_paths = vec![
+            std::path::PathBuf::from("C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd"),
+            std::path::PathBuf::from("C:\\Program Files (x86)\\Microsoft VS Code\\bin\\code.cmd"),
+            std::path::PathBuf::from(
+                std::path::PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_default())
+                    .join("Programs\\Microsoft VS Code\\bin\\code.cmd"),
+            ),
+        ];
+
+        // Try each path
+        for code_path in possible_paths {
+            if code_path.exists() {
+                return Command::new(&code_path)
+                    .args(&args)
+                    .spawn()
+                    .and_then(|mut child| {
+                        // Don't wait for the process to finish, just let it run
+                        let _ = child.kill();
+                        Ok(())
+                    })
+                    .map_err(|e| format!("Failed to launch VS Code: {}", e));
+            }
+        }
+
+        // Try using 'code' from PATH as fallback
+        if let Ok(_) = Command::new("code")
+            .args(&args)
+            .spawn()
+        {
+            return Ok(());
+        }
+
+        Err("VS Code not found. Make sure VS Code is installed and 'code' command is available in PATH.".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("code")
+            .args(&args)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in VS Code: {}", e))?;
+        Ok(())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -297,6 +358,7 @@ pub fn run() {
             graph_tests::test_scheduler,
             graph_tests::test_operation_with_params,
             get_artifacts_directory,
+            open_file_in_editor,
             // Waveform cache commands
             waveform::get_waveform,
             waveform::get_waveforms_batch,
