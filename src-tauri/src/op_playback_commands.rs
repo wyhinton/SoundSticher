@@ -408,7 +408,7 @@ pub fn op_playback_play(
                 thread::sleep(Duration::from_millis(50));
                 continue;
             } else if let Some(pause_started_at) = pause_start.take() {
-                // We just resumed from pause - add pause duration to total
+                // We just resumed from pause
                 let pause_duration = pause_started_at.elapsed();
                 total_pause_duration += pause_duration;
                 println!(
@@ -416,13 +416,14 @@ pub fn op_playback_play(
                     pause_duration.as_secs_f32(),
                     total_pause_duration.as_secs_f32()
                 );
+                // Reset tracking_start to now so we measure from resume point, not from initial play start
+                tracking_start = Instant::now();
             }
 
             // Calculate current position (excluding time spent paused)
             let seek_start = *state_clone.seek_position.lock().unwrap();
             let total_elapsed = tracking_start.elapsed();
-            let active_elapsed = total_elapsed - total_pause_duration;
-            let current_position = seek_start + active_elapsed.as_secs_f32();
+            let current_position = seek_start + total_elapsed.as_secs_f32();
 
             // Calculate progress (handle looping)
             let progress = if total_duration_seconds > 0.0 {
@@ -436,28 +437,8 @@ pub fn op_playback_play(
                 0.0
             };
 
-            // Debug output every second to track position calculations
-            static mut LAST_DEBUG_TIME: f32 = 0.0;
-            let current_time = total_elapsed.as_secs_f32();
-            unsafe {
-                if current_time - LAST_DEBUG_TIME >= 1.0 && total_pause_duration.as_secs_f32() > 0.0
-                {
-                    println!(
-                        "DEBUG: Position calc - seek_start: {:.2}s, total_elapsed: {:.2}s, pause_time: {:.2}s, active_elapsed: {:.2}s, current_pos: {:.2}s, progress: {:.1}%",
-                        seek_start,
-                        total_elapsed.as_secs_f32(),
-                        total_pause_duration.as_secs_f32(),
-                        active_elapsed.as_secs_f32(),
-                        current_position,
-                        progress * 100.0
-                    );
-                    LAST_DEBUG_TIME = current_time;
-                }
-            }
-
             // Update state and emit progress
             *state_clone.progress.lock().unwrap() = progress;
-            println!("p: {}", progress);
             emit_logged!(app_clone, "op-timeline-progress", progress);
 
             thread::sleep(Duration::from_millis(16)); // ~60 FPS
