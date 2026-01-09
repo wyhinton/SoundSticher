@@ -37,7 +37,17 @@ export interface FileLocation {
 export interface BackendLogMessage {
   timestamp: number;
   level: 'debug' | 'info' | 'warning' | 'error';
-  system: 'encoder' | 'combine' | 'playback' | 'sorting' | 'cook' | 'graph' | 'waveform' | 'timeline' | 'operation' | 'eventEmits';
+  system:
+    | 'encoder'
+    | 'combine'
+    | 'playback'
+    | 'sorting'
+    | 'cook'
+    | 'graph'
+    | 'waveform'
+    | 'timeline'
+    | 'operation'
+    | 'eventEmits';
   category?: string;
   message: string;
   data?: any;
