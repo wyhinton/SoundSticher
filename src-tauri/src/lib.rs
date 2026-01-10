@@ -341,7 +341,7 @@ pub fn run() {
             timeline_playback::set_volume,
             get_metadata,
             duration_cache::get_duration_cache_stats,
-            duration_service::get_duration_service,
+            duration_service::get_duration,
             duration_service::get_durations_batch,
             duration_service::invalidate_duration,
             duration_service::clear_duration_cache,

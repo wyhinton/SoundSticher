@@ -7,7 +7,15 @@ import { invokeWithPerf } from './performance';
 
 export interface DurationResponse {
   path: string;
-  duration_seconds: number | null;
+  durationSeconds: number | null;
+  cacheHit: boolean;
+}
+
+export interface BatchDurationResponse {
+  items: DurationResponse[];
+  totalCacheHits: number;
+  totalComputed: number;
+  totalErrors: number;
 }
 
 export class DurationCache {
@@ -61,7 +69,7 @@ export class DurationCache {
     if (!result.ok || !result.value) {
       return null;
     }
-    return result.value.duration_seconds ?? null;
+    return result.value.durationSeconds ?? null;
   }
 
   /**
@@ -79,14 +87,19 @@ export class DurationCache {
     }
     if (toFetch.length > 0) {
       try {
-        const batchResult = await invokeWithPerf<DurationResponse[]>('get_durations', {
-          paths: toFetch,
+        const batchResult = await invokeWithPerf<BatchDurationResponse>('get_durations_batch', {
+          request: {
+            paths: toFetch,
+          },
         });
+        console.log(batchResult);
+
         if (batchResult.ok && batchResult.value) {
-          for (const resp of batchResult.value) {
-            if (resp.duration_seconds !== null) {
-              this.cache.set(resp.path, resp.duration_seconds);
-              result.set(resp.path, resp.duration_seconds);
+          for (const resp of batchResult.value.items) {
+            if (resp.durationSeconds !== null) {
+              console.log(resp.path);
+              this.cache.set(resp.path, resp.durationSeconds);
+              result.set(resp.path, resp.durationSeconds);
             } else {
               result.set(resp.path, null);
             }
