@@ -4,6 +4,12 @@
 // - Local caching of waveforms by audio key
 // - Batch requests when switching operations
 // - Reactive stores for timeline items derived from operations
+//
+// IMPORTANT ARCHITECTURE NOTE:
+// - Duration comes from the DurationCache (durationCache.ts), NOT from waveforms
+// - Waveform generation only cares about: file path, width, height, normalize
+// - Layout depends on duration, waveforms are purely visual
+// - Waveforms can arrive out of order, fail, or be re-requested without breaking layout
 
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
@@ -11,6 +17,7 @@ import type { OperationDef, MergeOp } from './operation';
 import { logger } from './logging';
 import { opPlaybackService, type AddOpRequest } from './opPlaybackService';
 import { invokeWithPerf } from './performance';
+import { durationCache } from './durationCache';
 
 // ============================================================================
 // TYPES
@@ -189,7 +196,6 @@ export class WaveformCache {
             normalize: spec.normalize,
           },
         });
-
         if (!batchResult.ok) {
           throw new Error(`Batch fetch failed: ${batchResult.error.message}`);
         }
@@ -318,20 +324,38 @@ export const waveformCache = new WaveformCache(500);
 export interface OperationWaveforms {
   operationName: string | null;
   filePaths: string[];
+  /** Durations loaded from duration cache - source of truth for layout */
+  durations: Map<string, number>;
+  /** Waveforms are purely visual - optional and can arrive independently */
   waveforms: Map<string, Waveform>;
+  /** Total duration in seconds - computed from durations map */
+  totalDuration: number;
+  /** Pixels per second for timeline layout */
+  pxPerSecond: number;
   loading: boolean;
+  loadingWaveforms: boolean;
   error: string | null;
 }
 
 /**
  * Store that holds waveforms for the currently selected operation
+ *
+ * ARCHITECTURE:
+ * 1. Load durations FIRST (from durationCache)
+ * 2. Compute layout (totalDuration, pxPerSecond, item widths)
+ * 3. THEN request waveforms with computed widths
+ * 4. Waveforms populate progressively without affecting layout
  */
 function createOperationWaveformStore() {
   const { subscribe, set, update } = writable<OperationWaveforms>({
     operationName: null,
     filePaths: [],
+    durations: new Map(),
     waveforms: new Map(),
+    totalDuration: 0,
+    pxPerSecond: 10, // Default pixels per second
     loading: false,
+    loadingWaveforms: false,
     error: null,
   });
 
@@ -339,11 +363,21 @@ function createOperationWaveformStore() {
     subscribe,
 
     /**
-     * Load waveforms for an operation and build the playback graph
+     * Load durations and waveforms for an operation
+     *
+     * Flow:
+     * 1. Load durations from duration cache (mandatory for layout)
+     * 2. Compute total duration and layout metrics
+     * 3. Request waveforms with computed widths (optional, visual only)
+     * 4. Build playback graph
      */
-    async loadForOperation(operationName: string, filePaths: string[]): Promise<void> {
+    async loadForOperation(
+      operationName: string,
+      filePaths: string[],
+      timelineWidth: number = 1000
+    ): Promise<void> {
       logger.waveform.operation(
-        `Loading waveforms for operation "${operationName}" (${filePaths.length} files)`
+        `Loading operation "${operationName}" (${filePaths.length} files, ${timelineWidth}px timeline)`
       );
 
       update(state => ({
@@ -351,34 +385,104 @@ function createOperationWaveformStore() {
         operationName,
         filePaths,
         loading: true,
+        loadingWaveforms: false,
         error: null,
       }));
 
       try {
-        const waveforms = await waveformCache.getBatch(filePaths);
+        // STEP 1: Load durations FIRST (from duration cache)
+        logger.waveform.operation(`Step 1: Loading durations for ${filePaths.length} files`);
+        const durationsMap = await durationCache.getBatch(filePaths);
+        console.log(Array.from(durationsMap.values()));
+        console.log(Array.from(durationsMap.entries()));
+        // Convert to our format and compute total
+        const durations = new Map<string, number>();
+        let totalDuration = 0;
+        // console.log(durationsMap.entries())
+        for (const [filePath, duration] of durationsMap.entries()) {
+          console.log(duration);
+          if (duration && duration > 0) {
+            durations.set(filePath, duration);
+            totalDuration += duration;
+          } else {
+            logger.waveform.warning(`No valid duration for ${filePath}, skipping from layout`);
+          }
+        }
+
+        if (totalDuration === 0) {
+          throw new Error('No valid durations found for any files');
+        }
+
+        // STEP 2: Compute layout metrics
+        const pxPerSecond = timelineWidth / totalDuration;
+        logger.waveform.operation(
+          `Step 2: Layout computed - total: ${totalDuration.toFixed(2)}s, ${pxPerSecond.toFixed(2)}px/sec`
+        );
+
+        // Update state with durations (layout is now stable)
         update(state => ({
           ...state,
-          waveforms,
+          durations,
+          totalDuration,
+          pxPerSecond,
           loading: false,
+          loadingWaveforms: true,
+        }));
+
+        // STEP 3: Request waveforms with computed widths
+        logger.waveform.operation(`Step 3: Requesting waveforms with computed widths`);
+
+        // Request waveforms for each file with its computed width
+        const waveformPromises = filePaths.map(async filePath => {
+          const duration = durations.get(filePath);
+          if (!duration) return null;
+
+          const widthPx = Math.max(1, Math.floor(duration * pxPerSecond));
+
+          try {
+            const waveform = await waveformCache.getOrFetch(filePath, {
+              width: widthPx,
+              height: 70,
+              normalize: false,
+            });
+
+            // Update waveforms progressively
+            update(state => {
+              const newWaveforms = new Map(state.waveforms);
+              newWaveforms.set(filePath, waveform);
+              return { ...state, waveforms: newWaveforms };
+            });
+
+            return { filePath, waveform };
+          } catch (error) {
+            logger.waveform.error(`Failed to load waveform for ${filePath}:`, error);
+            return null;
+          }
+        });
+
+        await Promise.allSettled(waveformPromises);
+
+        update(state => ({
+          ...state,
+          loadingWaveforms: false,
         }));
 
         logger.waveform.operation(
-          `Operation "${operationName}" waveforms loaded successfully (${waveforms.size}/${filePaths.length})`
+          `Operation "${operationName}" loaded: ${durations.size} durations, waveforms loading complete`
         );
 
-        // Build playback graph from the MergeOp
+        // STEP 4: Build playback graph (uses durations, not waveforms)
         await buildPlaybackGraphFromMergeOp();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         update(state => ({
           ...state,
           loading: false,
+          loadingWaveforms: false,
           error: errorMessage,
         }));
 
-        logger.waveform.error(
-          `Failed to load waveforms for operation "${operationName}": ${errorMessage}`
-        );
+        logger.waveform.error(`Failed to load operation "${operationName}": ${errorMessage}`);
       }
     },
 
@@ -386,12 +490,16 @@ function createOperationWaveformStore() {
      * Clear the current operation waveforms
      */
     clear(): void {
-      logger.waveform.operation('Clearing current operation waveforms');
+      logger.waveform.operation('Clearing current operation');
       set({
         operationName: null,
         filePaths: [],
+        durations: new Map(),
         waveforms: new Map(),
+        totalDuration: 0,
+        pxPerSecond: 10,
         loading: false,
+        loadingWaveforms: false,
         error: null,
       });
 
@@ -405,6 +513,9 @@ function createOperationWaveformStore() {
 
 /**
  * Build a playback graph from the currently selected MergeOp
+ *
+ * IMPORTANT: Uses duration cache for timing, NOT waveforms
+ * Waveforms are purely visual and should not affect playback timing
  */
 async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   const appStateValue = get(appState);
@@ -435,6 +546,9 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
     return;
   }
 
+  // Get duration store state for cached durations
+  const opWaveformsState = get(operationWaveforms);
+
   let currentTime = 0;
 
   // Iterate through the MergeOp's sources
@@ -449,12 +563,18 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
         // Get the file path from the SampleOp's sources
         const fileSource = sampleOp.sources.find(s => s.type === 'file');
         if (fileSource && fileSource.type === 'file') {
-          // Try to get duration from waveform cache, or use a default
-          const waveform = waveformCache.getCached(fileSource.fileId);
-          const duration = waveform?.duration || 30; // Default duration if no waveform
+          // ✅ Get duration from duration cache, NOT waveform
+          const duration = opWaveformsState.durations.get(fileSource.fileId);
+
+          if (!duration) {
+            logger.waveform.warning(
+              `No duration cached for ${fileSource.fileId}, skipping from playback graph`
+            );
+            continue;
+          }
 
           operations.push({
-            name: source.operationRef, // Use the operation reference name
+            name: source.operationRef,
             filePath: fileSource.fileId,
             startTime: currentTime,
             endTime: currentTime + duration,
@@ -469,9 +589,7 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
           }
         }
       }
-    }
-    // Handle other source types if needed in the future
-    else {
+    } else {
       logger.waveform.warning(`Unsupported source type "${source.type}" in MergeOp, skipping`);
     }
   }
@@ -494,7 +612,6 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
     );
   } catch (error) {
     logger.waveform.error('Failed to build playback graph:', error);
-    // Don't rethrow - waveforms are still valid even if playback graph fails
   }
 }
 
@@ -621,7 +738,14 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
  * appState.timelineItems. It reactively updates when:
  * - The selected operation changes
  * - The operation's sections change
- * - Waveforms are loaded
+ * - Durations are loaded (layout changes)
+ * - Waveforms are loaded (visual updates only)
+ *
+ * ARCHITECTURE:
+ * - Duration from $operationWaveforms.durations -> determines layout (size, startOffset)
+ * - Waveform from $operationWaveforms.waveforms -> purely visual (svgPath)
+ * - Timeline layout is stable as soon as durations are loaded
+ * - Waveforms can arrive later without affecting layout
  */
 export const operationTimelineItems: Readable<TimelineItem[]> = derived(
   [appState, operationWaveforms],
@@ -652,44 +776,58 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
       return [];
     }
 
-    // Calculate total duration based on waveforms
-    let totalDuration = 0;
-    let loadedWaveforms = 0;
-    for (const file of fileItems) {
-      const waveform = $operationWaveforms.waveforms.get(file.path);
-      if (waveform) {
-        totalDuration += waveform.duration;
-        loadedWaveforms++;
-      }
+    // ✅ Use durations from duration cache (source of truth for layout)
+    // NOT waveforms - waveforms are purely visual
+    const { durations, totalDuration } = $operationWaveforms;
+
+    // If durations aren't loaded yet, we can't compute layout
+    if (durations.size === 0 || totalDuration === 0) {
+      logger.waveform.info(
+        `Operation "${selectedOpName}" waiting for durations (${durations.size} loaded)`
+      );
+      return [];
     }
 
+    // Log waveform loading status (informational, doesn't affect layout)
+    const loadedWaveforms = $operationWaveforms.waveforms.size;
     if (loadedWaveforms < fileItems.length) {
       logger.waveform.info(
-        `Operation "${selectedOpName}" has ${loadedWaveforms}/${fileItems.length} waveforms loaded`
+        `Operation "${selectedOpName}" has ${loadedWaveforms}/${fileItems.length} waveforms loaded (layout is stable)`
       );
     }
 
-    // Build timeline items with start offsets
+    // Build timeline items with start offsets based on DURATIONS (not waveforms)
     const items: TimelineItem[] = [];
     let currentOffset = 0;
 
     for (const file of fileItems) {
-      const waveform = $operationWaveforms.waveforms.get(file.path);
-      if (waveform) {
-        const size = totalDuration > 0 ? waveform.duration / totalDuration : 0;
-
-        items.push({
-          type: 'audio-file',
-          id: file.id,
-          fileName: file.path,
-          svgPath: waveform.svgPath,
-          startOffset: currentOffset,
-          size,
-          active: file.active,
-        } as AudioFileTimelineItem);
-
-        currentOffset += size;
+      // ✅ Get duration from duration cache (source of truth)
+      const duration = durations.get(file.path);
+      if (!duration || duration <= 0) {
+        logger.waveform.warning(`No valid duration for ${file.path}, skipping`);
+        continue;
       }
+
+      // ✅ Calculate size from duration (stable layout)
+      const size = duration / totalDuration;
+
+      // Waveform is optional - purely visual
+      const waveform = $operationWaveforms.waveforms.get(file.path);
+
+      items.push({
+        type: 'audio-file',
+        id: file.id,
+        fileName: file.path,
+        // svgPath may be empty/undefined until waveform loads - that's OK
+        svgPath: waveform?.svgPath || '',
+        startOffset: currentOffset,
+        size,
+        active: file.active,
+        // Include duration for potential component use
+        duration,
+      } as AudioFileTimelineItem);
+
+      currentOffset += size;
     }
 
     logger.waveform.info(
@@ -701,24 +839,36 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
 
 /**
  * Derived store for the total duration of the selected operation's audio
+ *
+ * ARCHITECTURE:
+ * - Uses totalDuration from operationWaveforms (computed from duration cache)
+ * - NOT from waveforms - waveforms are purely visual
+ * - Duration is stable as soon as duration cache is loaded
  */
 export const operationDuration: Readable<number> = derived(
   operationWaveforms,
   $operationWaveforms => {
-    let totalDuration = 0;
-    for (const waveform of $operationWaveforms.waveforms.values()) {
-      totalDuration += waveform.duration;
-    }
-    return totalDuration || 30; // Default to 30 seconds if no waveforms
+    // ✅ Use totalDuration from duration cache (source of truth)
+    // This is computed when durations are loaded, before waveforms
+    return $operationWaveforms.totalDuration || 30; // Default to 30 seconds if not loaded
   }
 );
 
 /**
- * Helper to check if waveforms are still loading
+ * Helper to check if durations are still loading (affects layout)
+ * This is the critical loading state - timeline can't render until durations are loaded
  */
 export const operationWaveformsLoading: Readable<boolean> = derived(
   operationWaveforms,
   $operationWaveforms => $operationWaveforms.loading
+);
+
+/**
+ * Helper to check if waveforms are still loading (visual only, doesn't affect layout)
+ */
+export const operationVisualsLoading: Readable<boolean> = derived(
+  operationWaveforms,
+  $operationWaveforms => $operationWaveforms.loadingWaveforms
 );
 
 // ============================================================================

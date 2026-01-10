@@ -193,53 +193,6 @@ pub struct DurationResponse {
 }
 
 #[tauri::command]
-pub async fn get_duration(
-    cache: State<'_, Arc<Mutex<DurationCache>>>,
-    path: String,
-) -> Result<DurationResponse, String> {
-    let mut cache = cache.lock().map_err(|e| format!("Cache lock error: {e}"))?;
-    let duration = cache.get_or_compute(&path);
-    Ok(DurationResponse {
-        path,
-        duration_seconds: duration,
-    })
-}
-
-#[tauri::command]
-pub async fn get_durations(
-    cache: State<'_, Arc<Mutex<DurationCache>>>,
-    paths: Vec<String>,
-) -> Result<Vec<DurationResponse>, String> {
-    let mut cache = cache.lock().map_err(|e| format!("Cache lock error: {e}"))?;
-    let results = cache
-        .get_or_compute_batch(&paths)
-        .into_iter()
-        .map(|(path, duration)| DurationResponse {
-            path,
-            duration_seconds: duration,
-        })
-        .collect();
-    Ok(results)
-}
-
-#[tauri::command]
-pub fn invalidate_duration(
-    cache: State<'_, Arc<Mutex<DurationCache>>>,
-    path: String,
-) -> Result<(), String> {
-    let mut cache = cache.lock().map_err(|e| format!("Cache lock error: {e}"))?;
-    cache.invalidate(&path);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn clear_duration_cache(cache: State<'_, Arc<Mutex<DurationCache>>>) -> Result<(), String> {
-    let mut cache = cache.lock().map_err(|e| format!("Cache lock error: {e}"))?;
-    cache.clear();
-    Ok(())
-}
-
-#[tauri::command]
 pub fn get_duration_cache_stats(
     cache: State<'_, Arc<Mutex<DurationCache>>>,
 ) -> Result<DurationCacheStats, String> {

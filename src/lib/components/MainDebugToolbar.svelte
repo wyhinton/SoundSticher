@@ -12,9 +12,16 @@
   import { onMount, onDestroy } from 'svelte';
   import { debugState, customContextMenu } from '../state/debug.svelte';
   import { timelineDebugMode } from '../state/state.svelte';
+  import { type DurationResponse } from '$lib/state/durationCache';
 
   // Visibility state
   let isVisible = false;
+
+  // Duration test state
+  let durationTestFilePath = '';
+  let durationTestResult: DurationResponse | null = null;
+  let durationTestLoading = false;
+  let durationTestError: string | null = null;
 
   // Global keyboard shortcut handler
   function handleGlobalKeydown(event: KeyboardEvent) {
@@ -328,6 +335,42 @@ Project: Sound Stitch (Tauri + SvelteKit)
   function toggleGroupsLogging() {
     toggleLogging('groupsLog');
   }
+
+  // Duration test function
+  async function testGetDuration() {
+    if (!durationTestFilePath.trim()) {
+      durationTestError = 'Please enter a file path';
+      return;
+    }
+
+    durationTestLoading = true;
+    durationTestError = null;
+    durationTestResult = null;
+
+    try {
+      const result = await invokeWithPerf<DurationResponse>('get_duration', {
+        request: {
+          path: durationTestFilePath,
+        },
+      });
+
+      console.log('🔧 Debug: Duration test result:', durationTestResult);
+    } catch (error) {
+      durationTestError = error instanceof Error ? error.message : String(error);
+      durationTestLoading = false;
+      console.error('🔧 Debug: Duration test error:', error);
+    } finally {
+      durationTestLoading = false;
+    }
+  }
+
+  // Handle Enter key in duration input
+  function handleDurationInputKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      testGetDuration();
+    }
+  }
 </script>
 
 {#if isVisible}
@@ -467,6 +510,51 @@ Project: Sound Stitch (Tauri + SvelteKit)
           <i class="fa fa-cog"></i>
           Prep Check
         </button>
+      </div>
+
+      <div class="button-group">
+        <span class="group-title">Duration Test</span>
+        <div class="duration-test-input-group">
+          <input
+            type="text"
+            class="duration-test-input"
+            placeholder="File path..."
+            bind:value={durationTestFilePath}
+            on:keydown={handleDurationInputKeydown}
+          />
+          <button class="btn btn-xs btn-outline-primary" on:click={testGetDuration}>
+            <i class="fa fa-clock-o"></i>
+            {durationTestLoading ? 'Loading...' : 'Get Duration'}
+          </button>
+        </div>
+        {#if durationTestError}
+          <div class="duration-test-error">
+            <i class="fa fa-exclamation-circle"></i>
+            {durationTestError}
+          </div>
+        {/if}
+        {#if durationTestResult}
+          <div class="duration-test-result">
+            <div class="result-item">
+              <span class="result-label">Path:</span>
+              <span class="result-value">{durationTestResult.path}</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Duration:</span>
+              <span class="result-value">
+                {durationTestResult.durationSeconds !== null
+                  ? `${durationTestResult.durationSeconds.toFixed(2)}s`
+                  : 'N/A'}
+              </span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Cache Hit:</span>
+              <span class="result-value" class:cache-hit={durationTestResult.cacheHit}>
+                {durationTestResult.cacheHit ? 'Yes ✓' : 'No (computed)'}
+              </span>
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -638,6 +726,83 @@ Project: Sound Stitch (Tauri + SvelteKit)
     margin-right: 2px;
   }
 
+  /* Duration test styles */
+  .duration-test-input-group {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+
+  .duration-test-input {
+    flex: 1;
+    font-size: 9px;
+    padding: 2px 4px;
+    border: 1px solid var(--bs-secondary);
+    border-radius: 2px;
+    background: var(--bs-dark);
+    color: var(--bs-light);
+    min-width: 150px;
+  }
+
+  .duration-test-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .duration-test-input::placeholder {
+    color: var(--bs-secondary);
+  }
+
+  .duration-test-error {
+    background: rgba(220, 53, 69, 0.1);
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    color: #ff6b6b;
+    padding: 3px 4px;
+    border-radius: 2px;
+    font-size: 9px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .duration-test-error i {
+    font-size: 8px;
+  }
+
+  .duration-test-result {
+    background: rgba(40, 167, 69, 0.1);
+    border: 1px solid rgba(40, 167, 69, 0.5);
+    padding: 3px 4px;
+    border-radius: 2px;
+    font-size: 9px;
+    margin-top: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .result-item {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .result-label {
+    color: var(--bs-secondary);
+    font-weight: 600;
+    min-width: 80px;
+  }
+
+  .result-value {
+    color: var(--bs-light);
+    font-family: 'Courier New', monospace;
+  }
+
+  .result-value.cache-hit {
+    color: #51cf66;
+  }
+
   /* Responsive adjustments */
   @media (max-width: 768px) {
     .debug-buttons {
@@ -647,6 +812,15 @@ Project: Sound Stitch (Tauri + SvelteKit)
 
     .button-group {
       min-width: auto;
+    }
+
+    .duration-test-input-group {
+      flex-direction: column;
+    }
+
+    .duration-test-input {
+      min-width: auto;
+      width: 100%;
     }
   }
 </style>

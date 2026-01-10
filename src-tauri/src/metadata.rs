@@ -1,20 +1,8 @@
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-
+use crate::Error;
 use lofty::file::AudioFile;
 use lofty::read_from_path;
 use serde::Deserialize;
 use serde::Serialize;
-use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
-use symphonia::core::probe::ProbeResult;
-use symphonia::default::get_probe;
-use tauri::State;
-
-use crate::duration_cache::DurationCache;
-use crate::error::Error;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

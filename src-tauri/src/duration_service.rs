@@ -146,6 +146,7 @@ impl Default for DurationService {
 // ============================================================================
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DurationResponse {
     pub path: String,
     pub duration_seconds: Option<f32>,
@@ -153,6 +154,7 @@ pub struct DurationResponse {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BatchDurationItem {
     pub path: String,
     pub duration_seconds: Option<f32>,
@@ -161,6 +163,7 @@ pub struct BatchDurationItem {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BatchDurationResponse {
     pub items: Vec<BatchDurationItem>,
     pub total_cache_hits: u32,
@@ -189,7 +192,7 @@ pub struct DurationCacheStats {
 
 /// Get a single duration
 #[tauri::command]
-pub async fn get_duration_service(
+pub async fn get_duration(
     service: State<'_, Arc<DurationService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     request: DurationRequest,
