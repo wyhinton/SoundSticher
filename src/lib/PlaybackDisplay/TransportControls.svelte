@@ -1,25 +1,35 @@
 <script lang="ts">
-  import { appState, durationSeconds } from '$lib/state/state.svelte';
-  import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
-  import { invokeWithPerf } from '$lib/state/performance';
+  import {
+    opPlaybackService,
+    opPlaybackState,
+    opPlaybackProgress,
+    opIsPlaying,
+    opIsPaused,
+  } from '$lib/state/opPlaybackService';
+  import { operationDuration } from '$lib/state/waveformCache';
 
   let bufferingProgress = 0;
   let playHeadPosition = 0;
 
-  listen<number>('buffering-progress', e => {
-    bufferingProgress = e.payload;
-  });
+  // Listen to operation playback progress when using operation system
+  $: playHeadPosition = $opPlaybackState.positionSeconds;
 
-  listen<number>('timeline-progress', event => {
-    playHeadPosition = event.payload * $durationSeconds;
-  });
+  // Reactive current duration based on operation system
+  $: currentDuration = $operationDuration;
+
+  // Reactive play state
+  $: isCurrentlyPlaying = $opIsPlaying && !$opIsPaused;
+
+  // Reactive pause state
+  $: isCurrentlyPaused = $opIsPaused;
+
+  // Reactive loop state
+  $: isLoopEnabled = $opPlaybackState.loopEnabled;
 
   // Transport control functions
   async function handlePlay() {
     try {
-      let startPosition = playHeadPosition;
-      await invoke('play_timeline_audio', { start_seconds: playHeadPosition });
+      await opPlaybackService.play(playHeadPosition);
     } catch (error) {
       console.error('Error playing audio:', error);
     }
@@ -27,15 +37,23 @@
 
   async function handlePause() {
     try {
-      await invoke('pause_timeline_audio');
+      await opPlaybackService.pause();
     } catch (error) {
       console.error('Error pausing audio:', error);
     }
   }
 
+  async function handleResume() {
+    try {
+      await opPlaybackService.resume();
+    } catch (error) {
+      console.error('Error resuming audio:', error);
+    }
+  }
+
   async function handleStop() {
     try {
-      await invoke('stop_timeline_audio');
+      await opPlaybackService.stop();
     } catch (error) {
       console.error('Error stopping audio:', error);
     }
@@ -43,7 +61,7 @@
 
   async function handleSkipToStart() {
     try {
-      await invoke('set_timeline_play_position', { position: 0.0 });
+      await opPlaybackService.seek(0);
     } catch (error) {
       console.error('Error skipping to start:', error);
     }
@@ -51,43 +69,33 @@
 
   async function handleSkipToEnd() {
     try {
-      await invoke('set_timeline_play_position', { position: 1.0 });
+      await opPlaybackService.seek(currentDuration);
     } catch (error) {
       console.error('Error skipping to end:', error);
     }
   }
 
-  // Loop and record are UI-only for now
-  let isLoopEnabled = false;
   async function toggleLoop() {
     try {
-      // Toggle the frontend state
-      appState.update(s => {
-        s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
-        return s;
-      });
-
-      // Communicate with backend to toggle the actual LoopingSamplesBuffer
-      await invoke('set_timeline_loop_enabled', {
-        loop_enabled: $appState.isLoopingTimelineAudio,
-      });
+      await opPlaybackService.setLoop(!$opPlaybackState.loopEnabled);
     } catch (error) {
       console.error('Error toggling loop:', error);
-      // Revert the state change if backend call fails
-      appState.update(s => {
-        s.isLoopingTimelineAudio = !s.isLoopingTimelineAudio;
-        return s;
-      });
     }
   }
 
-  listen('audio-playback-ended', e => {
-    if ($appState.isLoopingTimelineAudio) {
-      invokeWithPerf('stop_timeline_audio', { start_seconds: 0 }).then(() => {
-        invokeWithPerf('play_timeline_audio');
-      });
+  // Handle play/pause toggle
+  async function handlePlayPause() {
+    if (isCurrentlyPlaying) {
+      await handlePause();
+    } else if (isCurrentlyPaused) {
+      await handleResume();
+    } else {
+      await handlePlay();
     }
-  });
+  }
+
+  // No longer need to listen for legacy audio playback events
+  // The operation system handles looping internally
 </script>
 
 {#snippet transportButton(
@@ -102,6 +110,7 @@
     class="btn btn-transport {buttonClass}"
     class:active
     {title}
+    aria-label={title}
     on:click={onclick}
     {disabled}
   >
@@ -112,23 +121,11 @@
 <!-- Audacity-style Transport Controls -->
 <div class="transport-controls d-flex align-items-center gap-2 py-2 px-2">
   {@render transportButton('fa-backward-step', 'Skip to Start', handleSkipToStart)}
-  {@render transportButton('fa-play', 'Play', handlePlay, 'btn-play', $appState.playingCombined)}
-  {@render transportButton(
-    'fa-pause',
-    'Pause',
-    handlePause,
-    'btn-pause',
-    !$appState.playingCombined && playHeadPosition > 0
-  )}
+  {@render transportButton('fa-play', 'Play', handlePlayPause, 'btn-play', isCurrentlyPlaying)}
+  {@render transportButton('fa-pause', 'Pause', handlePause, 'btn-pause', isCurrentlyPaused)}
   {@render transportButton('fa-stop', 'Stop', handleStop, 'btn-stop')}
   {@render transportButton('fa-forward-step', 'Skip to End', handleSkipToEnd)}
-  {@render transportButton(
-    'fa-repeat',
-    'Loop',
-    toggleLoop,
-    'btn-loop',
-    $appState.isLoopingTimelineAudio
-  )}
+  {@render transportButton('fa-repeat', 'Loop', toggleLoop, 'btn-loop', isLoopEnabled)}
 </div>
 
 <style>

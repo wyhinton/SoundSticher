@@ -1,12 +1,17 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { appState } from '../state/state.svelte';
+  import {
+    appState,
+    callSiteTrackingEnabled,
+    toggleCallSiteTrackingEnabled,
+  } from '../state/state.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
   import { audioFileStateManager } from '../state/stateSynchronization';
   import { loggingState } from '../state/logging';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  import { debugState, timelineDebugMode, customContextMenu } from '../state/debug.svelte';
+  import { debugState, customContextMenu } from '../state/debug.svelte';
+  import { timelineDebugMode } from '../state/state.svelte';
 
   // Visibility state
   let isVisible = false;
@@ -34,24 +39,12 @@
     window.removeEventListener('keydown', handleGlobalKeydown);
   });
 
-  // Debug functions
+  // Debug functions - updated to work with operation-specific sections
   async function triggerNoActiveSamples() {
     try {
-      // Deactivate all files to trigger the no active samples event
-      const currentState = get(appState);
-      const allFileIds = currentState.sections.flatMap(section =>
-        section.files.map(file => file.id)
-      );
-
-      if (allFileIds.length > 0) {
-        await audioFileStateManager.setFilesActive(allFileIds, false);
-        console.log('🔧 Debug: Deactivated all files');
-
-        // Trigger combine to emit no-active-samples event
-        await invokeWithPerf('combine_all_cached_samples_with_custom_order');
-      } else {
-        console.log('🔧 Debug: No files to deactivate');
-      }
+      // Note: This function now needs to work with current operation sections
+      console.log('🔧 Debug: triggerNoActiveSamples - needs operation context');
+      // Implementation depends on having an active operation selected
     } catch (error) {
       console.error('Debug: Failed to trigger no active samples:', error);
     }
@@ -59,20 +52,9 @@
 
   async function reactivateAllFiles() {
     try {
-      const currentState = get(appState);
-      const allFileIds = currentState.sections.flatMap(section =>
-        section.files.map(file => file.id)
-      );
-
-      if (allFileIds.length > 0) {
-        await audioFileStateManager.setFilesActive(allFileIds, true);
-        console.log('🔧 Debug: Reactivated all files');
-
-        // Trigger combine to update timeline
-        await invokeWithPerf('combine_all_cached_samples_with_custom_order');
-      } else {
-        console.log('🔧 Debug: No files to reactivate');
-      }
+      // Note: This function now needs to work with current operation sections
+      console.log('🔧 Debug: reactivateAllFiles - needs operation context');
+      // Implementation depends on having an active operation selected
     } catch (error) {
       console.error('Debug: Failed to reactivate all files:', error);
     }
@@ -82,12 +64,11 @@
     try {
       appState.update(state => ({
         ...state,
-        sections: [],
         timelineItems: [],
         combinedFile: undefined,
         hasNoActiveSamples: false,
       }));
-      console.log('🔧 Debug: Cleared app state');
+      console.log('🔧 Debug: Cleared app state (sections now managed per operation)');
     } catch (error) {
       console.error('Debug: Failed to clear app state:', error);
     }
@@ -118,10 +99,11 @@
 
   async function forceStateSync() {
     try {
-      console.log('🔧 Debug: Forcing state synchronization...');
-      const currentState = get(appState);
-      await updateInputs(currentState.sections);
-      console.log('🔧 Debug: State sync completed');
+      console.log('🔧 Debug: Force state sync now requires operation context');
+      // Note: updateInputs now needs to be called with operation-specific sections
+      // const currentState = get(appState);
+      // await updateInputs(currentOperationSections);
+      console.log('🔧 Debug: State sync requires active operation');
     } catch (error) {
       console.error('Debug: Failed to force state sync:', error);
     }
@@ -335,6 +317,13 @@ Project: Sound Stitch (Tauri + SvelteKit)
     console.log(`🔧 Debug: ${categoryKey} toggled to:`, newState[categoryKey]);
   }
 
+  // Toggle call site tracking for performance metrics
+  function toggleCallSiteTracking() {
+    toggleCallSiteTrackingEnabled();
+    const newValue = get(callSiteTrackingEnabled);
+    console.log(`🔧 Debug: Call site tracking toggled to:`, newValue);
+  }
+
   // Keep the specific function for backward compatibility, but use the generic one
   function toggleGroupsLogging() {
     toggleLogging('groupsLog');
@@ -416,8 +405,8 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <span class="group-title">Timeline</span>
         <button
           class="btn btn-xs"
-          class:btn-outline-success={!$debugState.timelineDebugMode}
-          class:btn-success={$debugState.timelineDebugMode}
+          class:btn-outline-success={!$timelineDebugMode}
+          class:btn-success={$timelineDebugMode}
           on:click={timelineDebugMode.toggle}
         >
           <i class="fa fa-bug"></i>
@@ -452,6 +441,16 @@ Project: Sound Stitch (Tauri + SvelteKit)
             {category.label}
           </button>
         {/each}
+        <button
+          class="btn btn-xs"
+          class:btn-outline-warning={!$callSiteTrackingEnabled}
+          class:btn-warning={$callSiteTrackingEnabled}
+          on:click={toggleCallSiteTracking}
+          title="Toggle call site tracking for performance metrics"
+        >
+          <i class="fa fa-map-marker"></i>
+          Call Sites
+        </button>
       </div>
 
       <div class="button-group">
@@ -474,9 +473,11 @@ Project: Sound Stitch (Tauri + SvelteKit)
     <div class="debug-info">
       <small>
         <i class="fa fa-info-circle"></i>
-        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$debugState.timelineDebugMode
+        DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$timelineDebugMode
           ? 'ON'
-          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} |
+          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Call Sites: {$callSiteTrackingEnabled
+          ? 'ON'
+          : 'OFF'} |
         {#each loggingCategories as category}
           {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
         {/each}

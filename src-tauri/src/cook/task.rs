@@ -1,6 +1,7 @@
 // Cook task definition and management
 
 use crate::graph::OpId;
+use crate::util::id_utils;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime};
@@ -50,19 +51,16 @@ pub struct CookTask {
 
 /// Task priority levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum CookTaskPriority {
     Low = 0,
+    #[default]
     Normal = 1,
     High = 2,
     Critical = 3,
     Immediate = 4,
 }
 
-impl Default for CookTaskPriority {
-    fn default() -> Self {
-        CookTaskPriority::Normal
-    }
-}
 
 impl CookTaskPriority {
     /// Get numeric value for priority comparison
@@ -288,7 +286,7 @@ impl CookTask {
         format!(
             "{} ({}): {:?} - {}",
             self.operation_type,
-            self.op_id.data().as_ffi(),
+            id_utils::friendly_id(self.op_id, "task"),
             self.status,
             if let Some(label) = self.metadata.get("label") {
                 label.clone()

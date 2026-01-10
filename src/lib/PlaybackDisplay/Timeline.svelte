@@ -2,8 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
   import { createEventDispatcher } from 'svelte';
-  import { appState, durationSeconds } from '../state/state.svelte';
-  import { listen, TauriEvent } from '@tauri-apps/api/event';
+  import { appState } from '../state/state.svelte';
   import {
     getItemSize,
     isItemActive,
@@ -16,7 +15,6 @@
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
   import DropIndicator from './Timeline/DropIndicator.svelte';
-  import { invokeWithPerf, updateInputs } from '../state/performance';
   import { audioFileStateManager } from '../state/stateSynchronization';
   import {
     selectionService,
@@ -25,16 +23,24 @@
     previewActive,
   } from '../state/selection.svelte';
   import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
-  import { debugState, timelineDebugMode } from '../state/debug.svelte';
+  import { timelineDebugMode } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
+  import {
+    operationTimelineItems,
+    operationDuration,
+    operationWaveformsLoading,
+    initWaveformService,
+  } from '../state/waveformCache';
+  // Import operation playback service
+  import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
 
   import {
     DragDropManager,
     type DragStartEvent,
     type DragMoveEvent,
     type DragEndEvent,
-    type DragDropState, // <-- add this type export in DragDropManager.ts
-    DEFAULT_DD, // <-- export this from DragDropManager.ts (recommended)
+    type DragDropState,
+    DEFAULT_DD,
   } from './Timeline/DragDropManager';
 
   const dispatch = createEventDispatcher();
@@ -67,9 +73,14 @@
   let playHeadPosition = 0;
   let playHeadX = 0;
 
-  // Initialize managers when dependencies change
-  $: if (width > 0 && $durationSeconds > 0) {
+  // Initialize managers once when component mounts and DOM is ready
+  $: if (width > 0 && currentDuration > 0 && !d3Manager) {
     initializeManagers();
+  }
+
+  // Update managers when props change (instead of re-initializing)
+  $: if (d3Manager && (width > 0 || currentDuration > 0)) {
+    updateManagers();
   }
 
   // Drag and drop state
@@ -77,7 +88,11 @@
   let arrowHeadSize = 6;
   const debugShowDropLine = false;
 
-  // ✅ reactive drag-drop state (now driven by store subscription)
+  // Track if we're currently scrolling to prevent keyboard events during scroll
+  let isScrolling = false;
+  let scrollTimeout: number | null = null;
+
+  // Reactive drag-drop state (driven by store subscription)
   let dragDropState: DragDropState = DEFAULT_DD;
 
   // These locals drive your template
@@ -94,7 +109,23 @@
   const DEBUG_MODE = false;
   const timelineXAxisBg = '#1d1c23';
 
-  // Selection state - now derived from the selection service
+  // ============================================================================
+  // TIMELINE ITEMS - Operation-based system
+  // ============================================================================
+
+  // Reactive timeline items from operation system
+  $: timelineItems = $operationTimelineItems;
+
+  // Reactive duration from operation system
+  $: currentDuration = $operationDuration;
+
+  // Loading state for operation waveforms
+  $: isLoadingWaveforms = $operationWaveformsLoading;
+
+  // Check if we have no active samples
+  $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;
+
+  // Selection state - derived from the selection service
   $: selectedSegments = $selectedIds;
   $: previewSegments = $previewIds;
   $: isPreviewActive = $previewActive;
@@ -147,20 +178,20 @@
   function initializeManagers() {
     if (!svgEl || !axisGroup || !pathGroup || !container) return;
 
-    // Clean up existing managers
-    if (d3Manager) d3Manager.destroy();
-
-    if (dragDropManager) dragDropManager.destroy();
-
-    // ✅ Clean up previous subscription (important since you recreate the manager)
-    unsubscribeDragDrop?.();
-    unsubscribeDragDrop = null;
+    // DEBUG: Log initialization
+    console.log('🔧 Timeline: Initializing managers with:', {
+      currentDuration,
+      width,
+      operationTimelineItems: $operationTimelineItems?.length || 0,
+      operationDuration: $operationDuration,
+      isLoadingWaveforms,
+    });
 
     // Create new D3 manager
     d3Manager = new D3TimelineManager({
       width,
       height,
-      durationSeconds: $durationSeconds,
+      durationSeconds: currentDuration,
       originalPathWidth,
       onTransformChange: transform => {
         currentTransform = transform;
@@ -180,7 +211,7 @@
     // Initialize with current selection
     dragDropManager.setSelectedSegments(selectedSegments);
 
-    // ✅ Subscribe to manager's state store (Option A)
+    // ✅ Subscribe to manager's state store
     unsubscribeDragDrop = dragDropManager.state.subscribe(s => {
       dragDropState = s;
     });
@@ -191,20 +222,30 @@
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
+  function updateManagers() {
+    if (!d3Manager) return;
+
+    // Update D3 manager options
+    d3Manager.updateOptions({ width, durationSeconds: currentDuration });
+    scaleX = d3Manager.getScaleX();
+    xScale = d3Manager.getXScale() ?? xScale;
+    playHeadX = d3Manager.getPlayheadX(playHeadPosition);
+
+    // Update drag drop manager if needed
+    if (dragDropManager) {
+      dragDropManager.setSelectedSegments(selectedSegments);
+    }
+  }
+
   // Update playhead position when it changes
   $: if (d3Manager) {
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
-  // Update manager options when width or duration changes
-  $: if (d3Manager && (width > 0 || $durationSeconds > 0)) {
-    d3Manager.updateOptions({ width, durationSeconds: $durationSeconds });
-    scaleX = d3Manager.getScaleX();
+  // Listen to operation playback progress
+  $: if ($opPlaybackProgress !== undefined) {
+    playHeadPosition = $opPlaybackProgress * currentDuration;
   }
-
-  listen<number>('timeline-progress', event => {
-    playHeadPosition = event.payload * $durationSeconds;
-  });
 
   function handleClick(event: MouseEvent) {
     if (!d3Manager) return;
@@ -220,23 +261,38 @@
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-      invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+
+      // Use operation playback service for seeking
+      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
       return;
     }
 
     // Check for segment clicks only if not in x-axis area
-    const clickedSegmentIndex = $appState?.timelineItems
-      ? d3Manager.findClickedSegment(relativeX, $appState.timelineItems as TimelineItem[])
-      : null;
+    const clickedSegmentIndex =
+      timelineItems.length > 0
+        ? d3Manager.findClickedSegment(relativeX, timelineItems as TimelineItem[])
+        : null;
 
     if (clickedSegmentIndex === null) {
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-      invokeWithPerf('set_timeline_play_position', { position: clickedTime });
+
+      // Use operation playback service for seeking
+      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
     }
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    // Prevent repeated calls when key is held down
+    if (event.repeat) {
+      return;
+    }
+
+    // Don't process keyboard events if we're currently dragging or scrolling
+    if (isDragging || isScrolling) {
+      return;
+    }
+
     // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
     if (
       typeof import.meta !== 'undefined' &&
@@ -249,7 +305,7 @@
       event.preventDefault();
       event.stopPropagation();
       timelineDebugMode.toggle();
-      console.log('🔧 Timeline: Toggled debug mode:', !$debugState.timelineDebugMode);
+      console.log('🔧 Timeline: Toggled debug mode:', !$timelineDebugMode);
       return;
     }
 
@@ -258,26 +314,63 @@
         return;
       event.preventDefault();
 
-      const selectedIds: string[] = [];
-      if ($appState?.timelineItems) {
+      const selectedFileIds: string[] = [];
+      if (timelineItems.length > 0) {
         Array.from(selectedSegments).forEach(index => {
-          if (index < $appState.timelineItems.length) {
-            const item = $appState.timelineItems[index];
-            if (item && isAudioFileItem(item)) selectedIds.push(item.id);
+          if (index < timelineItems.length) {
+            const item = timelineItems[index];
+            if (item && isAudioFileItem(item)) selectedFileIds.push(item.id);
           }
         });
       }
 
-      if (selectedIds.length > 0) {
+      if (selectedFileIds.length > 0) {
         audioFileStateManager
-          .setFilesActive(selectedIds, false)
+          .setFilesActive(selectedFileIds, false)
           .then(() => handleClearSelection())
           .catch(error => console.error('Failed to deactivate segments:', error));
       }
     }
   }
 
+  function handleWheel(event: WheelEvent) {
+    // Set scrolling flag when wheel events occur
+    isScrolling = true;
+
+    // Clear any existing timeout
+    if (scrollTimeout !== null) {
+      clearTimeout(scrollTimeout);
+    }
+
+    // Reset scrolling flag after a short delay
+    scrollTimeout = setTimeout(() => {
+      isScrolling = false;
+      scrollTimeout = null;
+    }, 150) as unknown as number;
+  }
+
   onMount(() => {
+    // DEBUG: Log component mount state
+    console.log('🔧 Timeline: Component mounted with:', {
+      operationTimelineItems: $operationTimelineItems?.length || 0,
+      operationDuration: $operationDuration,
+      operationWaveformsLoading: $operationWaveformsLoading,
+    });
+
+    // Initialize waveform service
+    console.log('🔧 Timeline: Initializing waveform service...');
+    try {
+      initWaveformService();
+      console.log('🔧 Timeline: Waveform service initialized');
+    } catch (error) {
+      console.error('🔧 Timeline: Failed to initialize waveform service:', error);
+    }
+
+    // Initialize the operation playback progress listener
+    opPlaybackService.initProgressListener().catch(err => {
+      console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
+    });
+
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
     });
@@ -286,15 +379,55 @@
 
     return () => {
       resizeObserver.disconnect();
-      if (d3Manager) d3Manager.destroy();
-      if (dragDropManager) dragDropManager.destroy();
-      unsubscribeDragDrop?.();
+
+      // Clean up managers
+      if (d3Manager) {
+        d3Manager.destroy();
+        d3Manager = null;
+      }
+
+      if (dragDropManager) {
+        dragDropManager.destroy();
+        dragDropManager = null;
+      }
+
+      // Clean up subscriptions
+      if (unsubscribeDragDrop) {
+        unsubscribeDragDrop();
+        unsubscribeDragDrop = null;
+      }
+
+      // Clean up operation playback listener
+      opPlaybackService.cleanupProgressListener();
     };
   });
 
   onDestroy(() => {
-    // in case the component is destroyed without onMount cleanup firing as expected
-    unsubscribeDragDrop?.();
+    // Clean up managers if component is destroyed without onMount cleanup firing
+    if (d3Manager) {
+      d3Manager.destroy();
+      d3Manager = null;
+    }
+
+    if (dragDropManager) {
+      dragDropManager.destroy();
+      dragDropManager = null;
+    }
+
+    // Clean up subscriptions
+    if (unsubscribeDragDrop) {
+      unsubscribeDragDrop();
+      unsubscribeDragDrop = null;
+    }
+
+    // Clean up operation playback listener
+    opPlaybackService.cleanupProgressListener();
+
+    // Clear any pending scroll timeout
+    if (scrollTimeout !== null) {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = null;
+    }
   });
 
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
@@ -327,11 +460,19 @@
     {currentTransform.k.toFixed(2)}x
   </div>
   <!-- No Active Samples Message -->
-  {#if $appState?.hasNoActiveSamples}
+  {#if hasNoActiveSamples}
     <div class="no-active-samples-message">
-      <div class="message-content">No active samples to display</div>
+      <div class="message-content">
+        {#if isLoadingWaveforms}
+          Loading waveforms...
+        {:else}
+          No active samples to display
+        {/if}
+      </div>
       <div class="message-subtitle">
-        Activate audio files from the Sources panel to see them here
+        {#if !isLoadingWaveforms}
+          Activate audio files from the Sources panel to see them here
+        {/if}
       </div>
     </div>
   {/if}
@@ -344,6 +485,7 @@
       handleClick(e);
     }}
     on:keydown={handleKeyDown}
+    on:wheel={handleWheel}
     bind:this={container}
     role="application"
     aria-label="Timeline"
@@ -381,10 +523,10 @@
 
           <Playhead {playHeadX} {currentTransform} />
 
-          <!-- {#if $appState?.timelneItems} -->
+          <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
-            {#if $appState?.timelineItems.length > 0}
-              {#each $appState?.timelineItems as timelineItem, i}
+            {#if timelineItems.length > 0}
+              {#each timelineItems as timelineItem, i}
                 <TimelineSegment
                   {scaleX}
                   index={i}
@@ -431,10 +573,10 @@
           </g>
         </g>
       </g>
-      {#if $appState?.timelineItems.length > 0}
+      {#if timelineItems.length > 0}
         <LabelLayer
           {scaleX}
-          items={$appState?.timelineItems}
+          items={timelineItems}
           {originalPathWidth}
           {currentTransform}
           {isDragging}
@@ -459,7 +601,7 @@
   </div>
 
   <!-- Debug Panel -->
-  {#if $debugState.timelineDebugMode}
+  {#if $timelineDebugMode}
     <TimelineDebugPanel
       {isDragging}
       {draggedSegmentIndex}
@@ -469,7 +611,7 @@
       {scaleX}
       {playHeadPosition}
       {currentTransform}
-      timelineItems={$appState?.timelineItems || []}
+      {timelineItems}
       {originalPathWidth}
       {selectedSegments}
       {lastSelectedIndex}
@@ -479,9 +621,6 @@
 </div>
 
 <style>
-  .waveform-svg-parent {
-    /* Timeline waveform container */
-  }
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
   }
@@ -490,7 +629,7 @@
     height: auto;
   }
 
-  g.axis text {
+  :global(g.axis text) {
     font-family: monospace;
     font-size: 10px; /* optional: adjust as needed */
   }

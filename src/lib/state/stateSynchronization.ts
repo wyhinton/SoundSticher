@@ -1,5 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
-import { appState, type AppState } from './state.svelte';
+import { appState, type AppState, getCurrentOperationSections } from './state.svelte';
 import { invokeWithPerf, updateInputs } from './performance';
 import { get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
@@ -28,14 +28,37 @@ export function initializeStateSynchronization() {
 
 /**
  * Updates a specific property of an audio file in both sections and timeline items
+ * Also updates files within operation sections
  */
 function updateAudioFileProperty(fileId: string, field: string, value: any) {
   appState.update(state => {
-    // Update in sections
+    // Update in global sections (legacy)
     const updatedSections = state.sections.map(section => ({
       ...section,
       files: section.files.map(file => (file.id === fileId ? { ...file, [field]: value } : file)),
     }));
+
+    // Update in operation sections
+    const updatedOperations = state.operations
+      ? {
+          ...state.operations,
+          defs: Object.fromEntries(
+            Object.entries(state.operations.defs).map(([name, def]) => [
+              name,
+              {
+                ...def,
+                sections:
+                  def.sections?.map(section => ({
+                    ...section,
+                    files: section.files.map(file =>
+                      file.id === fileId ? { ...file, [field]: value } : file
+                    ),
+                  })) ?? [],
+              },
+            ])
+          ),
+        }
+      : state.operations;
 
     // Update in timeline items if they exist
     const updatedTimelineItems = state.timelineItems?.map(item =>
@@ -45,6 +68,7 @@ function updateAudioFileProperty(fileId: string, field: string, value: any) {
     return {
       ...state,
       sections: updatedSections,
+      operations: updatedOperations,
       timelineItems: updatedTimelineItems || state.timelineItems,
     };
   });
@@ -76,7 +100,8 @@ export class AudioFileStateManager {
       this.updateFrontendFilesActive(fileIds, !active);
       throw error;
     }
-    updateInputs(get(appState).sections);
+    // Update inputs with current operation sections
+    updateInputs(getCurrentOperationSections());
   }
 
   /**
@@ -146,12 +171,27 @@ export class AudioFileStateManager {
 
   /**
    * Finds a file in the current app state by ID
+   * Searches both global sections and operation sections
    */
   private findFileInState(state: AppState, fileId: string) {
+    // Search in global sections
     for (const section of state.sections) {
       const file = section.files.find(f => f.id === fileId);
       if (file) return file;
     }
+
+    // Search in operation sections
+    if (state.operations?.defs) {
+      for (const def of Object.values(state.operations.defs)) {
+        if (def.sections) {
+          for (const section of def.sections) {
+            const file = section.files.find(f => f.id === fileId);
+            if (file) return file;
+          }
+        }
+      }
+    }
+
     return null;
   }
 }

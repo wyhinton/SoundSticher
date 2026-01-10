@@ -1,30 +1,43 @@
-use log;
+#![allow(dead_code)]
+
 use std::collections::HashMap;
-use std::fs::{metadata, File};
-use std::io::BufReader;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::fs::metadata;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use std::{fs, thread};
 use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::duration_service::DurationService;
 use crate::error::Error;
+use crate::graph::OperationGraph;
 use crate::logging::{LogSystem, LoggingConfig, LoggingService};
 use crate::metadata::get_metadata;
 use crate::state::AppState;
+use crate::waveform::WaveformService;
+
+mod artifacts;
 mod audio_manager;
 mod combine;
+mod cook;
+mod duration_cache;
+mod duration_service;
 mod encoder;
 mod error;
+mod graph;
+mod graph_tests;
 mod logging;
 mod looping_samples_buffer;
 mod macros;
 mod metadata;
+mod op_playback_commands;
+mod ops;
+mod playback;
 mod sample_playback;
 mod sorting;
 mod state;
 mod timeline_playback;
+mod util;
+mod waveform;
 
 pub struct Song {
     pub title: String,
@@ -136,9 +149,73 @@ fn get_logging_config(
 }
 
 #[tauri::command]
-fn open_in_explorer(state: State<'_, Arc<AppState>>, file_to_open: String) {
+fn open_in_explorer(_state: State<'_, Arc<AppState>>, file_to_open: String) {
     println!("SHOWING IN EXP");
     showfile::show_path_in_file_manager(file_to_open);
+}
+
+#[tauri::command]
+fn get_artifacts_directory() -> String {
+    let artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+    artifacts_dir.to_string_lossy().to_string()
+}
+
+/// Open a file in VS Code at a specific line
+#[tauri::command]
+fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<(), String> {
+    use std::process::Command;
+
+    let path = file_path.replace('\\', "/");
+
+    let args = if let Some(line) = line_number {
+        vec!["--goto".to_string(), format!("{}:{}", path, line)]
+    } else {
+        vec![path]
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        // Common VS Code installation paths on Windows
+        let possible_paths = vec![
+            std::path::PathBuf::from("C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd"),
+            std::path::PathBuf::from("C:\\Program Files (x86)\\Microsoft VS Code\\bin\\code.cmd"),
+            std::path::PathBuf::from(
+                std::path::PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_default())
+                    .join("Programs\\Microsoft VS Code\\bin\\code.cmd"),
+            ),
+        ];
+
+        // Try each path
+        for code_path in possible_paths {
+            if code_path.exists() {
+                return Command::new(&code_path)
+                    .args(&args)
+                    .spawn()
+                    .and_then(|mut child| {
+                        // Don't wait for the process to finish, just let it run
+                        let _ = child.kill();
+                        Ok(())
+                    })
+                    .map_err(|e| format!("Failed to launch VS Code: {}", e));
+            }
+        }
+
+        // Try using 'code' from PATH as fallback
+        if let Ok(_) = Command::new("code").args(&args).spawn() {
+            return Ok(());
+        }
+
+        Err("VS Code not found. Make sure VS Code is installed and 'code' command is available in PATH.".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("code")
+            .args(&args)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in VS Code: {}", e))?;
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -152,7 +229,69 @@ pub fn run() {
             // Initialize logging service
             let mut logging_service = LoggingService::new();
             logging_service.set_app_handle(app.handle().clone());
-            app.manage(Arc::new(Mutex::new(logging_service)));
+            let logging_service = Arc::new(Mutex::new(logging_service));
+            app.manage(logging_service.clone());
+
+            // Initialize cook scheduler
+            {
+                use crate::artifacts::ArtifactStorage;
+                use crate::cook::{CookScheduler, SchedulerConfig};
+                use crate::graph::{InvalidationManager, OperationNodeManager};
+                use crate::ops::{MergeOperation, OperationRegistry};
+
+                // Create operation registry and register operations
+                let mut operation_registry = OperationRegistry::new();
+                operation_registry.register(MergeOperation::new());
+                let operation_registry = Arc::new(operation_registry);
+
+                // Create other components
+                let operation_graph = OperationGraph::new();
+                let node_manager = Arc::new(Mutex::new(OperationNodeManager::new()));
+                let invalidation_manager =
+                    Arc::new(Mutex::new(InvalidationManager::new(operation_graph)));
+
+                // Create artifact storage
+                let storage_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+                let artifact_storage = match ArtifactStorage::new(storage_dir, 100 * 1024 * 1024) {
+                    Ok(storage) => Arc::new(storage),
+                    Err(e) => {
+                        eprintln!("Failed to create artifact storage: {}", e);
+                        return Err(Box::new(e));
+                    }
+                };
+
+                // Create scheduler configuration
+                let config = SchedulerConfig::default();
+
+                // Extract logger from mutex for scheduler
+                let logger = {
+                    if let Ok(_service) = logging_service.lock() {
+                        // Create a new logging service instance for the scheduler
+                        let mut scheduler_logger = LoggingService::new();
+                        scheduler_logger.set_app_handle(app.handle().clone());
+                        Arc::new(scheduler_logger)
+                    } else {
+                        Arc::new(LoggingService::new())
+                    }
+                };
+
+                // Create and start scheduler
+                let mut scheduler = CookScheduler::new(
+                    operation_registry,
+                    node_manager,
+                    invalidation_manager,
+                    artifact_storage,
+                    config,
+                    logger,
+                );
+
+                if let Err(e) = scheduler.start() {
+                    eprintln!("Failed to start scheduler: {}", e);
+                    return Err(Box::new(e));
+                }
+
+                app.manage(Arc::new(Mutex::new(scheduler)));
+            }
 
             // Initialize app state
             app.manage(Arc::new(AppState {
@@ -169,11 +308,20 @@ pub fn run() {
                 seek_start_time: Mutex::new(0.0),
             }));
 
+            // Initialize waveform cache service
+            app.manage(Arc::new(WaveformService::new()));
+
+            // Initialize duration service for proportional waveform width calculation
+            app.manage(Arc::new(DurationService::new()));
+
+            // Initialize operation-based playback state
+            app.manage(Arc::new(op_playback_commands::OpPlaybackState::new()));
+
             #[cfg(debug_assertions)] // Only include this code on debug builds
             {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
-                app.listen("download-started", |event| {});
+                app.listen("download-started", |_event| {});
             }
             #[cfg(not(debug_assertions))] // Only for release builds
             {
@@ -192,6 +340,15 @@ pub fn run() {
             timeline_playback::stop_timeline_audio,
             timeline_playback::set_volume,
             get_metadata,
+            duration_cache::get_duration,
+            duration_cache::get_durations,
+            duration_cache::invalidate_duration,
+            duration_cache::get_duration_cache_stats,
+            duration_cache::clear_duration_cache,
+            duration_service::get_duration_service,
+            duration_service::get_durations_batch,
+            duration_service::invalidate_duration,
+            duration_service::clear_duration_cache,
             combine::test_async,
             combine::update_inputs,
             combine::combine_all_cached_samples,
@@ -209,6 +366,29 @@ pub fn run() {
             sorting::update_sorting,
             update_logging_config,
             get_logging_config,
+            graph_tests::test_operation,
+            graph_tests::test_scheduler,
+            graph_tests::test_operation_with_params,
+            get_artifacts_directory,
+            open_file_in_editor,
+            // Waveform cache commands
+            waveform::get_waveform,
+            waveform::get_waveforms_batch,
+            waveform::invalidate_waveform,
+            waveform::clear_waveform_cache,
+            waveform::get_waveform_cache_stats,
+            waveform::get_waveforms_for_operation,
+            // Operation-based playback commands
+            op_playback_commands::op_playback_build_graph,
+            op_playback_commands::op_playback_play,
+            op_playback_commands::op_playback_pause,
+            op_playback_commands::op_playback_resume,
+            op_playback_commands::op_playback_stop,
+            op_playback_commands::op_playback_seek,
+            op_playback_commands::op_playback_get_progress,
+            op_playback_commands::op_playback_set_volume,
+            op_playback_commands::op_playback_set_loop,
+            op_playback_commands::op_playback_clear_graph,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()

@@ -17,14 +17,15 @@ pub enum LogLevel {
 pub enum LogSystem {
     Encoder,
     Combine,
-    #[allow(dead_code)] // For future use
     Playback,
-    #[allow(dead_code)] // For future use
     Sorting,
-    #[allow(dead_code)] // For future use
     Cook,
-    #[allow(dead_code)] // For future use
     Graph,
+    Waveform,
+    Duration,  // Add duration system
+    Timeline,  // Add timeline system
+    Operation, // Add operation system
+    EventEmits,
 }
 
 /// A log message that will be sent to the frontend
@@ -37,6 +38,15 @@ pub struct LogMessage {
     pub category: Option<String>,
     pub message: String,
     pub data: Option<serde_json::Value>,
+    pub file_location: Option<FileLocation>,
+}
+
+/// File location information for opening in editor
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLocation {
+    pub file_path: String,
+    pub line_number: Option<u32>,
 }
 
 /// Configuration for which systems should log
@@ -46,7 +56,12 @@ pub struct LoggingConfig {
     pub combine_enabled: bool,
     pub playback_enabled: bool,
     pub sorting_enabled: bool,
-    pub console_output: bool, // Whether to also print to console
+    pub waveform_enabled: bool,
+    pub duration_enabled: bool,  // Add duration logging
+    pub timeline_enabled: bool,  // Add timeline logging
+    pub operation_enabled: bool, // Add operation logging
+    pub console_output: bool,    // Whether to also print to console
+    pub event_emits_enabled: bool,
 }
 
 impl Default for LoggingConfig {
@@ -56,12 +71,18 @@ impl Default for LoggingConfig {
             combine_enabled: false,
             playback_enabled: false,
             sorting_enabled: false,
+            waveform_enabled: false,
+            duration_enabled: false,  // Default off for duration
+            timeline_enabled: false,  // Default off for timeline
+            operation_enabled: false, // Default off for operations
             console_output: true,
+            event_emits_enabled: false,
         }
     }
 }
 
 /// Main logging service that can be shared across the app
+#[derive(Debug)]
 pub struct LoggingService {
     config: Arc<Mutex<LoggingConfig>>,
     app_handle: Option<AppHandle>,
@@ -100,6 +121,18 @@ impl LoggingService {
         category: Option<&str>,
         data: Option<serde_json::Value>,
     ) {
+        self.log_with_location(system, level, message, category, data, None);
+    }
+
+    pub fn log_with_location(
+        &self,
+        system: LogSystem,
+        level: LogLevel,
+        message: &str,
+        category: Option<&str>,
+        data: Option<serde_json::Value>,
+        file_location: Option<FileLocation>,
+    ) {
         let config = self.get_config();
 
         // Check if this system should log
@@ -110,6 +143,11 @@ impl LoggingService {
             LogSystem::Cook => false,  // Future system, default to off
             LogSystem::Graph => false, // Future system, default to off
             LogSystem::Sorting => config.sorting_enabled,
+            LogSystem::Waveform => config.waveform_enabled,
+            LogSystem::Duration => config.duration_enabled, // Add duration check
+            LogSystem::Timeline => config.timeline_enabled, // Add timeline check
+            LogSystem::Operation => config.operation_enabled, // Add operation check
+            LogSystem::EventEmits => config.event_emits_enabled,
         };
 
         if !should_log {
@@ -126,6 +164,7 @@ impl LoggingService {
             category: category.map(|s| s.to_string()),
             message: message.to_string(),
             data,
+            file_location,
         };
 
         // Print to console if enabled
@@ -144,6 +183,11 @@ impl LoggingService {
                 LogSystem::Sorting => "SORTING",
                 LogSystem::Cook => "COOK",
                 LogSystem::Graph => "GRAPH",
+                LogSystem::Waveform => "WAVEFORM",
+                LogSystem::Duration => "DURATION",
+                LogSystem::Timeline => "TIMELINE",
+                LogSystem::Operation => "OPERATION",
+                LogSystem::EventEmits => "EVENT EMITS",
             };
 
             let category_str = category.map(|c| format!("[{}] ", c)).unwrap_or_default();
@@ -236,5 +280,119 @@ macro_rules! log_error {
     };
     ($logger:expr, $system:expr, $category:expr, $message:expr) => {
         $logger.error($system, $message, Some($category));
+    };
+}
+
+// Timeline-specific logging macros
+#[macro_export]
+macro_rules! timeline_debug {
+    ($logger:expr, $message:expr) => {
+        $logger.debug(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.debug(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! timeline_info {
+    ($logger:expr, $message:expr) => {
+        $logger.info(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.info(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! timeline_warning {
+    ($logger:expr, $message:expr) => {
+        $logger.warning(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.warning(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! timeline_error {
+    ($logger:expr, $message:expr) => {
+        $logger.error(crate::logging::LogSystem::Timeline, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.error(
+            crate::logging::LogSystem::Timeline,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+// Operation-specific logging macros
+#[macro_export]
+macro_rules! operation_debug {
+    ($logger:expr, $message:expr) => {
+        $logger.debug(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.debug(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! operation_info {
+    ($logger:expr, $message:expr) => {
+        $logger.info(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.info(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! operation_warning {
+    ($logger:expr, $message:expr) => {
+        $logger.warning(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.warning(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! operation_error {
+    ($logger:expr, $message:expr) => {
+        $logger.error(crate::logging::LogSystem::Operation, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.error(
+            crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
     };
 }

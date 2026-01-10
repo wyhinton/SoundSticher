@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::artifacts::{AudioArtifact, RegionsArtifact};
+
 /// Universal artifact type that represents any data produced by operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Artifact {
@@ -223,30 +225,24 @@ pub struct StorageHints {
     pub temporary: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum CompressionType {
+    #[default]
     None,
     Lz4,
     Zstd,
     Gzip,
 }
 
-impl Default for CompressionType {
-    fn default() -> Self {
-        CompressionType::None
-    }
-}
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum StoragePriority {
     Low,
+    #[default]
     Normal,
     High,
     Critical,
 }
 
-impl Default for StoragePriority {
-    fn default() -> Self {
-        StoragePriority::Normal
-    }
-}

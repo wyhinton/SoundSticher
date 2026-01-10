@@ -1,7 +1,8 @@
 // DAG (Directed Acyclic Graph) and dependencies management
 
-use crate::ops::OpId;
 use std::collections::{HashMap, HashSet, VecDeque};
+
+use crate::util::OpId;
 
 #[derive(Debug, Clone)]
 pub struct OperationGraph {
@@ -23,8 +24,8 @@ impl OperationGraph {
     /// Add a node to the graph
     pub fn add_node(&mut self, node_id: OpId) {
         self.nodes.insert(node_id);
-        self.dependencies.entry(node_id).or_insert_with(Vec::new);
-        self.dependents.entry(node_id).or_insert_with(Vec::new);
+        self.dependencies.entry(node_id).or_default();
+        self.dependents.entry(node_id).or_default();
     }
 
     /// Add a dependency edge: `dependent` depends on `dependency`
@@ -35,7 +36,7 @@ impl OperationGraph {
 
         // Check for cycles before adding
         if self.would_create_cycle(dependent, dependency)? {
-            return Err(format!("Adding dependency would create a cycle"));
+            return Err("Adding dependency would create a cycle".to_string());
         }
 
         // Add the dependency
@@ -194,5 +195,10 @@ impl OperationGraph {
         }
 
         invalidated
+    }
+
+    /// Get the total number of nodes in the graph
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
     }
 }

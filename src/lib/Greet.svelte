@@ -1,13 +1,12 @@
 <script lang="ts">
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
-  import { appState } from './state/state.svelte';
-  import Section from './InputDisplay/FileTable.svelte';
+  import { appState, currentOperationSources } from './state/state.svelte';
+  import FileTable from './InputDisplay/FileTable.svelte';
   import Plotted from './PlaybackDisplay/Timeline.svelte';
   import Sources from './InputDisplay/Sources.svelte';
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import type { Event, UnlistenFn } from '@tauri-apps/api/event';
-  import Toolbar from './Toolbar.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { invokeWithPerf, updateInputs } from './state/performance';
   import Export from './Export.svelte';
@@ -15,8 +14,12 @@
   import { exportState } from './state/export';
   import { get } from 'svelte/store';
   import { initializeStateSynchronization } from './state/stateSynchronization';
+  import { initWaveformService } from './state/waveformCache';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
+  import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
+  import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
+  import { opPlaybackService } from './state/opPlaybackService';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -28,6 +31,8 @@
   let unlisten: UnlistenFn;
   let contextMenuWrapper: ContextMenuWrapper;
   let timelineComponent: any;
+  let cleanupWaveformService: (() => void) | null = null;
+
   async function onDrop(event) {
     filedropEvent = event;
     if (!filedropEvent) return;
@@ -38,16 +43,9 @@
   const handleSpaceBar = (ev: KeyboardEvent) => {
     if (ev.code === 'Space') {
       ev.preventDefault(); // optional, if you want to prevent default scrolling
-      console.log('Spacebar pressed');
-
-      appState.update(s => {
-        s.playingCombined = !s.playingCombined;
-        if (s.playingCombined) {
-          invokeWithPerf('play_timeline_audio');
-        } else {
-          invokeWithPerf('pause_timeline_audio');
-        }
-        return s;
+      // Use the operation playback service
+      opPlaybackService.togglePlayPause().catch(err => {
+        console.error('Error toggling playback:', err);
       });
     }
   };
@@ -56,6 +54,9 @@
     // Initialize state synchronization
     initializeStateSynchronization();
 
+    // Initialize waveform service (handles loading waveforms when operation changes)
+    cleanupWaveformService = initWaveformService();
+
     window.addEventListener('keyup', handleSpaceBar);
     exportState.update(s => {
       s.message = undefined;
@@ -63,7 +64,7 @@
       s.error = undefined;
       return s;
     });
-    updateInputs(get(appState).sections);
+    // updateInputs(get(appState).sections); // Legacy code - no longer needed
   });
 
   // Sync timeline selection with context menu
@@ -73,6 +74,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keyup', handleSpaceBar);
+    cleanupWaveformService?.();
   });
 </script>
 
@@ -83,14 +85,25 @@
     <MainDebugToolbar />
   {/if}
 
-  <div class="content-area flex-grow-1 d-flex justify-content-between flex-column">
+  <div
+    style:height="70vh"
+    class="content-area flex-grow-1 d-flex justify-content-between flex-column"
+  >
     <div class="px-0 d-flex h-fill-available">
-      <Sources></Sources>
       <!-- <div class="text-center pixel-font py-2"><b>$</b></div> -->
-      <Section sections={$appState.sections}></Section>
+      <MainLeftPanel></MainLeftPanel>
+      <div class="d-flex flex-column w-100">
+        <div class="d-flex flex-column w-100">
+          <OperationsFlowPanel></OperationsFlowPanel>
+        </div>
+        <div class="d-flex w-100 h-fill-available">
+          <Sources></Sources>
+          <FileTable></FileTable>
+        </div>
+      </div>
     </div>
     <!-- <Waveform></Waveform> -->
-    <div>
+    <div style:height="30vh">
       <PlottedInfo></PlottedInfo>
       <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
       ></Plotted>

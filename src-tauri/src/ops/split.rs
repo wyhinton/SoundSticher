@@ -16,8 +16,6 @@ pub enum SplitType {
     SilenceDetection,
     /// Split into equal duration chunks
     EqualChunks,
-    /// Split by channel
-    Channels,
 }
 
 impl SplitOperation {
@@ -96,7 +94,7 @@ impl Operation for SplitOperation {
         }
     }
 
-    fn execute(&self, mut context: OperationContext) -> OperationResult {
+    fn execute(&self, context: OperationContext) -> OperationResult {
         context.report_progress(0.0);
 
         // Get input artifact
@@ -133,12 +131,11 @@ impl Operation for SplitOperation {
                 let chunk_duration: f64 = context.get_parameter("segment_duration").unwrap_or(10.0);
                 self.split_into_equal_chunks(input_audio, chunk_duration, &context)?
             }
-            "channels" => self.split_by_channels(input_audio, &context)?,
             _ => {
                 return Err(OperationError::InvalidInput(format!(
                     "Unsupported split type: {}",
                     split_type
-                )))
+                )));
             }
         };
 
@@ -154,15 +151,14 @@ impl Operation for SplitOperation {
         "Split audio files into multiple segments using various methods"
     }
 
-    fn estimated_duration(&self, context: &OperationContext) -> std::time::Duration {
+    fn estimated_duration(&self, _context: &OperationContext) -> std::time::Duration {
         match self.split_type {
             SplitType::TimeSegments | SplitType::EqualChunks => std::time::Duration::from_secs(1),
             SplitType::SilenceDetection => std::time::Duration::from_secs(5), // Requires analysis
-            SplitType::Channels => std::time::Duration::from_secs(2),
         }
     }
 
-    fn memory_requirement(&self, context: &OperationContext) -> usize {
+    fn memory_requirement(&self, _context: &OperationContext) -> usize {
         match self.split_type {
             SplitType::SilenceDetection => 200 * 1024 * 1024, // 200MB - needs full audio in memory
             _ => 50 * 1024 * 1024,                            // 50MB for other types
@@ -178,7 +174,7 @@ impl SplitOperation {
         context: &OperationContext,
     ) -> Result<Vec<AudioArtifact>, OperationError> {
         let mut segments = Vec::new();
-        let padding: f64 = context.get_parameter("padding").unwrap_or(0.1);
+        let _padding: f64 = context.get_parameter("padding").unwrap_or(0.1);
 
         // Add start and end points
         let mut all_points = vec![0.0];
@@ -209,8 +205,8 @@ impl SplitOperation {
     fn split_by_silence(
         &self,
         input: &AudioArtifact,
-        threshold_db: f64,
-        min_silence_duration: f64,
+        _threshold_db: f64,
+        _min_silence_duration: f64,
         context: &OperationContext,
     ) -> Result<Vec<AudioArtifact>, OperationError> {
         // TODO: Implement silence detection algorithm
@@ -257,46 +253,6 @@ impl SplitOperation {
             context.report_progress(0.2 + (0.7 * (i as f32 / num_chunks as f32)));
 
             let segment = self.create_segment(input, i, start_time, end_time, &context.work_dir)?;
-
-            segments.push(segment);
-        }
-
-        Ok(segments)
-    }
-
-    fn split_by_channels(
-        &self,
-        input: &AudioArtifact,
-        context: &OperationContext,
-    ) -> Result<Vec<AudioArtifact>, OperationError> {
-        let mut segments = Vec::new();
-
-        for channel in 0..input.channels {
-            context.report_progress(0.2 + (0.7 * (channel as f32 / input.channels as f32)));
-
-            // TODO: Extract individual channel
-            let output_path = context.work_dir.join(format!(
-                "split_{}_{}_ch{}.wav",
-                context.op_id.data().as_ffi(),
-                input.path.file_stem().unwrap_or_default().to_string_lossy(),
-                channel
-            ));
-
-            // Placeholder - create single-channel audio file
-            std::fs::write(&output_path, b"placeholder_channel_audio")?;
-
-            let segment = AudioArtifact {
-                path: output_path,
-                format: input.format.clone(),
-                sample_rate: input.sample_rate,
-                channels: 1, // Single channel
-                duration: input.duration,
-                metadata: {
-                    let mut meta = input.metadata.clone();
-                    meta.insert("source_channel".to_string(), channel.to_string());
-                    meta
-                },
-            };
 
             segments.push(segment);
         }

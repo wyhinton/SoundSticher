@@ -16,13 +16,6 @@
     }
   });
 
-  listen<number>('timeline-progress', e => {
-    if ($appState.playingCombined) {
-      statusMessage = 'Playing';
-      lastActivity = new Date().toLocaleTimeString();
-    }
-  });
-
   // Watch for app state changes
   $: {
     if ($exportState && $exportState.progress > 0 && $exportState.progress < 1) {
@@ -35,16 +28,18 @@
       statusMessage = 'Playing';
     } else if ($appState.isCombiningFile) {
       statusMessage = 'Processing audio...';
-    } else if ($appState.sections.length === 0) {
-      statusMessage = 'No files loaded';
-    } else if (!$appState.playingCombined && statusMessage === 'Playing') {
+    } else {
+      // Note: Section count removed - operations no longer have sections
+      statusMessage = 'Ready';
+    }
+    if (!$appState.playingCombined && statusMessage === 'Playing') {
       statusMessage = 'Paused';
     }
   }
 
-  // Calculate total files and size
-  $: totalFiles = $appState.sections.length;
-  $: totalSize = $appState.sections.reduce((sum, section) => sum + (section.size || 0), 0);
+  // Note: File and size calculations removed - operations no longer have sections
+  $: totalFiles = 0;
+  $: totalSize = 0;
 
   // Export progress calculations
   $: isExporting = $exportState && $exportState.progress > 0 && $exportState.progress < 1;

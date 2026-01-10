@@ -1,19 +1,19 @@
-use rodio::buffer::SamplesBuffer;
 use rodio::{Decoder, OutputStream, Sink};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
-use std::{fs, thread};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::duration_service::DurationService;
 use crate::metadata;
 use crate::state::AppState;
 
 #[tauri::command]
 pub fn pause_sample_preview(state: State<'_, Arc<AppState>>) {
-    let mut current_song = state.current_song.lock().unwrap();
+    let current_song = state.current_song.lock().unwrap();
     if let Some(ref sink) = *current_song {
         println!("PAUSING!!!!");
         sink.pause();
@@ -25,9 +25,15 @@ pub fn pause_sample_preview(state: State<'_, Arc<AppState>>) {
 }
 
 #[tauri::command]
-pub fn play_sample_preview(title: String, state: State<'_, Arc<AppState>>, app: AppHandle) {
+pub fn play_sample_preview(
+    title: String,
+    state: State<'_, Arc<AppState>>,
+    app: AppHandle,
+    duration_service: State<'_, Arc<DurationService>>,
+) {
     let path = title.clone();
     let state = state.inner().clone();
+    let duration_service = duration_service.inner().clone();
     log::info!("Got request to play_sample_preview {}", title);
     state.cancel_playback.store(false, Ordering::Relaxed);
 
@@ -91,7 +97,10 @@ pub fn play_sample_preview(title: String, state: State<'_, Arc<AppState>>, app: 
             *current_song = Some(Arc::clone(&sink));
         }
 
-        let duration = metadata::get_duration(&path);
+        let duration = duration_service
+            .get_duration(&path)
+            .map(|response| response.duration_seconds)
+            .unwrap_or(None);
         let start = Instant::now();
 
         let sink_clone = Arc::clone(&sink);

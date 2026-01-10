@@ -8,11 +8,13 @@
   } from '$lib/state/performance';
   import { addNewFolderOnDrop, positionStore } from '$lib/state/position';
   import {
-    addSource,
     appState,
     hoveredSourceItem,
     resetAppState,
     setDebugActiveTab,
+    setSvgPathDisplayMode,
+    callSiteTrackingEnabled,
+    toggleCallSiteTrackingEnabled,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
@@ -31,17 +33,52 @@
     initializeBackendLogListener,
     updateBackendLoggingConfig,
     loggingState,
+    listenerLogs,
   } from '$lib/state/logging';
 
+  // Helper function to process svg_path properties based on display mode
+  function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => processSvgPaths(item, mode, maxLength));
+    }
+
+    if (typeof obj === 'object') {
+      const result: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        if (key === 'svg_path' || key === 'svgPath') {
+          // Process svg path properties based on mode
+          if (mode === 'hide') {
+            result[key] = '[SVG Path Hidden]';
+          } else if (mode === 'trim' && typeof value === 'string' && value.length > maxLength) {
+            result[key] = value.substring(0, maxLength) + `... (${value.length} chars total)`;
+          } else {
+            // mode === 'full' or value is short enough
+            result[key] = value;
+          }
+        } else {
+          // Recursively process other properties
+          result[key] = processSvgPaths(value, mode, maxLength);
+        }
+      }
+      return result;
+    }
+
+    return obj;
+  }
+
   // Reactive derived state for simplified display
-  $: forPrint = {
-    ...$appState,
-    sections: $appState.sections.map(s => ({
-      folderPath: s.folderPath,
-      files: s.files.length,
-      // files: s.files.length,
-    })),
-  };
+  $: svgDisplayMode = $appState.uiSettings?.svgPathDisplayMode || 'trim';
+  $: forPrint = processSvgPaths(
+    {
+      ...$appState,
+      // sections property removed - operations no longer have sections
+    },
+    svgDisplayMode
+  );
 
   $: t = {
     x: JSON.stringify($positionStore),
@@ -103,6 +140,29 @@
       const lastB = b[1][b[1].length - 1] ?? 0;
       return lastB.timeStamp - lastA.timeStamp;
     });
+  });
+
+  // Derive invoke history - all invokes sorted by timestamp
+  const invokeHistory = derived(performanceStore, $store => {
+    const allInvokes: Array<{
+      command: string;
+      metric: PerformanceMetric;
+      timestamp: number;
+    }> = [];
+
+    // Collect all metrics from all commands
+    Object.entries($store).forEach(([command, metrics]) => {
+      metrics.forEach(metric => {
+        allInvokes.push({
+          command,
+          metric,
+          timestamp: metric.timeStamp,
+        });
+      });
+    });
+
+    // Sort by timestamp (newest first)
+    return allInvokes.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // Show last 100 invokes
   });
 
   interface AppStateDebug {
@@ -207,8 +267,10 @@
     { id: 'frontend', label: 'Frontend State', icon: 'fa-code' },
     { id: 'backend', label: 'Backend State', icon: 'fa-server' },
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
+    { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
+    { id: 'listeners', label: 'Listeners', icon: 'fa-ear-listen' },
     { id: 'debug', label: 'Debug Info', icon: 'fa-bug' },
   ];
 
@@ -298,9 +360,9 @@
         'info'
       )}
       {@render actionButton(
-        () => console.log($appState.sections),
+        () => console.log('Global sections removed - use currentOperationSections instead'),
         'fa-arrows-spin',
-        'Log Sections',
+        'Log Current Op Sections',
         false,
         'info'
       )}
@@ -373,7 +435,25 @@
   >
     <!-- Frontend State Tab -->
     <div slot="frontend">
-      <h3>Frontend State</h3>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Frontend State</h3>
+        <div class="svg-path-controls">
+          <label for="svg-path-select" class="control-label">SVG Path Display:</label>
+          <select
+            id="svg-path-select"
+            bind:value={svgDisplayMode}
+            on:change={e =>
+              setSvgPathDisplayMode(
+                (e.target as HTMLSelectElement).value as 'full' | 'trim' | 'hide'
+              )}
+            class="svg-path-select"
+          >
+            <option value="full">Show Full</option>
+            <option value="trim">Trim</option>
+            <option value="hide">Hide</option>
+          </select>
+        </div>
+      </div>
       <PrismWrapper data={forPrint} />
     </div>
 
@@ -413,6 +493,87 @@
       </table>
     </div>
 
+    <!-- Invoke History Tab -->
+    <div slot="invoke-history">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Invoke History</h3>
+        <div class="history-controls">
+          <label class="toggle-label me-3">
+            <input
+              type="checkbox"
+              checked={$callSiteTrackingEnabled}
+              on:change={() => toggleCallSiteTrackingEnabled()}
+            />
+            <i class="fa fa-map-marker"></i> Call Site Tracking
+          </label>
+          {@render actionButton(
+            () => resetPerformance(),
+            'fa-trash',
+            'Clear History',
+            false,
+            'danger'
+          )}
+        </div>
+      </div>
+
+      {#if $invokeHistory.length === 0}
+        <div class="empty-state">
+          <i class="fa fa-history"></i>
+          <p>No invoke history yet. Call some Tauri commands to see them here.</p>
+        </div>
+      {:else}
+        <div class="history-table-container">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Command</th>
+                <th>Duration (ms)</th>
+                <th>Call Site</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each $invokeHistory as { command, metric, timestamp }}
+                <tr>
+                  <td class="timestamp">
+                    {new Date(timestamp).toLocaleTimeString('en-US', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </td>
+                  <td class="command">
+                    <code>{command}</code>
+                  </td>
+                  <td
+                    class="duration text-center"
+                    class:slow={metric.time > 100}
+                    class:medium={metric.time > 50 && metric.time <= 100}
+                  >
+                    {metric.time.toFixed(2)}
+                  </td>
+                  <td class="call-site">
+                    {#if metric.callSite}
+                      <span class="call-site-info" title={metric.callSite}>
+                        <i class="fa fa-map-marker"></i>
+                        {metric.fileName}:{metric.lineNumber}
+                      </span>
+                    {:else}
+                      <span class="no-call-site">
+                        <i class="fa fa-question-circle"></i>
+                        No tracking
+                      </span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+
     <!-- Export State Tab -->
     <div slot="export">
       <h3>Export State</h3>
@@ -422,6 +583,105 @@
     <!-- Logging Tab -->
     <div slot="logging">
       <LoggingControls />
+    </div>
+
+    <!-- Listeners Tab -->
+    <div slot="listeners">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Event Listeners</h3>
+        <div class="listeners-controls">
+          {@render actionButton(
+            () => listenerLogs.set([]),
+            'fa-trash',
+            'Clear Logs',
+            false,
+            'danger'
+          )}
+        </div>
+      </div>
+
+      {#if $listenerLogs.length === 0}
+        <div class="empty-state">
+          <i class="fa fa-ear-listen"></i>
+          <p>
+            No event listener logs yet. Enable Listeners logging and interact with the UI to see
+            logs here.
+          </p>
+          <small class="text-muted">
+            Event listeners that use the <code>listenWithLogging</code> utility will appear here.
+          </small>
+        </div>
+      {:else}
+        <div class="listeners-table-container">
+          <table class="listeners-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Element</th>
+                <th>Event</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each $listenerLogs.slice().reverse() as log}
+                <tr class="listener-log-{log.action}">
+                  <td class="timestamp">
+                    {new Date(log.timestamp).toLocaleTimeString('en-US', {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </td>
+                  <td class="action">
+                    <span class="action-badge action-{log.action}">
+                      {#if log.action === 'attach'}
+                        <i class="fa fa-link"></i>
+                      {:else if log.action === 'detach'}
+                        <i class="fa fa-unlink"></i>
+                      {:else if log.action === 'event'}
+                        <i class="fa fa-bolt"></i>
+                      {/if}
+                      {log.action}
+                    </span>
+                  </td>
+                  <td class="element">
+                    <code class="element-info">
+                      {log.elementType}
+                      {#if log.elementId}
+                        <span class="element-id">#{log.elementId}</span>
+                      {/if}
+                      {#if log.elementClass}
+                        <span class="element-class"
+                          >.{log.elementClass.split(' ').slice(0, 2).join('.')}</span
+                        >
+                      {/if}
+                    </code>
+                  </td>
+                  <td class="event-type">
+                    <code>{log.eventType}</code>
+                  </td>
+                  <td class="details">
+                    {#if log.details}
+                      <details class="details-dropdown">
+                        <summary class="details-summary">
+                          <i class="fa fa-info-circle"></i>
+                        </summary>
+                        <div class="details-content">
+                          <PrismWrapper data={log.details} maxHeight="150px" fontSize="10px" />
+                        </div>
+                      </details>
+                    {:else}
+                      <span class="no-details">-</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     </div>
 
     <!-- Debug Info Tab -->
@@ -525,6 +785,139 @@
 
   .performance-table tr:last-child td {
     border-bottom: none;
+  }
+
+  /* Invoke History Styles */
+  .history-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .history-table-container {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .history-table {
+    width: 100%;
+    background-color: transparent;
+  }
+
+  .history-table th {
+    background-color: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+    padding: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .history-table td {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    vertical-align: middle;
+  }
+
+  .history-table tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .timestamp {
+    font-family: 'Courier New', monospace;
+    color: rgba(156, 163, 175, 0.9);
+    white-space: nowrap;
+    min-width: 100px;
+  }
+
+  .command {
+    min-width: 200px;
+  }
+
+  .command code {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .duration {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    min-width: 80px;
+  }
+
+  .duration.medium {
+    color: #fbbf24;
+  }
+
+  .duration.slow {
+    color: #f87171;
+  }
+
+  .call-site {
+    max-width: 250px;
+  }
+
+  .call-site-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background-color: rgba(34, 197, 94, 0.1);
+    color: #4ade80;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+  }
+
+  .call-site-info i {
+    font-size: 8px;
+  }
+
+  .no-call-site {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(156, 163, 175, 0.6);
+    font-size: 10px;
+    font-style: italic;
+  }
+
+  .no-call-site i {
+    font-size: 8px;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: rgba(156, 163, 175, 0.6);
+    text-align: center;
+  }
+
+  .empty-state i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+
+  .empty-state p {
+    margin: 0;
+    font-style: italic;
   }
 
   /* Tab Content Styling for TabContainer */
@@ -684,7 +1077,8 @@
 
   /* Select Styles */
   select,
-  .example-select {
+  .example-select,
+  .svg-path-select {
     background-color: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.3);
     color: white;
@@ -696,9 +1090,177 @@
   }
 
   select option,
-  .example-select option {
+  .example-select option,
+  .svg-path-select option {
     background-color: #1a1a1a;
     color: white;
+  }
+
+  /* SVG Path Controls */
+  .svg-path-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .control-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .svg-path-select {
+    min-width: 100px;
+  }
+
+  /* Listeners Tab Styles */
+  .listeners-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .listeners-table-container {
+    max-height: 500px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+
+  .listeners-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .listeners-table th {
+    background-color: rgba(0, 188, 212, 0.2);
+    color: #00bcd4;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .listeners-table td {
+    padding: 6px 12px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    vertical-align: top;
+  }
+
+  .listeners-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  /* Row styling based on action */
+  .listener-log-attach {
+    background-color: rgba(76, 175, 80, 0.05);
+  }
+
+  .listener-log-detach {
+    background-color: rgba(255, 87, 34, 0.05);
+  }
+
+  .listener-log-event {
+    background-color: rgba(156, 39, 176, 0.05);
+  }
+
+  /* Action badge styling */
+  .action-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .action-attach {
+    background-color: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+  }
+
+  .action-detach {
+    background-color: rgba(255, 87, 34, 0.2);
+    color: #ff5722;
+  }
+
+  .action-event {
+    background-color: rgba(156, 39, 176, 0.2);
+    color: #9c27b0;
+  }
+
+  /* Element info styling */
+  .element-info {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .element-id {
+    color: #81c784;
+    font-weight: 600;
+  }
+
+  .element-class {
+    color: #64b5f6;
+    font-weight: 500;
+  }
+
+  /* Details dropdown */
+  .details-dropdown {
+    display: inline-block;
+  }
+
+  .details-summary {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 10px;
+    list-style: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+  }
+
+  .details-summary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .details-content {
+    margin-top: 4px;
+    padding: 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .no-details {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+  }
+
+  /* Timestamp styling */
+  .timestamp {
+    font-family: 'Fira Code', monospace;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 10px;
+  }
+
+  .event-type {
+    font-family: 'Fira Code', monospace;
+    color: #ffb74d;
+    font-weight: 500;
   }
 
   /* Responsive Design */

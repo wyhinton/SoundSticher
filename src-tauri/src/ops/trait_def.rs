@@ -30,7 +30,6 @@ pub enum OperationError {
 }
 
 /// Context provided to operations during execution
-#[derive(Debug)]
 pub struct OperationContext {
     /// The operation's unique identifier
     pub op_id: OpId,
@@ -46,6 +45,21 @@ pub struct OperationContext {
 
     /// Optional progress callback
     pub progress_callback: Option<Box<dyn Fn(f32) + Send + Sync>>,
+}
+
+impl std::fmt::Debug for OperationContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OperationContext")
+            .field("op_id", &self.op_id)
+            .field("inputs", &self.inputs)
+            .field("parameters", &self.parameters)
+            .field("work_dir", &self.work_dir)
+            .field(
+                "progress_callback",
+                &self.progress_callback.as_ref().map(|_| "<callback>"),
+            )
+            .finish()
+    }
 }
 
 impl OperationContext {
@@ -98,7 +112,7 @@ pub trait Operation: Send + Sync + std::fmt::Debug {
     }
 
     /// Validate parameters before execution
-    fn validate_parameters(&self, parameters: &serde_json::Value) -> Result<(), OperationError> {
+    fn validate_parameters(&self, _parameters: &serde_json::Value) -> Result<(), OperationError> {
         // Default implementation - no validation
         Ok(())
     }

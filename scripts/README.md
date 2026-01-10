@@ -1,15 +1,15 @@
 # Logging Configuration Sync
 
-This directory contains scripts to automatically synchronize logging configuration between the Rust backend and TypeScript frontend.
+This directory contains scripts to automatically synchronize configuration between the Rust backend and TypeScript frontend.
 
 ## Overview
 
-The logging system has two main configuration interfaces that must be kept in sync:
+The system has two main configuration interfaces that must be kept in sync:
 
-- **Rust**: `LoggingConfig` struct in `src-tauri/src/logging.rs`
-- **TypeScript**: `LoggingState` interface in `src/lib/state/logging.ts`
+- **Logging**: `LoggingConfig` struct ↔ `LoggingState` interface
+- **Performance**: Tauri commands ↔ `PerformanceState` interface
 
-## Sync Script
+## Sync Scripts
 
 ### `sync-logging-config.js`
 
@@ -21,6 +21,34 @@ This Node.js script automatically:
 4. **Generates** the default state values
 5. **Updates** the `updateBackendLoggingConfig` function
 6. **Syncs** the `BackendLogMessage` system union type from `LogSystem` enum
+
+### `sync-performance-types.js`
+
+This Node.js script automatically:
+
+1. **Scans** all Rust files for `#[tauri::command]` functions
+2. **Extracts** command function names from the Tauri backend
+3. **Updates** the TypeScript `PerformanceState` interface
+4. **Synchronizes** the `performanceStore` default values
+5. **Categorizes** commands by functionality for better organization
+
+## When to Run
+
+**Automatically**: These scripts are run during development via:
+
+```bash
+npm run dev          # Includes sync:logging
+npm run build        # Includes sync:logging
+npm run sync:logging # Manual logging sync
+npm run sync:performance # Manual performance sync
+```
+
+**Manually**: Run when you:
+
+- Add new `#[tauri::command]` functions (performance sync)
+- Add new logging fields to `LoggingConfig` (logging sync)
+- Want to audit command coverage
+- See TypeScript errors about missing performance metrics
 
 ### Field Mapping
 
@@ -41,6 +69,29 @@ npm run sync:logging
 npm run dev      # Auto-syncs then starts dev server
 npm run build    # Auto-syncs then builds
 ```
+
+#### Performance Sync Usage
+
+1. **Add Tauri commands** to your Rust files:
+
+   ```rust
+   #[tauri::command]
+   pub async fn new_audio_operation() -> Result<String, String> {
+       // Implementation
+       Ok("Success".to_string())
+   }
+   ```
+
+2. **Run sync script**:
+   ```bash
+   npm run sync:performance
+   ```
+
+The TypeScript `PerformanceState` interface will be automatically updated with:
+
+- `new_audio_operation: PerformanceMetric[]` field
+- Default empty array value
+- Performance tracking integration
 
 ### Adding New Backend Systems
 

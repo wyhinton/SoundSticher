@@ -29,12 +29,8 @@
   $: labelXArr = items.map(t => {
     const xPos = t.startOffset * originalPathWidth;
     let testX = currentTransform.applyX(t.startOffset * originalPathWidth) + paddingX;
-    // console.log(testX)*scale
-    // testX/=scaleX;
-    // return testX * scaleX;
     return xPos;
   });
-  //   $: labelXArr = items.map(t => currentTransform.applyX(t.startOffset * originalPathWidth) + paddingX);
   $: labelYArr = items.map(() => 7); // same Y for all
   $: rectXArr = items.map(t => {
     const rectX = t.startOffset * originalPathWidth * currentTransform.k * scaleX;
@@ -50,8 +46,6 @@
 
   // Function to convert RGB color and darken it
   function darkenColor(rgbColor: string, factor: number = 0.6): string {
-    console.log(rgbColor);
-
     // Parse RGB values from string like "rgb(255, 0, 0)" or "#ffffff"
     let r, g, b;
 
@@ -142,15 +136,6 @@
 </script>
 
 <g class="clip-labels">
-  <!-- <rect
-    cursor="grab"
-    x={0}
-    y={0}
-    width={'100%'}
-    height={headerHeight}
-    class="lable-header-bar"
-    stroke="red"
-  ></rect> -->
   {#each items as t, i}
     {#if showLabelArr[i] && rectXArr[i] !== undefined && rectWidthArr[i] !== undefined}
       <g
@@ -222,9 +207,6 @@
       stroke-width 0.2s ease;
   }
 
-  /* g .dragging > rect {
-    fill: rgb(47, 137, 210) !important;
-  } */
   .draggable-header:hover {
     fill: rgb(58, 165, 255) !important;
     stroke: rgb(255, 255, 255) !important;

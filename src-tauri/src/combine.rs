@@ -1,17 +1,14 @@
 use crate::error::Error;
 use crate::logging::{LogSystem, LoggingService};
+use crate::send_channel_event;
 use crate::state::{AppState, AudioFile};
-use hound::{SampleFormat, WavSpec, WavWriter};
-use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, Sink};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs::File;
-use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::thread::{self, sleep};
-use std::time::{Duration, Instant};
+use std::thread::sleep;
+use std::time::Duration;
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::FormatOptions;
@@ -85,8 +82,9 @@ pub struct AudioSend {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Section {
-    folderPath: String,
+    folder_path: String,
     paths: Vec<AudioSend>,
 }
 
@@ -113,11 +111,15 @@ pub async fn update_inputs(
 ) -> Result<String, Error> {
     let state = state.inner().clone();
     let logging_service = logging_service.inner().clone();
-    let current_token = state.cancel_token.fetch_add(1, Ordering::SeqCst) + 1;
-    
+    let _current_token = state.cancel_token.fetch_add(1, Ordering::SeqCst) + 1;
+
     // Log operation start
     if let Ok(logger) = logging_service.lock() {
-        logger.info(LogSystem::Combine, "Starting input updates", Some("update_inputs"));
+        logger.info(
+            LogSystem::Combine,
+            "Starting input updates",
+            Some("update_inputs"),
+        );
     } else {
         println!("RUNNING UPDATES");
     }
@@ -135,11 +137,12 @@ pub async fn update_inputs(
             .flat_map(|section| section.paths.iter().map(|audio| audio.path.clone()))
             .collect();
 
-        on_event
-            .send(BufferAudioEvent::Started {
+        send_channel_event!(
+            on_event,
+            BufferAudioEvent::Started {
                 content_length: valid_paths.len(),
-            })
-            .unwrap();
+            }
+        );
 
         // Collect IDs of files that will be removed
         let removed_ids: Vec<Uuid> = audio_files
@@ -187,7 +190,6 @@ pub async fn update_inputs(
         let existing_total_samples: usize = audio_files.values().map(|f| f.samples.len()).sum();
         let grand_total_samples = existing_total_samples + total_new_samples;
 
-        //TODO: DUPLICATE FILES
         for (i, (path, samples)) in new_files.iter().enumerate() {
             combined.extend(samples);
 
@@ -222,7 +224,7 @@ pub async fn update_inputs(
 
         let mut combined_audio = state.combined_audio.lock().unwrap();
         *combined_audio = Some(combined);
-        on_event.send(BufferAudioEvent::Finished);
+        send_channel_event!(on_event, BufferAudioEvent::Finished);
 
         Ok(format!(
             "Inserted {}, removed {}.",
@@ -276,7 +278,7 @@ pub async fn combine_all_cached_samples(
     tauri::async_runtime::spawn_blocking(move || {
         let process_count = count.clone();
         let orig = *process_count.lock().unwrap();
-        
+
         // Log operation start
         if let Ok(logger) = logging_service.lock() {
             logger.info_with_data(
@@ -287,17 +289,17 @@ pub async fn combine_all_cached_samples(
                     "origin_count": orig,
                     "current_count": *count.lock().unwrap(),
                     "has_custom_order": custom_order.is_some()
-                })
+                }),
             );
         } else {
             println!("ORIGIN: {}, COUNT: {}", orig, count.lock().unwrap());
         }
-        
+
         state.buffering_samples.store(true, Ordering::Relaxed);
         let mut audio_files = state.audio_files.lock().unwrap();
 
         let sample_rate = 44100.0;
-        let full_waveform_width = 1000.0;
+        let _full_waveform_width = 1000.0;
 
         let mut combined_samples: Vec<i16> = Vec::new();
         let mut total_samples = 0;
@@ -327,20 +329,22 @@ pub async fn combine_all_cached_samples(
         }
 
         let duration = total_samples as f64 / sample_rate;
-        on_event
-            .send(CombineAudioEvent::Started {
+        send_channel_event!(
+            on_event,
+            CombineAudioEvent::Started {
                 content_length: ordered_files.len(),
                 duration,
-            })
-            .unwrap();
+            }
+        );
         if total_samples == 0 {
             // Emit specific event for no active samples
-            on_event
-                .send(CombineAudioEvent::Finished {
+            send_channel_event!(
+                on_event,
+                CombineAudioEvent::Finished {
                     svg_path: String::new(),
                     empty: true,
-                })
-                .unwrap();
+                }
+            );
 
             println!("⚠️ No active samples to combine");
             return Ok("No active samples".to_string());
@@ -373,16 +377,17 @@ pub async fn combine_all_cached_samples(
                 // Use the pre-calculated waveform path (no regeneration needed)
                 let svg_path = &original_file.waveform_path;
 
-                on_event
-                    .send(CombineAudioEvent::Progress {
+                send_channel_event!(
+                    on_event,
+                    CombineAudioEvent::Progress {
                         file_name: audio_file.path.clone(),
                         svg_path: svg_path.clone(),
                         start_offset: original_file.start_offset,
                         size: relative_length,
                         id: audio_file.id.to_string(),
                         active: audio_file.active,
-                    })
-                    .unwrap();
+                    }
+                );
                 if *process_count.lock().unwrap() != orig {
                     println!("🛑 Stopped while adding samples");
                     return Ok("stopped".to_string());
@@ -402,12 +407,13 @@ pub async fn combine_all_cached_samples(
         *combined_audio = Some(combined_samples);
 
         let mut state_svg_path = state.svg_path.lock().unwrap();
-        on_event
-            .send(CombineAudioEvent::Finished {
+        send_channel_event!(
+            on_event,
+            CombineAudioEvent::Finished {
                 svg_path: combined_svg_string.clone(),
                 empty: false,
-            })
-            .unwrap();
+            }
+        );
         *state_svg_path = Some(combined_svg_string);
 
         Ok("⏳ Combining started in background thread".to_string())
@@ -419,18 +425,22 @@ pub async fn test_async(
     state: State<'_, Arc<AppState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     app: AppHandle,
-    on_event: Channel<CombineAudioEvent>,
+    _on_event: Channel<CombineAudioEvent>,
 ) -> Result<String, Error> {
     let state = Arc::clone(&state); // Clone for thread
     let logging_service = logging_service.inner().clone();
-    let app = app.clone(); // Clone for thread
+    let _app = app.clone(); // Clone for thread
 
     let count = state.combine_process.clone();
     *count.lock().unwrap() += 1;
 
     tauri::async_runtime::spawn_blocking(move || {
         if let Ok(logger) = logging_service.lock() {
-            logger.debug(LogSystem::Combine, "Test async function called", Some("test"));
+            logger.debug(
+                LogSystem::Combine,
+                "Test async function called",
+                Some("test"),
+            );
         }
         sleep(Duration::from_millis(5000));
         Ok("⏳Did it".to_string())
@@ -439,7 +449,7 @@ pub async fn test_async(
 }
 
 #[tauri::command]
-pub fn cancel_combine(state: State<'_, Arc<AppState>>) -> Result<(), Error> {
+pub fn cancel_combine(_state: State<'_, Arc<AppState>>) -> Result<(), Error> {
     println!("🚨 Cancellation flag set");
     Ok(())
 }

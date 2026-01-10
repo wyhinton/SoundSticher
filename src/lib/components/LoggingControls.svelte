@@ -6,6 +6,9 @@
     type BackendLogMessage,
   } from '$lib/state/logging';
   import PrismWrapper from './PrismWrapper.svelte';
+  import { invoke } from '@tauri-apps/api/core';
+
+  // ...existing code...
 
   // Define logging system configurations
   const loggingConfigs = {
@@ -24,6 +27,31 @@
       category: 'frontend',
       label: 'Drag & Drop',
       icon: 'fa-arrows-alt',
+    },
+    operationsLog: {
+      category: 'frontend',
+      label: 'Operations',
+      icon: 'fa-cogs',
+    },
+    waveformLog: {
+      category: 'frontend',
+      label: 'Waveform',
+      icon: 'fa-wave-square',
+    },
+    opPlaybackLog: {
+      category: 'frontend',
+      label: 'Op Playback',
+      icon: 'fa-play-circle',
+    },
+    timelineLog: {
+      category: 'frontend',
+      label: 'Timeline',
+      icon: 'fa-timeline',
+    },
+    listenersLog: {
+      category: 'frontend',
+      label: 'Event Listeners',
+      icon: 'fa-ear-listen',
     },
     // Backend logging systems
     encoderLog: {
@@ -46,6 +74,26 @@
       label: 'Sorting',
       icon: 'fa-sort',
     },
+    waveformBackendLog: {
+      category: 'backend',
+      label: 'Waveform',
+      icon: 'fa-wave-square',
+    },
+    timelineBackendLog: {
+      category: 'backend',
+      label: 'Timeline',
+      icon: 'fa-timeline',
+    },
+    operationLog: {
+      category: 'backend',
+      label: 'Operations',
+      icon: 'fa-cogs',
+    },
+    eventEmitsLog: {
+      category: 'backend',
+      label: 'Event Emits',
+      icon: 'fa-broadcast-tower',
+    },
   };
 
   // Get frontend and backend systems
@@ -57,7 +105,7 @@
   );
 
   // Handle logging toggle changes
-  const handleLoggingChange = async (category: keyof typeof $loggingState, enabled: boolean) => {
+  const handleLoggingChange = async (category: keyof typeof loggingConfigs, enabled: boolean) => {
     loggingState.update(state => ({
       ...state,
       [category]: enabled,
@@ -91,6 +139,67 @@
 
   // Log display limit
   let logLimit = 50;
+
+  // Parse file locations from log messages (kept for backward compatibility)
+  function parseMessage(
+    message: string
+  ): Array<{ type: 'text' | 'link'; value: string; file?: string; line?: number }> {
+    // Match patterns like "at src/file.rs:123" or "at src\file.rs:123"
+    const filePattern = /at\s+([\w\\\/\.\-]+):(\d+)/g;
+    const parts: Array<{ type: 'text' | 'link'; value: string; file?: string; line?: number }> = [];
+
+    let lastIndex = 0;
+    let match;
+
+    while ((match = filePattern.exec(message)) !== null) {
+      // Add text before the match
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          value: message.substring(lastIndex, match.index),
+        });
+      }
+
+      // Add the file link
+      parts.push({
+        type: 'link',
+        value: `${match[1]}:${match[2]}`,
+        file: match[1],
+        line: parseInt(match[2]),
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < message.length) {
+      parts.push({
+        type: 'text',
+        value: message.substring(lastIndex),
+      });
+    }
+
+    // If no matches found, return the whole message as text
+    if (parts.length === 0) {
+      return [{ type: 'text', value: message }];
+    }
+
+    return parts;
+  }
+
+  // Open file in VS Code
+  async function openFileInEditor(filePath: string | undefined, lineNumber: number | undefined) {
+    if (!filePath) return;
+
+    try {
+      await invoke('open_file_in_editor', {
+        filePath,
+        lineNumber: lineNumber || undefined,
+      });
+    } catch (error) {
+      console.error('Failed to open file:', error);
+    }
+  }
 </script>
 
 <div class="logging-container">
@@ -103,8 +212,9 @@
           <label class="toggle-label">
             <input
               type="checkbox"
-              bind:checked={$loggingState[key]}
-              on:change={e => handleLoggingChange(key, e.currentTarget.checked)}
+              bind:checked={$loggingState[key as keyof typeof loggingConfigs]}
+              on:change={e =>
+                handleLoggingChange(key as keyof typeof loggingConfigs, e.currentTarget.checked)}
             />
             <i class="fa {config.icon}"></i>
             {config.label}
@@ -121,8 +231,9 @@
           <label class="toggle-label">
             <input
               type="checkbox"
-              bind:checked={$loggingState[key]}
-              on:change={e => handleLoggingChange(key, e.currentTarget.checked)}
+              bind:checked={$loggingState[key as keyof typeof loggingConfigs]}
+              on:change={e =>
+                handleLoggingChange(key as keyof typeof loggingConfigs, e.currentTarget.checked)}
             />
             <i class="fa {config.icon}"></i>
             {config.label}
@@ -180,7 +291,7 @@
 
     <!-- Backend Logs Display -->
     <div class="backend-logs">
-      {#each filteredLogs.slice(-logLimit) as log (log.timestamp)}
+      {#each filteredLogs.slice(-logLimit) as log, index (log.timestamp + '-' + index)}
         <div class="log-entry log-{log.level}">
           <span class="log-timestamp">{new Date(log.timestamp).toLocaleTimeString()}</span>
           <span class="log-level">{log.level.toUpperCase()}</span>
@@ -188,7 +299,36 @@
           {#if log.category}
             <span class="log-category">[{log.category}]</span>
           {/if}
-          <span class="log-message">{log.message}</span>
+          <span class="log-message">
+            {#if log.fileLocation}
+              <!-- Use structured file location if available -->
+              {log.message}
+              <button
+                class="file-link"
+                on:click={() =>
+                  openFileInEditor(log.fileLocation?.filePath, log.fileLocation?.lineNumber)}
+                title="Click to open {log.fileLocation.filePath}:{log.fileLocation.lineNumber ||
+                  1} in VS Code"
+              >
+                [{log.fileLocation.filePath}:{log.fileLocation.lineNumber || 1}]
+              </button>
+            {:else}
+              <!-- Fall back to parsing message for backward compatibility -->
+              {#each parseMessage(log.message) as part (part.value)}
+                {#if part.type === 'link'}
+                  <button
+                    class="file-link"
+                    on:click={() => openFileInEditor(part.file, part.line)}
+                    title="Click to open {part.file}:{part.line} in VS Code"
+                  >
+                    {part.value}
+                  </button>
+                {:else}
+                  {part.value}
+                {/if}
+              {/each}
+            {/if}
+          </span>
           {#if log.data}
             <details class="log-data">
               <summary>Data</summary>
@@ -438,6 +578,34 @@
     flex: 1;
     color: white;
     min-width: 150px;
+    display: inline-flex;
+    gap: 0;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .file-link {
+    background: none;
+    border: none;
+    color: #60a5fa;
+    text-decoration: underline;
+    cursor: pointer;
+    font-family: 'Fira Code', monospace;
+    font-size: 10px;
+    padding: 0;
+    margin: 0;
+    display: inline;
+    font-weight: 600;
+    transition: color 0.2s ease;
+  }
+
+  .file-link:hover {
+    color: #93c5fd;
+    text-decoration-color: #93c5fd;
+  }
+
+  .file-link:active {
+    color: #3b82f6;
   }
 
   .log-data {

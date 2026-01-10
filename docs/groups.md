@@ -194,10 +194,11 @@ The compiled selectors capture query parameters at compile time through **closur
 
 ```typescript
 // When compiled, parameters get "baked in":
-const selector = (state) => runQuery(state, { 
-  kind: 'sectionPercent', 
-  percent: 0.5  // ❌ This was captured and wouldn't change
-});
+const selector = state =>
+  runQuery(state, {
+    kind: 'sectionPercent',
+    percent: 0.5, // ❌ This was captured and wouldn't change
+  });
 ```
 
 ### The Bug That Was Fixed

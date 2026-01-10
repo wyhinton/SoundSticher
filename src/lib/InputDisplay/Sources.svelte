@@ -3,15 +3,11 @@
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
   import { stat } from '@tauri-apps/plugin-fs';
   import {
-    addSource,
     appState,
-    combine_audio_files,
-    deleteSection,
-    getAllFiles,
-    updatePath,
-    applySyncIndexes,
-    setActiveTab,
-    setTabContentHeight,
+    currentOperationSources,
+    addOperationSourceToCurrent,
+    removeSourceFromCurrentOperation,
+    addToFavorites,
   } from '../state/state.svelte';
   import { onMount, tick } from 'svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -25,41 +21,27 @@
     setInputsUnderMouse,
     setIsOverTableContainer,
   } from '../state/position';
-  import SineWaveShader from '../Examples/SineWaveShader.svelte';
-  import EditableInput from './EditableInput.svelte';
   import SourceRow from './SourceRow.svelte';
-  import SourceToolbar from './SourceToolbar.svelte';
-  import Favorites from './Favorites.svelte';
-  import Groups from './Groups.svelte';
-  import { get } from 'svelte/store';
+  import MainLeftPanel from './MainLeftPanel.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
   import { Channel, invoke } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
+  import type { OperationSource } from '../state/operation';
 
-  // Local sorting function - moved from store
-  function getSortedFiles(state: typeof $appState) {
-    let files = getAllFiles(state.sections);
+  // Get sample op files for display
+  function getSampleOpFiles(operationRef: string) {
+    const operations = $appState.operations?.defs;
+    if (!operations) return [];
 
-    // If no sort key is set, return files sorted by index
-    if (!state.sortKey) {
-      return files.sort((a, b) => a.index - b.index);
+    const sampleOp = operations[operationRef];
+    if (!sampleOp || sampleOp.kind !== 'sample') return [];
+
+    // For sample ops, there should be exactly one source with type 'file'
+    if (sampleOp.sources.length > 0 && sampleOp.sources[0].type === 'file') {
+      return [sampleOp.sources[0].fileId];
     }
 
-    // Sort by the specified key and direction
-    let sorted = [...files].sort((a, b) => {
-      let valA = a[state.sortKey!];
-      let valB = b[state.sortKey!];
-
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return state.sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      } else {
-        return state.sortDirection === 'asc'
-          ? (valA as number) - (valB as number)
-          : (valB as number) - (valA as number);
-      }
-    });
-
-    return sorted;
+    return [];
   }
 
   WebviewWindow.getCurrent()
@@ -167,7 +149,7 @@
   // Toolbar functions
   function handleSelectAll() {
     selectedRows.clear();
-    for (let i = 0; i < $appState.sections.length; i++) {
+    for (let i = 0; i < $currentOperationSources.length; i++) {
       selectedRows.add(i);
     }
     selectedRows = new Set(selectedRows);
@@ -185,9 +167,9 @@
     // Convert to array and sort in descending order to delete from end to start
     const indicesToDelete = Array.from(selectedRows).sort((a, b) => b - a);
 
-    // Delete sections
+    // Delete sources from current operation
     indicesToDelete.forEach(index => {
-      deleteSection(index);
+      removeSourceFromCurrentOperation(index);
     });
 
     // Clear selection
@@ -261,23 +243,56 @@
             }
           });
           if (event.payload.type === 'drop') {
-            console.log(event.payload.paths);
+            console.log('Drop event detected:', event.payload.paths);
             const paths = event.payload.paths;
-            console.log(atDrop);
+            const dropX = event.payload.position.x / scaleFactor;
+            const dropY = event.payload.position.y / scaleFactor;
+
+            // Use elementFromPoint to get the topmost element at drop coordinates
+            const elementAtPoint = document.elementFromPoint(dropX, dropY);
+
+            // Check if we're dropping on the favorites area or sources area
+            const favoritesElement = elementAtPoint?.closest('.favorites-container');
+            const sourcesElement = elementAtPoint?.closest('.sources-container');
+
+            console.log('Drop coordinates:', { dropX, dropY });
+            console.log('Element at point:', elementAtPoint);
+            console.log('Is favorites area:', !!favoritesElement);
+            console.log('Is sources area:', !!sourcesElement);
+
             if (atDrop.length > 0) {
               Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
-                v.forEach(v => {
-                  if (v.isDirectory) {
-                    updatePath(atDrop[0], paths[0]);
+                v.forEach((filestat, index) => {
+                  const path = paths[index];
+                  if (filestat.isDirectory) {
+                    // If dropped on favorites area, add to favorites
+                    if (favoritesElement) {
+                      console.log('Adding folder to favorites:', path);
+                      addToFavorites(path);
+                    } else {
+                      // TODO: Implement drag-drop for operation sources
+                      console.log('Drag-drop needs to be reimplemented for operation sources');
+                    }
                   }
                 });
                 positionStore.reset();
                 clearUnderMouse();
               });
               inputsUnderMouse = [];
-            }
-            if (addNewFolderOnDrop && atDrop.length === 0) {
-              addSource(paths);
+            } else if (addNewFolderOnDrop) {
+              // Handle drop when not over specific input areas
+              Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
+                v.forEach((filestat, index) => {
+                  const path = paths[index];
+                  if (filestat.isDirectory) {
+                    // If dropped on favorites area (even outside specific inputs), add to favorites
+                    if (favoritesElement) {
+                      console.log('Adding folder to favorites (general area):', path);
+                      addToFavorites(path);
+                    }
+                  }
+                });
+              });
             }
             positionStore.reset();
             clearUnderMouse();
@@ -316,84 +331,58 @@
   let prevSortDirection: 'asc' | 'desc' | null = null;
   let debounceTimeout: number | undefined;
 
-  appState.subscribe($appState => {
-    // Clear the previous timeout if it exists
-    if (debounceTimeout) clearTimeout(debounceTimeout);
+  // appState.subscribe($appState => {
+  //   // Clear the previous timeout if it exists
+  //   if (debounceTimeout) clearTimeout(debounceTimeout);
 
-    debounceTimeout = window.setTimeout(() => {
-      if (!$appState.sortKey || !$appState.sortDirection) return;
+  //   debounceTimeout = window.setTimeout(() => {
+  //     if (!$appState.sortKey || !$appState.sortDirection) return;
 
-      // Only proceed if sortKey or sortDirection changed
-      if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
-        return;
-      }
+  //     // Only proceed if sortKey or sortDirection changed
+  //     if ($appState.sortKey === prevSortKey && $appState.sortDirection === prevSortDirection) {
+  //       return;
+  //     }
 
-      prevSortKey = $appState.sortKey;
-      prevSortDirection = $appState.sortDirection;
+  //     prevSortKey = $appState.sortKey;
+  //     prevSortDirection = $appState.sortDirection;
 
-      // Compute new sorted order
-      const files = getSortedFiles($appState);
+  //     // Compute new sorted order
+  //     const files = getSortedFiles($appState);
 
-      // Build array for Rust: { id, index }
-      const updates = files.map((file, index) => ({
-        id: file.id, // UUID string
-        index,
-      }));
+  //     // Build array for Rust: { id, index }
+  //     const updates = files.map((file, index) => ({
+  //       id: file.id, // UUID string
+  //       index,
+  //     }));
 
-      console.log(updates);
+  //     console.log(updates);
 
-      const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
-        started: data => {
-          console.log('STARTED SORT');
-        },
-        progress: data => {},
-        finished: data => {
-          console.log('FINISHED SORT');
-        },
-      });
+  //     const onEvent = generateProgressChannel<SortAudioEvent>(Channel, {
+  //       started: data => {
+  //         console.log('STARTED SORT');
+  //       },
+  //       progress: data => {},
+  //       finished: data => {
+  //         console.log('FINISHED SORT');
+  //       },
+  //     });
 
-      invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
-        .then(newOrder => {
-          updateInputs($appState.sections);
-          console.log(newOrder);
-          console.log(newOrder);
-          // Use the reusable index syncing function if newOrder has value
-          if (newOrder.ok && newOrder.value) {
-            applySyncIndexes(newOrder.value);
-            console.log(`%cHERE LINE :227 %c`, 'color: yellow; font-weight: bold', '');
-          }
-        })
-        .catch(err => console.error('Tauri invoke failed', err));
-    }, 100); // 100ms debounce
-  });
+  //     invokeWithPerf<[string, number][]>('update_sorting', { updates, onEvent })
+  //       .then(newOrder => {
+  //         updateInputs($currentOperationSections);
+  //         // Use the reusable index syncing function if newOrder has value
+  //         if (newOrder.ok && newOrder.value) {
+  //           // applySyncIndexes(newOrder.value);
+  //           console.log(`%cHERE LINE :227 %c`, 'color: yellow; font-weight: bold', '');
+  //         }
+  //       })
+  //       .catch(err => console.error('Tauri invoke failed', err));
+  //   }, 100); // 100ms debounce
+  // });
 
   // Add tab state at the end of script section
-  let isResizing: boolean = false;
 
-  function handleResizeStart(event: MouseEvent) {
-    event.preventDefault();
-    isResizing = true;
-
-    const startY = event.clientY;
-    const startHeight = $appState.uiSettings?.tabContentHeight || 120;
-
-    function handleMouseMove(e: MouseEvent) {
-      if (!isResizing) return;
-
-      const deltaY = e.clientY - startY;
-      const newHeight = Math.max(80, Math.min(MAX_PANEL_HEIGHT, startHeight + deltaY)); // Min 80px, Max 400px
-      setTabContentHeight(newHeight);
-    }
-
-    function handleMouseUp() {
-      isResizing = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    }
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }
+  // Selected operation state (bound from parent)
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -404,7 +393,7 @@
   onkeydown={handleKeyDown}
   tabindex="0"
   role="region"
-  aria-label="Source sections"
+  aria-label="Operation sources"
 >
   <div
     class="sources-container"
@@ -419,20 +408,24 @@
         bind:this={tableContainer}
         class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
       >
-        {#if $appState.sections.length === 0 && !$addNewFolderOnDrop}
+        {#if $currentOperationSources.length === 0 && !$addNewFolderOnDrop}
           <!-- <SineWaveShader></SineWaveShader> -->
-          <div class="position-absolute no-inputs-warning">
+          <div class="position-absolute no-inputs-warning d-flex flex-column">
             <div
               id="lottie-container"
               class="m-auto"
               style={`width: ${lottieSize}px; height: ${lottieSize}px;`}
               bind:this={lottieContainer}
             ></div>
-            <div class="text-center">
-              No inputs! Drag and Drop a folder of samples or add a section
+            <div class="text-center font-size-12px">
+              No sources! Add sample operation sources to the current merge operation
             </div>
-            <button class="btn btn-sm m-auto mt-2" onclick={() => addSource()}
-              ><i class="me-1 fas fa-plus-circle text-success"></i>Add section</button
+            <button
+              class="btn btn-sm m-auto mt-2"
+              onclick={() => {
+                // TODO: Implement adding a new sample operation source
+                console.log('Add source clicked - need to implement');
+              }}><i class="me-1 fas fa-plus-circle text-success"></i>Add source</button
             >
           </div>
           {@html (() => {
@@ -446,133 +439,61 @@
           </div>
         {/if}
 
-        {#if $appState.sections.length > 0}
-          <!-- <SourceToolbar
-        selectedRowCount={selectedRows.size}
-        onSelectAll={handleSelectAll}
-        onClearSelection={handleClearSelection}
-        onDeleteSelected={handleDeleteSelected}
-      /> -->
-        {/if}
-
         <table class="w-100 table m-0">
           <thead>
             <tr>
-              <th class="file-column">Source</th>
-              <th class="file-column text-center">Samples</th>
+              <th class="file-column">Source Operation</th>
+              <th class="file-column text-center">File</th>
               <th class="file-column text-center">Actions</th>
             </tr>
           </thead>
           <tbody bind:this={container}>
-            {#each $appState.sections as item, sectionIndex}
-              <SourceRow
-                {item}
-                {sectionIndex}
-                {inputsUnderMouse}
-                isSelected={selectedRows.has(sectionIndex)}
-                onRowSelect={selectRow}
-                onRowToggle={toggleRowSelection}
-              />
+            {#each $currentOperationSources as source, sourceIndex}
+              {#if source.type === 'operation'}
+                <tr class:table-warning={selectedRows.has(sourceIndex)}>
+                  <td>
+                    <small class="text-muted" title={source.operationRef}
+                      >{source.operationRef}</small
+                    >
+                  </td>
+                  <td class="text-center">
+                    {#each getSampleOpFiles(source.operationRef) as fileId}
+                      <small class="text-info" title={fileId}>{fileId}</small>
+                    {/each}
+                  </td>
+                  <td class="text-center">
+                    <button
+                      class="btn btn-sm btn-outline-danger"
+                      onclick={() => removeSourceFromCurrentOperation(sourceIndex)}
+                      title="Remove source"
+                    >
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </td>
+                </tr>
+              {:else}
+                <tr class:table-warning={selectedRows.has(sourceIndex)}>
+                  <td colspan="3">
+                    <small class="text-muted" title="Unsupported source type: {source.type}"
+                      >Unsupported source type: {source.type}</small
+                    >
+                  </td>
+                </tr>
+              {/if}
             {/each}
           </tbody>
         </table>
-      </div>
-    </section>
-
-    <!-- Tab panel section -->
-    <section class="tab-panel-section">
-      <div class="tab-panel-container">
-        <!-- Tab navigation -->
-        <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
-          <button
-            class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Global'}
-            onclick={() => setActiveTab('Global')}
-            role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Global'}
-            aria-controls="global-tab-panel"
-          >
-            Global
-          </button>
-          <button
-            class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Group'}
-            onclick={() => setActiveTab('Group')}
-            role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Group'}
-            aria-controls="group-tab-panel"
-          >
-            Group
-          </button>
-          <button
-            class="tab"
-            class:active={$appState.uiSettings?.activeTab === 'Favorites'}
-            onclick={() => setActiveTab('Favorites')}
-            role="tab"
-            aria-selected={$appState.uiSettings?.activeTab === 'Favorites'}
-            aria-controls="favorites-tab-panel"
-          >
-            Favorites
-          </button>
-        </nav>
-
-        <!-- Tab content -->
-        <div class="tab-content" style="height: {$appState.uiSettings?.tabContentHeight || 120}px;">
-          {#if $appState.uiSettings?.activeTab === 'Global'}
-            <div
-              class="tab-panel"
-              id="global-tab-panel"
-              role="tabpanel"
-              aria-labelledby="global-tab"
-              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
-                'rgb(15 21 27)'};"
-            >
-              <p>Global content goes here</p>
-              <!-- Add your global content here -->
-            </div>
-          {/if}
-          {#if $appState.uiSettings?.activeTab === 'Group'}
-            <div
-              class="tab-panel"
-              id="group-tab-panel"
-              role="tabpanel"
-              aria-labelledby="group-tab"
-              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
-                'rgb(15 21 27)'};"
-            >
-              <Groups />
-            </div>
-          {/if}
-          {#if $appState.uiSettings?.activeTab === 'Favorites'}
-            <div
-              class="tab-panel"
-              id="favorites-tab-panel"
-              role="tabpanel"
-              aria-labelledby="favorites-tab"
-              style="background-color: {$appState.uiSettings?.theme?.tabPanelBackgroundColor ||
-                'rgb(15 21 27)'};"
-            >
-              <Favorites />
-            </div>
-          {/if}
-        </div>
-
-        <!-- Resize handle -->
-        <div
-          class="resize-handle"
-          class:resizing={isResizing}
-          onmousedown={handleResizeStart}
-          role="separator"
-          aria-label="Resize tab content"
-        >
-          <div class="resize-indicator"></div>
-        </div>
       </div>
     </section>
   </div>
 </div>
 
 <style>
+  .no-inputs-warning {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
   #lottie-container {
     opacity: 0.8;
   }
@@ -592,156 +513,26 @@
     overflow: hidden;
   }
 
-  .tab-panel-section {
-    flex-shrink: 0;
-  }
-
-  .tab-panel-container {
-    display: flex;
-    flex-direction: column;
-  }
-
   th {
-    text-align: left;
-    padding-top: 0px !important;
-    padding-bottom: 0px !important;
-    position: sticky !important;
-    top: 0;
-    font-size: 11px;
-    color: #9d9d9d !important;
-  }
-
-  .no-inputs-warning {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translate(-50%, -150%);
     font-size: 12px;
-    display: flex;
-    flex-direction: column;
   }
 
-  /* Tab styles */
-  .tab-navigation {
-    display: flex;
-    background-color: rgb(15 21 27);
-    padding: 0 8px;
-    border-bottom: 1px solid #555;
-    gap: 2px;
-    height: 30px;
+  /* Table cell styling for compact, non-wrapping text with ellipsis */
+  td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120ch; /* Maximum of 120 characters */
+    padding: 2px 8px !important; /* More compact padding */
+    font-size: 11px; /* Slightly smaller font */
+    line-height: 1.2; /* Tighter line height */
   }
 
-  .tab {
-    padding: 8px 16px;
-    cursor: pointer;
-    position: relative;
-    background: #2a2a2a;
-    border: 1px solid #555;
-    border-bottom: none;
-    color: #9d9d9d;
-    font-size: 11px;
-    transition: all 0.2s ease;
-    border-radius: 6px 6px 0 0;
-    margin-top: 4px;
-    min-width: 70px;
-  }
-
-  .tab:hover {
-    background-color: #3a3a3a;
-    color: #fff;
-    border-color: #666;
-  }
-
-  .tab.active {
-    color: #fff;
-    font-weight: bold;
-    background-color: rgb(15 21 27);
-    border-color: #777;
-    margin-top: 0;
-    padding-top: 8px;
-    z-index: 1;
-    position: relative;
-  }
-
-  .tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: rgb(15 21 27);
-  }
-
-  .tab-content {
-    background-color: rgb(15 21 27);
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    overflow-y: auto;
-    resize: vertical;
-    min-height: 80px;
-    max-height: 800px;
-  }
-
-  .tab-panel {
-    color: #9d9d9d;
-    font-size: 12px;
-    line-height: 1.4;
-    height: 100%;
-  }
-
-  .tab-panel p {
-    margin: 0 0 12px 0;
-    color: #ccc;
-  }
-
-  .resize-handle {
-    height: 8px;
-    background-color: rgb(15 21 27);
-    cursor: ns-resize;
-    border-top: 1px solid #555;
-    border-bottom: 1px solid #555;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s ease;
-  }
-
-  .resize-handle:hover {
-    background-color: #2a2a2a;
-  }
-
-  .resize-handle.resizing {
-    background-color: #3a3a3a;
-  }
-
-  .resize-indicator {
-    width: 40px;
-    height: 2px;
-    background-color: #666;
-    border-radius: 1px;
-    position: relative;
-  }
-
-  .resize-indicator::before {
-    content: '';
-    position: absolute;
-    top: -2px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: #666;
-    border-radius: 1px;
-  }
-
-  .resize-indicator::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background-color: #666;
-    border-radius: 1px;
+  td small {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block; /* Make sure the ellipsis works with small tags */
+    max-width: 100%; /* Inherit parent width constraint */
   }
 </style>

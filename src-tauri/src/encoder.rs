@@ -1,4 +1,5 @@
 use crate::logging::{LogSystem, LoggingService};
+use crate::send_channel_event;
 use crate::state::AppState;
 use crate::Error;
 use flacenc::bitsink::ByteSink;
@@ -188,14 +189,17 @@ impl AudioEncoder for FlacEncoder {
             println!("===================");
         }
 
-        if samples.len() % num_channels != 0 {
+        if !samples.len().is_multiple_of(num_channels) {
             return Err(Error::UnevenNumberOfSamples);
         }
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: format!("Converting to i32 PCM ({}bit depth)", bits_per_sample),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: format!("Converting to i32 PCM ({}bit depth)", bits_per_sample),
+            }
+        );
 
         // Convert to i32 PCM (flacenc expects i32 sample slices)
         let max_value = match bits_per_sample {
@@ -227,20 +231,26 @@ impl AudioEncoder for FlacEncoder {
             ),
         });
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: "Building FLAC encoder configuration".into(),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: "Building FLAC encoder configuration".into(),
+            }
+        );
 
         // Build encoder config
         let config = FlacConfig::default()
             .into_verified()
             .map_err(|_| Error::FlacEncodeError("Invalid config".into()))?;
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: "Building FLAC memory source".into(),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: "Building FLAC memory source".into(),
+            }
+        );
 
         // Build MemSource with actual settings
         let source = MemSource::from_samples(
@@ -255,10 +265,13 @@ impl AudioEncoder for FlacEncoder {
             num_channels, bits_per_sample, settings.sample_rate
         );
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: "Encoding to FLAC stream".into(),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: "Encoding to FLAC stream".into(),
+            }
+        );
         // Encode into a FLAC stream
         let flac_stream = encode_with_fixed_block_size(&config, source, config.block_size)
             .map_err(|_| Error::FlacEncodeError("FLAC encode error".into()))?;
@@ -368,7 +381,7 @@ impl AudioEncoder for Mp3Encoder {
             println!("🎧 ==================");
         }
 
-        if samples.len() % num_channels != 0 {
+        if !samples.len().is_multiple_of(num_channels) {
             return Err(Error::UnevenNumberOfSamples);
         }
 
@@ -383,20 +396,26 @@ impl AudioEncoder for Mp3Encoder {
             ),
         });
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: "Converting to u16 PCM for MP3 encoding".into(),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: "Converting to u16 PCM for MP3 encoding".into(),
+            }
+        );
 
         let to_u16 = |s: f32| (((s.clamp(-1.0, 1.0) + 1.0) / 2.0) * u16::MAX as f32).round() as u16;
 
         let mut left = Vec::with_capacity(samples.len() / num_channels);
         let mut right = Vec::with_capacity(samples.len() / num_channels);
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: "Separating and processing audio channels for MP3".into(),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: "Separating and processing audio channels for MP3".into(),
+            }
+        );
 
         // Handle mono vs stereo
         if num_channels == 1 {
@@ -421,14 +440,17 @@ impl AudioEncoder for Mp3Encoder {
 
         println!("✅ Prepared {} stereo frames for MP3 encoding", left.len());
 
-        channel.send(ExportAudioEvent::Progress {
-            progress: -1.,
-            message: format!(
-                "Configuring MP3 encoder: {}kbps, {}Hz, stereo, best quality",
-                settings.bitrate.unwrap_or(192),
-                settings.sample_rate
-            ),
-        });
+        send_channel_event!(
+            channel,
+            ExportAudioEvent::Progress {
+                progress: -1.,
+                message: format!(
+                    "Configuring MP3 encoder: {}kbps, {}Hz, stereo, best quality",
+                    settings.bitrate.unwrap_or(192),
+                    settings.sample_rate
+                ),
+            }
+        );
 
         // Configure encoder with settings
         let mut builder =
@@ -460,14 +482,16 @@ impl AudioEncoder for Mp3Encoder {
 
         // Set ID3 tag with filename if available
         let title = settings.filename.as_bytes();
-        builder.set_id3_tag(Id3Tag {
-            title,
-            artist: b"Sound Stitch",
-            album: b"Exported Audio",
-            year: b"2025",
-            comment: b"Exported from Sound Stitch",
-            album_art: &[],
-        });
+        builder
+            .set_id3_tag(Id3Tag {
+                title,
+                artist: b"Sound Stitch",
+                album: b"Exported Audio",
+                year: b"2025",
+                comment: b"Exported from Sound Stitch",
+                album_art: &[],
+            })
+            .map_err(|e| Error::MP3EncoderError(format!("{:?}", e)))?;
         println!(
             "  ✅ ID3 tags: Title='{}', Artist='Sound Stitch'",
             settings.filename
@@ -597,8 +621,8 @@ impl EncoderRegistry {
         Self { encoders }
     }
 
-    pub fn get(&self, format: &str) -> Option<&Box<dyn AudioEncoder>> {
-        self.encoders.get(format)
+    pub fn get(&self, format: &str) -> Option<&dyn AudioEncoder> {
+        self.encoders.get(format).map(|b| b.as_ref())
     }
 }
 
@@ -668,11 +692,7 @@ pub async fn export_audio(
 
     tauri::async_runtime::spawn_blocking(move || {
         // Get the logger
-        let logger = if let Ok(service) = logging_service.lock() {
-            Some(service)
-        } else {
-            None
-        };
+        let logger = logging_service.lock().ok();
 
         // lock audio_files
         let audio_files = state.audio_files.lock().unwrap();
@@ -687,7 +707,7 @@ pub async fn export_audio(
             println!("🎵 ENCODING STARTED of {} audio files", audio_files.len());
         }
 
-        if audio_files.len() == 0 {
+        if audio_files.is_empty() {
             if let Some(logger) = &logger {
                 logger.error(
                     LogSystem::Encoder,

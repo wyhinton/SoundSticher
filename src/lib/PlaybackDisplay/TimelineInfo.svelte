@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-  import { appState, getAllFiles } from '../state/state.svelte';
+  import { appState, currentOperationSources, getAllFiles } from '../state/state.svelte';
   import { formatMilliseconds } from '../utils/format';
   import TimeDisplay from './TimeDisplay.svelte';
   import {
@@ -15,7 +15,7 @@
     bufferingProgress = e.payload;
   });
 
-  $: activeSampleCount = getAllFiles($appState.sections).length;
+  $: activeSampleCount = $currentOperationSources.length;
 
   // Calculate estimated file size reactively
   $: durationSeconds = $appState.combinedFileLength ? $appState.combinedFileLength : 0;

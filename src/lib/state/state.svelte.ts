@@ -5,6 +5,7 @@ import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
 import { GroupsState } from './groups';
+import type { OperationsState, OperationSource, SampleOp } from './operation';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -26,8 +27,9 @@ interface VisualSample {
   svgPath: string;
 }
 
+interface Operation {}
+
 export interface AppState {
-  sections: Section[];
   playingSong?: string;
   playingSection?: number;
   playProgress?: number;
@@ -46,8 +48,14 @@ export interface AppState {
     activeTab?: string;
     debugActiveTab?: string;
     tabContentHeight?: number;
+    selectedOperationName?: string | null;
+    timelineDebugMode?: boolean;
+    showFullSvgPath?: boolean;
+    svgPathDisplayMode?: 'full' | 'trim' | 'hide';
+    callSiteTrackingEnabled?: boolean;
     theme?: {
       tabPanelBackgroundColor?: string;
+      panelHeaderBackgroundColor?: string;
       previewBackgroundColor?: string;
       previewBorderColor?: string;
       previewHoverBackgroundColor?: string;
@@ -62,7 +70,8 @@ export interface AppState {
   };
   _version?: number; // Internal version tracking for migrations
   groups?: GroupsState;
-  _rev?: number; // content revision (groups + geometry)
+  operations?: OperationsState;
+  _rev?: number; // content revision (groups + geometry + operations)
 }
 
 export interface AudioFileItem {
@@ -128,7 +137,6 @@ const CURRENT_STATE_VERSION = 1; // Increment this when you need to run migratio
 // Function to validate and migrate appState from localStorage
 function validateAndMigrateAppState(loadedState: any): AppState {
   const defaultState: AppState = {
-    sections: [],
     isCombiningFile: false,
     combinedFileLength: 0,
     playingCombined: false,
@@ -140,10 +148,16 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     sortDirection: undefined,
     favorites: [],
     uiSettings: {
-      activeTab: 'Global',
+      activeTab: 'Operations',
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
+      selectedOperationName: null,
+      timelineDebugMode: false,
+      showFullSvgPath: false,
+      svgPathDisplayMode: 'trim',
+      callSiteTrackingEnabled: false,
       theme: {
+        panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
         previewBorderColor: 'rgba(255, 165, 0, 0.5)',
@@ -188,16 +202,22 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     ...loadedState,
     // Ensure favorites array exists and is valid
     favorites: Array.isArray(loadedState.favorites) ? loadedState.favorites : [],
-    // Ensure sections array exists and is valid
-    sections: Array.isArray(loadedState.sections) ? loadedState.sections : [],
+    // Note: sections removed - now managed per operation
     // Ensure timelineItems array exists and is valid
     timelineItems: Array.isArray(loadedState.timelineItems) ? loadedState.timelineItems : [],
     // Migrate old activeTab to new uiSettings structure
     uiSettings: {
-      activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Global',
+      activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Operations',
       debugActiveTab: loadedState.uiSettings?.debugActiveTab || 'frontend',
       tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
+      selectedOperationName: loadedState.uiSettings?.selectedOperationName || null,
+      timelineDebugMode: loadedState.uiSettings?.timelineDebugMode || false,
+      showFullSvgPath: loadedState.uiSettings?.showFullSvgPath || false,
+      svgPathDisplayMode: loadedState.uiSettings?.svgPathDisplayMode || 'trim',
+      callSiteTrackingEnabled: loadedState.uiSettings?.callSiteTrackingEnabled || false,
       theme: {
+        panelHeaderBackgroundColor:
+          loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
         tabPanelBackgroundColor:
           loadedState.uiSettings?.theme?.tabPanelBackgroundColor || 'rgb(15 21 27)',
         previewBackgroundColor:
@@ -226,7 +246,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
     toVersion: CURRENT_STATE_VERSION,
     hasOriginalFavorites: !!loadedState.favorites,
     migratedFavoritesCount: migratedState.favorites.length,
-    sectionsCount: migratedState.sections.length,
+    // sectionsCount removed - now managed per operation
   });
 
   return migratedState;
@@ -235,7 +255,6 @@ function validateAndMigrateAppState(loadedState: any): AppState {
 export const appState = persisted<AppState>(
   'appState',
   {
-    sections: [],
     isCombiningFile: false,
     combinedFileLength: 0,
     playingCombined: false,
@@ -247,9 +266,14 @@ export const appState = persisted<AppState>(
     sortDirection: undefined,
     favorites: [],
     uiSettings: {
-      activeTab: 'Global',
+      activeTab: 'Operations',
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
+      selectedOperationName: null,
+      timelineDebugMode: false,
+      showFullSvgPath: false,
+      svgPathDisplayMode: 'trim',
+      callSiteTrackingEnabled: false,
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -281,8 +305,28 @@ export const appState = persisted<AppState>(
   }
 );
 
+// Convenience function for timeline debug mode
+export const timelineDebugMode = {
+  subscribe: derived(appState, state => state.uiSettings?.timelineDebugMode ?? false).subscribe,
+  toggle: () =>
+    appState.update(state => ({
+      ...state,
+      uiSettings: {
+        ...state.uiSettings,
+        timelineDebugMode: !(state.uiSettings?.timelineDebugMode ?? false),
+      },
+    })),
+  set: (value: boolean) =>
+    appState.update(state => ({
+      ...state,
+      uiSettings: {
+        ...state.uiSettings,
+        timelineDebugMode: value,
+      },
+    })),
+};
+
 const defaults: AppState = {
-  sections: [],
   isCombiningFile: false,
   combinedFileLength: 0,
   playingCombined: false,
@@ -331,123 +375,11 @@ const DEFAULT_FOLDER = 'C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\_ti
 let isCurrentlyCombining = false;
 let combiningCheckInterval;
 
-export async function addSource(paths?: string | string[]) {
-  const defaultSectionColor = getDefaultColor();
-  const selectedFolderPaths = Array.isArray(paths) ? paths : [paths ?? DEFAULT_FOLDER];
+// Removed addSource() function - use operation-specific addSourceToCurrentOperation() instead
 
-  const tState = get(appState);
-  console.log(tState);
+// Removed deleteSection() function - use operation-specific deleteSectionFromCurrentOperation() instead
 
-  try {
-    // Get file paths for each folder
-    const folderFilesResult = await invokeWithPerf<Record<string, string[]>>(
-      'get_file_paths_in_folder',
-      {
-        folderPaths: selectedFolderPaths,
-      }
-    );
-
-    if (folderFilesResult.ok === true) {
-      // Flatten all file paths to request metadata at once
-      const allDiscoveredFilePaths: string[] = Object.values(folderFilesResult.value).flat();
-      console.log(allDiscoveredFilePaths);
-
-      // Get metadata for all discovered files
-      const fileMetadataResult = await invokeWithPerf<FileMetadata[]>('get_metadata', {
-        titles: allDiscoveredFilePaths,
-      });
-
-      if (fileMetadataResult.ok === true) {
-        // Calculate starting index for new files - always use sequential indexing
-        let nextIndex = 0;
-        const allExistingFiles = getAllFiles(tState.sections);
-        if (allExistingFiles.length > 0) {
-          nextIndex = Math.max(...allExistingFiles.map(f => f.index)) + 1;
-        }
-        console.log(folderFilesResult);
-        const newSourceSections: Section[] = Object.entries(folderFilesResult.value).map(
-          ([folderPath, discoveredFiles]) => {
-            const filesWithMetadata: AudioFileItem[] = discoveredFiles
-              .map((filePath, fileIndex) => {
-                const fileMetadata = fileMetadataResult.value.find(
-                  metadata => metadata.path === filePath
-                );
-
-                // Use sequential indexing for all new files
-                const properIndex = nextIndex++;
-
-                return fileMetadata
-                  ? {
-                      ...fileMetadata,
-                      color: defaultSectionColor,
-                      index: properIndex,
-                      active: true,
-                    }
-                  : null;
-              })
-              .filter(Boolean) as AudioFileItem[];
-
-            return {
-              folderPath,
-              files: filesWithMetadata,
-              errors: [],
-              metaData: [],
-              color: defaultSectionColor,
-            };
-          }
-        );
-
-        console.log(newSourceSections);
-
-        // Update app state with new sections
-        appState.update(currentState => {
-          return {
-            ...currentState,
-            combinedFile: undefined,
-            combinedFileLength: undefined,
-            sections: [...newSourceSections, ...currentState.sections],
-          };
-        });
-      }
-    }
-
-    // Send updated sections to backend/input processor
-    const updatedAppState = get(appState);
-    updateInputs(updatedAppState.sections);
-  } catch (error) {
-    console.error('Error in addSection:', error);
-  }
-}
-
-export function deleteSection(index: number) {
-  console.log(`%cHERE LINE :150 %c`, 'color: yellow; font-weight: bold', '');
-
-  appState.update(state => {
-    // Remove the section at the specified index
-    state.sections.splice(index, 1);
-    if (state.sections.length === 0) {
-      invokeWithPerf('clear_audio_files');
-      state.sections = [];
-      state.timelineItems = [];
-      state.combinedFile = undefined;
-      return state;
-    } else {
-      updateInputs(state.sections);
-    }
-    return state;
-  });
-}
-
-export function updatePath(sectionIndex: number, value: string) {
-  appState.update(state => {
-    console.log(state.sections);
-    if (state.sections[sectionIndex]) {
-      state.sections[sectionIndex].folderPath = value;
-    }
-    return state;
-  });
-  get_file_paths_in_folder(sectionIndex);
-}
+// Removed updatePath() function - use operation-specific functions instead
 
 export async function play_sample_preview(song: string) {
   await invokeWithPerf<Song[]>('play_sample_preview', { title: song }).then(f => {
@@ -471,28 +403,6 @@ export async function pause_sample_preview() {
 export interface CombineAudioResult {
   output: string;
   svgPath: string;
-}
-
-export async function combine_audio_files(input_files: string[], output_path: string) {
-  const combineAudioFilesRes = await invokeWithPerf<CombineAudioResult>('combine_audio_files', {
-    inputFiles: input_files,
-    outputPath: output_path,
-  });
-  if (combineAudioFilesRes.ok === true) {
-    const getMetadataRes = await invokeWithPerf<FileMetadata>('get_metadata', {
-      title:
-        'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\assets\\test_output\\test.wav',
-    });
-    if (getMetadataRes.ok === true) {
-      appState.update(state => {
-        state.combinedFile = {
-          path: combineAudioFilesRes.value.output,
-          svgPath: combineAudioFilesRes.value.svgPath,
-        };
-        return state;
-      });
-    }
-  }
 }
 
 export async function get_file_paths_in_folder(sectionIndex: number) {
@@ -573,7 +483,6 @@ appState.subscribe(s => {
 export function resetAppState() {
   appState.update(state => {
     state.combinedFile = undefined;
-    // state.sections = [];
     state.playingSong = undefined;
     state.playingSection = undefined;
     state.playProgress = undefined;
@@ -669,78 +578,12 @@ function offsetX(path: string, dx: number): string {
   });
 }
 
-// Derived store for duration in seconds - used by Timeline and other components
+// Derived store for duration in seconds - updated to use operation-specific data or default
 export const durationSeconds = derived(appState, $appState => {
-  return $appState?.combinedFileLength && $appState.sections.length > 0
-    ? $appState.combinedFileLength
-    : 30;
+  return $appState?.combinedFileLength ? $appState.combinedFileLength : 30;
 });
 
-// Function to sync file indices with backend response and trigger animations
-export function syncIndexes(
-  newOrder: [string, number][],
-  currentState: AppState
-): {
-  updatedState: AppState;
-  changedIds: string[];
-} {
-  const allFiles = getAllFiles(currentState.sections);
-  const changedIds: string[] = [];
-
-  // Update each file's index based on the new order from backend
-  newOrder.forEach(([fileId, newIndex]) => {
-    const toUpdate = allFiles.find(f => f.id === fileId);
-    if (toUpdate) {
-      const oldIndex = toUpdate.index;
-
-      // Check if the index actually changed
-      if (oldIndex !== newIndex) {
-        changedIds.push(toUpdate.id);
-        console.log(`Updating file ${toUpdate.id} index from ${oldIndex} to ${newIndex}`);
-        toUpdate.index = newIndex;
-        console.log('File after update:', toUpdate);
-      } else {
-        console.log(`File ${toUpdate.id} index unchanged: ${oldIndex}`);
-      }
-    } else {
-      console.warn(`File with ID ${fileId} not found in sections`);
-    }
-  });
-
-  console.log(`Changed IDs (${changedIds.length}):`, changedIds);
-
-  // Create new sections array to trigger reactivity
-  const newSections = currentState.sections.map(section => ({
-    ...section,
-    files: [...section.files], // Create new file arrays
-  }));
-
-  console.log('Updated sections:', newSections);
-
-  const updatedState = {
-    ...currentState,
-    sections: newSections,
-  };
-
-  return {
-    updatedState,
-    changedIds,
-  };
-}
-
-// Function to apply index sync and trigger animations
-export function applySyncIndexes(newOrder: [string, number][]): void {
-  appState.update(state => {
-    const { updatedState, changedIds } = syncIndexes(newOrder, state);
-
-    // Trigger animation for changed files
-    if (changedIds.length > 0) {
-      triggerFileAnimation(changedIds);
-    }
-
-    return updatedState;
-  });
-}
+// Removed syncIndexes() and applySyncIndexes() functions - use operation-specific functions instead
 
 export function addToFavorites(folderPath: string) {
   appState.update(state => {
@@ -899,3 +742,336 @@ export function bumpRevision() {
     return state;
   });
 }
+
+export function setSelectedOperationName(operationName: string | null) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.selectedOperationName = operationName;
+    return state;
+  });
+}
+
+export function toggleShowFullSvgPath() {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.showFullSvgPath = !(state.uiSettings.showFullSvgPath ?? false);
+    return state;
+  });
+}
+
+export function setShowFullSvgPath(value: boolean) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.showFullSvgPath = value;
+    return state;
+  });
+}
+
+export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.svgPathDisplayMode = mode;
+    return state;
+  });
+}
+
+// ============================================================================
+// OPERATION-RELATED FUNCTIONS REMOVED
+// Operations no longer have sections property - these functions are deprecated
+// ============================================================================
+
+// All operation-section related functions have been removed since operations
+// no longer have a sections property. Operations now use sources instead.
+
+// Removed addSourceToCurrentOperation() - operations no longer have sections
+// Removed deleteSectionFromCurrentOperation() - operations no longer have sections
+
+/**
+ * Current operation sources - gets the sources array from the currently selected MergeOp
+ * For MergeOps, all sources are operation references to SampleOps
+ */
+export const currentOperationSources = derived(appState, $appState => {
+  const selectedOperationName = $appState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) return [];
+
+  const operation = $appState.operations?.defs?.[selectedOperationName];
+  if (!operation || operation.kind !== 'merge') return [];
+
+  return operation.sources;
+});
+
+/**
+ * Current operation file list - gets all file IDs from SampleOps referenced by the current MergeOp
+ * Returns an array of file ID strings extracted from the SampleOps
+ */
+export const currentOperationFileList = derived(appState, $appState => {
+  const selectedOperationName = $appState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) return [];
+
+  const operation = $appState.operations?.defs?.[selectedOperationName];
+  if (!operation || operation.kind !== 'merge') return [];
+
+  const fileIds: string[] = [];
+
+  // For each source in the MergeOp (which should be operation references)
+  for (const source of operation.sources) {
+    if (source.type === 'operation') {
+      // Get the referenced SampleOp
+      const sampleOp = $appState.operations?.defs?.[source.operationRef];
+      if (sampleOp && sampleOp.kind === 'sample') {
+        // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
+        for (const sampleSource of sampleOp.sources) {
+          if (sampleSource.type === 'file') {
+            fileIds.push(sampleSource.fileId);
+          }
+        }
+      }
+    }
+  }
+
+  return fileIds;
+});
+
+// Right now in here for when we have a given mergeOp selected, what we want to do is display the list of filenames that are the sources for all of the sampleOps which are referenced in that mergeOp. Don't worry about the metadata columns right now, but we want to display just the file names we can get via #
+/**
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
+ */
+export function getOperationSections(operationName: string): Section[] {
+  console.warn('getOperationSections is deprecated - operations no longer have sections');
+  return [];
+}
+
+/**
+ * Get the sources array from the currently selected MergeOp
+ * For MergeOps, all sources are operation references to SampleOps
+ */
+export function getCurrentOperationSources(): OperationSource[] {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) return [];
+
+  const operation = currentState.operations?.defs?.[selectedOperationName];
+  if (!operation || operation.kind !== 'merge') return [];
+
+  return operation.sources;
+}
+
+/**
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
+ */
+export function getCurrentOperationSections(): Section[] {
+  console.warn('getCurrentOperationSections is deprecated - operations no longer have sections');
+  return [];
+}
+
+/**
+ * Add a source to the current MergeOp
+ * For now, all sources are operation references to SampleOps
+ */
+export function addOperationSourceToCurrent(operationRef: string) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  appState.update(state => {
+    const operation = state.operations?.defs?.[selectedOperationName];
+    if (!operation || operation.kind !== 'merge') {
+      console.warn('Current operation is not a MergeOp');
+      return state;
+    }
+
+    // Add the new operation source
+    const newSource: OperationSource = { type: 'operation', operationRef };
+    operation.sources.push(newSource);
+
+    // Update the operations version
+    if (state.operations) {
+      state.operations._version = (state.operations._version ?? 0) + 1;
+    }
+    state._rev = (state._rev ?? 0) + 1;
+
+    return state;
+  });
+}
+
+/**
+ * Remove a source from the current MergeOp by index
+ */
+export function removeSourceFromCurrentOperation(index: number) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  appState.update(state => {
+    const operation = state.operations?.defs?.[selectedOperationName];
+    if (!operation || operation.kind !== 'merge') {
+      console.warn('Current operation is not a MergeOp');
+      return state;
+    }
+
+    if (index >= 0 && index < operation.sources.length) {
+      operation.sources.splice(index, 1);
+
+      // Update the operations version
+      if (state.operations) {
+        state.operations._version = (state.operations._version ?? 0) + 1;
+      }
+      state._rev = (state._rev ?? 0) + 1;
+    }
+
+    return state;
+  });
+}
+
+/**
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
+ */
+export async function addSourceToCurrentOperation(paths?: string | string[]) {
+  console.warn(
+    'addSourceToCurrentOperation is deprecated - use addOperationSourceToCurrent() instead'
+  );
+  // No-op for now
+}
+
+/**
+ * DEPRECATED: Operations no longer have sections
+ * This is kept temporarily for compatibility until UI is updated
+ */
+export function deleteSectionFromCurrentOperation(index: number) {
+  console.warn(
+    'deleteSectionFromCurrentOperation is deprecated - operations no longer have sections'
+  );
+  // No-op for now
+}
+
+/**
+ * Create SampleOps for each file in a directory and add them to the current MergeOp
+ * This function will scan the directory, create a SampleOp for each audio file,
+ * and add those operations as sources to the currently selected MergeOp
+ */
+export async function addSampleOpsFromDirectory(directoryPath: string) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  try {
+    // TODO: This would need to be implemented to get files from directory
+    // For now, we'll use a placeholder that simulates getting files
+    const files = await getFilesFromDirectory(directoryPath);
+
+    appState.update(state => {
+      const operation = state.operations?.defs?.[selectedOperationName];
+      if (!operation || operation.kind !== 'merge') {
+        console.warn('Current operation is not a MergeOp');
+        return state;
+      }
+
+      if (!state.operations) {
+        state.operations = { defs: {}, _version: 1 };
+      }
+
+      // Create a SampleOp for each file and add it to the current MergeOp
+      files.forEach((filePath, index) => {
+        // Generate a unique operation name
+        const fileName =
+          filePath
+            .split(/[/\\]/)
+            .pop()
+            ?.replace(/\.[^/.]+$/, '') || `file_${index}`;
+        const sampleOpName = `sample_${fileName}_${Date.now()}_${index}`;
+
+        // Create the SampleOp
+        const sampleOp: SampleOp = {
+          kind: 'sample',
+          sources: [{ type: 'file', fileId: filePath }],
+        };
+
+        // Add the SampleOp to operations
+        state.operations.defs[sampleOpName] = sampleOp;
+
+        // Add the SampleOp reference to the current MergeOp's sources
+        const operationSource: OperationSource = { type: 'operation', operationRef: sampleOpName };
+        operation.sources.push(operationSource);
+      });
+
+      // Update versions
+      state.operations._version = (state.operations._version ?? 0) + 1;
+      state._rev = (state._rev ?? 0) + 1;
+      console.log(state.operations);
+      console.log(`Created ${files.length} SampleOps from directory: ${directoryPath}`);
+      return state;
+    });
+  } catch (error) {
+    console.error('Failed to add SampleOps from directory:', error);
+  }
+}
+
+/**
+ * Get files from a directory using Tauri backend
+ */
+async function getFilesFromDirectory(directoryPath: string): Promise<string[]> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+
+    // Use the existing Tauri command to get files from the directory
+    const result: Record<string, string[]> = await invoke('get_file_paths_in_folder', {
+      folderPaths: [directoryPath],
+    });
+
+    // Extract the files array for our directory
+    return result[directoryPath] || [];
+  } catch (error) {
+    console.error('Failed to get files from directory:', error);
+
+    // Fallback to empty array if the operation fails
+    return [];
+  }
+}
+
+// Call site tracking functions
+export function setCallSiteTrackingEnabled(enabled: boolean) {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.callSiteTrackingEnabled = enabled;
+    return state;
+  });
+}
+
+export function toggleCallSiteTrackingEnabled() {
+  appState.update(state => {
+    if (!state.uiSettings) {
+      state.uiSettings = {};
+    }
+    state.uiSettings.callSiteTrackingEnabled = !(state.uiSettings.callSiteTrackingEnabled ?? false);
+    return state;
+  });
+}
+
+// Derived store for call site tracking enabled
+export const callSiteTrackingEnabled = derived(
+  appState,
+  $appState => $appState.uiSettings?.callSiteTrackingEnabled ?? false
+);

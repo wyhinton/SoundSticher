@@ -1,6 +1,5 @@
 <script lang="ts">
   import { open } from '@tauri-apps/plugin-dialog';
-  import { addSource } from '../state/state.svelte';
 
   export let selectedRowCount: number = 0;
   export let onSelectAll: (() => void) | undefined = undefined;
@@ -20,23 +19,22 @@
   }
 
   async function handleAddSource() {
-    try {
-      const selected = await open({
-        multiple: true,
-        directory: true,
-        title: 'Select folders to add as source sections',
-      });
-
-      if (selected && Array.isArray(selected) && selected.length > 0) {
-        // Pass the selected folders to addSource
-        await addSource(selected);
-      } else if (selected && typeof selected === 'string') {
-        // Handle single folder selection
-        await addSource([selected]);
-      }
-    } catch (error) {
-      console.error('Error opening folder dialog:', error);
-    }
+    // try {
+    //   const selected = await open({
+    //     multiple: true,
+    //     directory: true,
+    //     title: 'Select folders to add as source sections',
+    //   });
+    //   if (selected && Array.isArray(selected) && selected.length > 0) {
+    //     // Pass the selected folders to addSource
+    //     await addSource(selected);
+    //   } else if (selected && typeof selected === 'string') {
+    //     // Handle single folder selection
+    //     await addSource([selected]);
+    //   }
+    // } catch (error) {
+    //   console.error('Error opening folder dialog:', error);
+    // }
   }
 </script>
 

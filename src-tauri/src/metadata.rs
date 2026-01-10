@@ -1,7 +1,7 @@
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use lofty::file::AudioFile;
-use lofty::probe::Probe;
 use lofty::read_from_path;
 use serde::Deserialize;
 use serde::Serialize;
@@ -11,55 +11,19 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::probe::ProbeResult;
 use symphonia::default::get_probe;
+use tauri::State;
 
-use lofty;
-use uuid::Uuid;
-
+use crate::duration_cache::DurationCache;
 use crate::error::Error;
 
-pub fn get_duration(path: &str) -> Option<f32> {
-    let file = std::fs::File::open(path).ok()?;
-    // let mreader = std::io::BufReader::new(file);
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-
-    let mut hint = Hint::new();
-    let path = Path::new(&path);
-    if let Some(extension) = path.extension() {
-        hint.with_extension(&extension.to_string_lossy());
-    };
-
-    let probed: ProbeResult = get_probe()
-        .format(
-            &hint,
-            mss,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )
-        .ok()?;
-
-    let format = probed.format;
-    let track = format.default_track().or_else(|| format.tracks().get(0))?;
-
-    let duration = track.codec_params.n_frames?;
-    let sample_rate = track.codec_params.sample_rate?;
-
-    let length = duration as f32 / sample_rate as f32;
-    log::info!(
-        "Got duration: {}, sample_rate: {}, length: {}",
-        duration,
-        sample_rate,
-        length
-    );
-    Some(duration as f32 / sample_rate as f32)
-}
-
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileMetadata {
     pub path: String,
     pub size: Option<u64>,
-    pub bitRate: Option<u32>,
+    pub bit_rate: Option<u32>,
     pub channels: Option<u8>,
-    pub bitDepth: Option<u8>,
+    pub bit_depth: Option<u8>,
     pub duration: u128,
 }
 
@@ -98,9 +62,9 @@ pub fn get_metadata(titles: Vec<String>) -> Result<Vec<FileMetadata>, Error> {
                 results.push(FileMetadata {
                     path: title.clone(),
                     size: get_file_size(title.clone()),
-                    bitRate: props.audio_bitrate(),
+                    bit_rate: props.audio_bitrate(),
                     channels: props.channels(),
-                    bitDepth: props.bit_depth(),
+                    bit_depth: props.bit_depth(),
                     duration: props.duration().as_millis(),
                 });
             }
@@ -114,12 +78,14 @@ pub fn get_metadata(titles: Vec<String>) -> Result<Vec<FileMetadata>, Error> {
     Ok(results)
 }
 
-// #[tauri::command]
-// pub fn load_samples_into_state(
-//     samplePaths: Vec<String>,
-//     state: State<'_, Arc<AppState>>,
-// ) -> Result<FileMetadata, Error> {
-// }
+/// Lightweight duration-only command for waveform width calculation
+/// Uses the duration cache to avoid redundant audio parsing
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDuration {
+    pub path: String,
+    pub duration_seconds: f32,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -130,5 +96,5 @@ fn get_file_size(path: String) -> Option<u64> {
     if let Ok(metadata) = std::fs::metadata(path) {
         return Some(metadata.len());
     }
-    return None;
+    None
 }

@@ -1,13 +1,23 @@
 <script lang="ts">
-  import { appState, removeFromFavorites, addSource } from '../state/state.svelte';
-  import type { Favorite } from '../state/state.svelte';
+  import {
+    appState,
+    removeFromFavorites,
+    addToFavorites,
+    addOperationSourceToCurrent,
+    addSampleOpsFromDirectory,
+  } from '../state/state.svelte';
 
   function handleRemoveFromFavorites(path: string) {
     removeFromFavorites(path);
   }
 
-  function handleAddFavoriteAsSource(path: string) {
-    addSource([path]);
+  async function handleAddFavoriteAsSource(path: string) {
+    try {
+      await addSampleOpsFromDirectory(path);
+      console.log(`Added all files from directory as SampleOps: ${path}`);
+    } catch (error) {
+      console.error('Failed to add favorite as source:', error);
+    }
   }
 
   function getDirectoryName(path: string): string {
@@ -149,7 +159,6 @@
   .favorites-list {
     flex: 1;
     overflow-y: auto;
-    padding-right: 4px;
   }
 
   .favorite-item {

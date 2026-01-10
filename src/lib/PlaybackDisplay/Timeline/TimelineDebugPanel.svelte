@@ -1,7 +1,11 @@
 <script lang="ts">
   import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
-  import type { TimelineItem } from './D3TimelineManager';
-  import { durationSeconds } from '../../state/state.svelte';
+  import {
+    durationSeconds,
+    type TimelineItem,
+    appState,
+    toggleShowFullSvgPath,
+  } from '../../state/state.svelte';
 
   // Props passed from Timeline component
   export let isDragging: boolean;
@@ -17,9 +21,18 @@
   export let selectedSegments: Set<number>;
   export let lastSelectedIndex: number | null;
   export let segmentsToMove: number[] = [];
+
+  // Reactive access to showFullSvgPath setting
+  $: showFullSvgPath = $appState.uiSettings?.showFullSvgPath ?? false;
 </script>
 
 <div class="debug">
+  <div class="controls-row">
+    <label>
+      <input type="checkbox" checked={showFullSvgPath} on:change={() => toggleShowFullSvgPath()} />
+      Show full SVG path
+    </label>
+  </div>
   <div>
     <b>Drag:</b>
     {isDragging} |
@@ -64,7 +77,7 @@
     <div><b>Items ({timelineItems.length}):</b></div>
     {#each timelineItems as item, i}
       <div
-        class="item"
+        class="item d-flex gap-2"
         class:dragged={i === draggedSegmentIndex}
         class:selected={selectedSegments.has(i)}
       >
@@ -81,6 +94,26 @@
           originalPathWidth *
           scaleX
         ).toFixed(0)}px
+        {#if item.type === 'audio-file'}
+          <div>
+            {#if item.svgPath}
+              {#if showFullSvgPath}
+                <div class="svg-path">{item.svgPath}</div>
+              {:else}
+                <span class="svg-path-short">
+                  SVG: {item.svgPath.length} chars
+                  {#if item.svgPath.length > 50}
+                    - {item.svgPath.substring(0, 50)}...
+                  {:else}
+                    - {item.svgPath}
+                  {/if}
+                </span>
+              {/if}
+            {:else}
+              <span style="color: red;">undefined</span>
+            {/if}
+          </div>
+        {/if}
       </div>
     {/each}
   {:else}
@@ -102,6 +135,25 @@
 
   .debug div {
     margin: 2px 0;
+  }
+
+  .controls-row {
+    margin: 4px 0;
+    padding: 4px 0;
+    border-bottom: 1px solid #333;
+  }
+
+  .controls-row label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: #ccc;
+    cursor: pointer;
+  }
+
+  .controls-row input[type='checkbox'] {
+    margin: 0;
   }
 
   .debug .item {
@@ -127,5 +179,20 @@
   .debug .item-type {
     color: #888;
     font-style: italic;
+  }
+
+  .svg-path {
+    color: #88ddff;
+    font-size: 10px;
+    word-break: break-all;
+    margin-top: 2px;
+    padding: 2px;
+    background: #111;
+    border-radius: 2px;
+  }
+
+  .svg-path-short {
+    color: #88ddff;
+    font-size: 10px;
   }
 </style>

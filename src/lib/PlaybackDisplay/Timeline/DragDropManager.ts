@@ -2,7 +2,7 @@ import type { D3TimelineManager, TimelineItem } from './D3TimelineManager';
 import { invokeWithPerf, updateInputs } from '../../state/performance';
 import { generateProgressChannel, type SortAudioEvent } from '../../state/events';
 import { Channel } from '@tauri-apps/api/core';
-import { applySyncIndexes, type AppState } from '../../state/state.svelte';
+import { type AppState } from '../../state/state.svelte';
 import { get, type Writable } from 'svelte/store';
 import { writable, type Readable } from 'svelte/store';
 import { logger } from '../../state/logging';
@@ -262,12 +262,13 @@ export class DragDropManager {
 
       logger.dragdrop.reorder('Received new order from backend:', newOrder);
 
-      // Update inputs after state change
-      updateInputs(appState.sections);
+      // Note: updateInputs call removed - operations should manage their own sections
+      // updateInputs(appState.sections);
 
       // Use the reusable index syncing function
       if (newOrder.ok && newOrder.value) {
-        applySyncIndexes(newOrder.value);
+        // Note: applySyncIndexes removed - operations should handle their own index sync
+        // applySyncIndexes(newOrder.value);
       }
 
       logger.dragdrop.reorder('Reorder completed successfully');
