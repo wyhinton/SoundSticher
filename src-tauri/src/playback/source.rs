@@ -1,7 +1,5 @@
 // AudioSource trait for playback
 
-use std::io::{Read, Seek};
-
 /// Trait for audio sources that can be played back
 pub trait AudioSource: Send + Sync {
     /// Get the sample rate of the audio source

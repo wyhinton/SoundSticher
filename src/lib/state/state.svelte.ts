@@ -119,6 +119,8 @@ export interface AudioFileTimelineItem extends BaseTimelineItem {
   fileName: string;
   size: number;
   active: boolean;
+  /** Duration in seconds - from duration cache, NOT waveform */
+  duration?: number;
 }
 
 export interface SpacerTimelineItem extends BaseTimelineItem {
