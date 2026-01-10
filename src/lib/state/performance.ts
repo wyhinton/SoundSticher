@@ -70,7 +70,8 @@ function getCallSiteInfo() {
 
 export interface PerformanceState {
   cancel_combine: PerformanceMetric[];
-  clear_audio_files: [];
+  clear_duration_cache: PerformanceMetric[];
+  clear_duration_cache: PerformanceMetric[];
   clear_waveform_cache: PerformanceMetric[];
   combine_all_cached_samples: PerformanceMetric[];
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
@@ -79,12 +80,18 @@ export interface PerformanceState {
   get_audio_file_active_status: PerformanceMetric[];
   get_current_play_progress: PerformanceMetric[];
   get_custom_order: PerformanceMetric[];
-  get_file_paths_in_folder: PerformanceMetric[];
+  get_duration: PerformanceMetric[];
+  get_duration_cache_stats: PerformanceMetric[];
+  get_duration_service: PerformanceMetric[];
+  get_durations: PerformanceMetric[];
+  get_durations_batch: PerformanceMetric[];
   get_metadata: PerformanceMetric[];
   get_waveform: PerformanceMetric[];
   get_waveform_cache_stats: PerformanceMetric[];
   get_waveforms_batch: PerformanceMetric[];
   get_waveforms_for_operation: PerformanceMetric[];
+  invalidate_duration: PerformanceMetric[];
+  invalidate_duration: PerformanceMetric[];
   invalidate_waveform: PerformanceMetric[];
   op_playback_build_graph: PerformanceMetric[];
   op_playback_clear_graph: PerformanceMetric[];
@@ -96,7 +103,6 @@ export interface PerformanceState {
   op_playback_set_loop: PerformanceMetric[];
   op_playback_set_volume: PerformanceMetric[];
   op_playback_stop: PerformanceMetric[];
-  open_in_explorer: PerformanceMetric[];
   pause_sample_preview: PerformanceMetric[];
   pause_timeline_audio: PerformanceMetric[];
   play_sample_preview: PerformanceMetric[];
@@ -118,7 +124,8 @@ export interface PerformanceState {
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
   cancel_combine: [],
-  clear_audio_files: [],
+  clear_duration_cache: [],
+  clear_duration_cache: [],
   clear_waveform_cache: [],
   combine_all_cached_samples: [],
   combine_all_cached_samples_with_custom_order: [],
@@ -127,12 +134,18 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   get_audio_file_active_status: [],
   get_current_play_progress: [],
   get_custom_order: [],
-  get_file_paths_in_folder: [],
+  get_duration: [],
+  get_duration_cache_stats: [],
+  get_duration_service: [],
+  get_durations: [],
+  get_durations_batch: [],
   get_metadata: [],
   get_waveform: [],
   get_waveform_cache_stats: [],
   get_waveforms_batch: [],
   get_waveforms_for_operation: [],
+  invalidate_duration: [],
+  invalidate_duration: [],
   invalidate_waveform: [],
   op_playback_build_graph: [],
   op_playback_clear_graph: [],
@@ -144,7 +157,6 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   op_playback_set_loop: [],
   op_playback_set_volume: [],
   op_playback_stop: [],
-  open_in_explorer: [],
   pause_sample_preview: [],
   pause_timeline_audio: [],
   play_sample_preview: [],
@@ -306,9 +318,9 @@ export async function exportAudio(settings: ExportSettings, outputPath: string) 
     }
     if (message.event === 'finished') {
       console.log('FINISHED ENCODE');
-      invokeWithPerf('open_in_explorer', {
-        fileToOpen: message.data.outputPath,
-      });
+      // invokeWithPerf('open_in_explorer', {
+      //   fileToOpen: message.data.outputPath,
+      // });
     }
   };
   const res = await invokeWithPerf<string, CommandError>('export_audio', {

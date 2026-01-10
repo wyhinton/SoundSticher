@@ -22,6 +22,7 @@ pub enum LogSystem {
     Cook,
     Graph,
     Waveform,
+    Duration,  // Add duration system
     Timeline,  // Add timeline system
     Operation, // Add operation system
     EventEmits,
@@ -56,6 +57,7 @@ pub struct LoggingConfig {
     pub playback_enabled: bool,
     pub sorting_enabled: bool,
     pub waveform_enabled: bool,
+    pub duration_enabled: bool,  // Add duration logging
     pub timeline_enabled: bool,  // Add timeline logging
     pub operation_enabled: bool, // Add operation logging
     pub console_output: bool,    // Whether to also print to console
@@ -70,6 +72,7 @@ impl Default for LoggingConfig {
             playback_enabled: false,
             sorting_enabled: false,
             waveform_enabled: false,
+            duration_enabled: false,  // Default off for duration
             timeline_enabled: false,  // Default off for timeline
             operation_enabled: false, // Default off for operations
             console_output: true,
@@ -141,6 +144,7 @@ impl LoggingService {
             LogSystem::Graph => false, // Future system, default to off
             LogSystem::Sorting => config.sorting_enabled,
             LogSystem::Waveform => config.waveform_enabled,
+            LogSystem::Duration => config.duration_enabled, // Add duration check
             LogSystem::Timeline => config.timeline_enabled, // Add timeline check
             LogSystem::Operation => config.operation_enabled, // Add operation check
             LogSystem::EventEmits => config.event_emits_enabled,
@@ -180,6 +184,7 @@ impl LoggingService {
                 LogSystem::Cook => "COOK",
                 LogSystem::Graph => "GRAPH",
                 LogSystem::Waveform => "WAVEFORM",
+                LogSystem::Duration => "DURATION",
                 LogSystem::Timeline => "TIMELINE",
                 LogSystem::Operation => "OPERATION",
                 LogSystem::EventEmits => "EVENT EMITS",

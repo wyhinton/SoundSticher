@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Listener;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::duration_service::DurationService;
 use crate::error::Error;
 use crate::graph::OperationGraph;
 use crate::logging::{LogSystem, LoggingConfig, LoggingService};
@@ -18,6 +19,8 @@ mod artifacts;
 mod audio_manager;
 mod combine;
 mod cook;
+mod duration_cache;
+mod duration_service;
 mod encoder;
 mod error;
 mod graph;
@@ -161,9 +164,9 @@ fn get_artifacts_directory() -> String {
 #[tauri::command]
 fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<(), String> {
     use std::process::Command;
-    
+
     let path = file_path.replace('\\', "/");
-    
+
     let args = if let Some(line) = line_number {
         vec!["--goto".to_string(), format!("{}:{}", path, line)]
     } else {
@@ -198,10 +201,7 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
         }
 
         // Try using 'code' from PATH as fallback
-        if let Ok(_) = Command::new("code")
-            .args(&args)
-            .spawn()
-        {
+        if let Ok(_) = Command::new("code").args(&args).spawn() {
             return Ok(());
         }
 
@@ -311,6 +311,9 @@ pub fn run() {
             // Initialize waveform cache service
             app.manage(Arc::new(WaveformService::new()));
 
+            // Initialize duration service for proportional waveform width calculation
+            app.manage(Arc::new(DurationService::new()));
+
             // Initialize operation-based playback state
             app.manage(Arc::new(op_playback_commands::OpPlaybackState::new()));
 
@@ -337,6 +340,15 @@ pub fn run() {
             timeline_playback::stop_timeline_audio,
             timeline_playback::set_volume,
             get_metadata,
+            duration_cache::get_duration,
+            duration_cache::get_durations,
+            duration_cache::invalidate_duration,
+            duration_cache::get_duration_cache_stats,
+            duration_cache::clear_duration_cache,
+            duration_service::get_duration_service,
+            duration_service::get_durations_batch,
+            duration_service::invalidate_duration,
+            duration_service::clear_duration_cache,
             combine::test_async,
             combine::update_inputs,
             combine::combine_all_cached_samples,
