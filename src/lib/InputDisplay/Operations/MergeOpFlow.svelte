@@ -127,6 +127,7 @@
   }
 
   function getSourceLabel(source: OperationSource): string {
+    console.log(source);
     switch (source.type) {
       case 'group':
         return `Group: ${source.groupRef}`;

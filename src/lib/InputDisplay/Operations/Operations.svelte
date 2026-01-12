@@ -231,6 +231,8 @@
           return 'Active files';
         case 'section':
           return 'Section ' + source.sectionIndex;
+        case 'operation':
+          return `From: ${source.operationRef}`;
         case 'previousOperation':
           return 'Output from: ' + source.operationRef;
         default:

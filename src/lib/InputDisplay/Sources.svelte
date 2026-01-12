@@ -27,6 +27,7 @@
   import { Channel, invoke } from '@tauri-apps/api/core';
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
   import type { OperationSource } from '../state/operation';
+  import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
 
   // Get sample op files for display
   function getSampleOpFiles(operationRef: string) {
@@ -462,13 +463,20 @@
                     {/each}
                   </td>
                   <td class="text-center">
-                    <button
-                      class="btn btn-sm btn-outline-danger"
-                      onclick={() => removeSourceFromCurrentOperation(sourceIndex)}
-                      title="Remove source"
-                    >
-                      <i class="fas fa-times"></i>
-                    </button>
+                    <DropDownActionsButton
+                      dropdownId="source-actions-{sourceIndex}"
+                      buttonTitle="Source actions"
+                      buttonAriaLabel="Source actions for {source.operationRef}"
+                      actions={[
+                        {
+                          id: 'remove',
+                          label: 'Remove source',
+                          icon: 'fa-times',
+                          variant: 'danger',
+                          onClick: () => removeSourceFromCurrentOperation(sourceIndex),
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               {:else}
@@ -515,6 +523,10 @@
 
   th {
     font-size: 12px;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* Table cell styling for compact, non-wrapping text with ellipsis */
@@ -522,7 +534,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 120ch; /* Maximum of 120 characters */
+    max-width: 100px; /* Set max width to 100px for all columns */
     padding: 2px 8px !important; /* More compact padding */
     font-size: 11px; /* Slightly smaller font */
     line-height: 1.2; /* Tighter line height */
