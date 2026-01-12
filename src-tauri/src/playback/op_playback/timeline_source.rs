@@ -167,7 +167,7 @@ impl TimelineSource {
                 let local_time = event.to_local_time(self.position);
 
                 // Render into scratch buffer and get the rendered sample count
-                let samples = frames_to_render * self.spec.channels as usize;
+                let _samples = frames_to_render * self.spec.channels as usize;
                 let rendered = {
                     let scratch = self.context.scratch_buffer(frames_to_render);
                     scratch.fill(0.0);

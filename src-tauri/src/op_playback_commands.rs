@@ -4,10 +4,10 @@
 // using the pull-based playback system.
 
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::sample::SampleOp;
 use crate::playback::op_playback::{
     AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
 };
+use crate::playback_ops::sample_playback::SamplePlayableOp;
 use crate::{emit_logged, log_debug, log_info};
 use rodio::{OutputStream, Sink};
 use std::collections::HashMap;
@@ -199,7 +199,7 @@ pub fn op_playback_build_graph(
         };
 
         // Create the playable operation
-        let op = Box::new(SampleOp::new(samples.clone(), spec));
+        let op = Box::new(SamplePlayableOp::new(samples.clone(), spec));
         let op_duration = op.duration().unwrap_or(SampleTime::new(0));
         let op_duration_seconds = op_duration.to_seconds(sample_rate);
 
@@ -767,7 +767,7 @@ fn start_playback_from_position(
     *state.sink.lock().unwrap() = Some(Arc::clone(&sink));
 
     // Progress tracking loop
-    let mut tracking_start = Instant::now();
+    let tracking_start = Instant::now();
     let mut pause_start: Option<Instant> = None;
     let mut total_pause_duration = Duration::from_secs(0);
     let total_duration_seconds = graph.duration().to_seconds(spec.sample_rate);

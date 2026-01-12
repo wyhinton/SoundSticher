@@ -11,7 +11,7 @@ import {
   bumpRevision,
   callSiteTrackingEnabled,
 } from './state.svelte';
-import type { BufferAudioEvent, CombineAudioEvent, ExportAudioEvent } from './events';
+import type { CombineAudioEvent, ExportAudioEvent } from './events';
 import { exportState, type ExportSettings, type ExportState } from './export';
 import { createTypedEventChannel } from '$lib/utils/channelMaker';
 

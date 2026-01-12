@@ -3,8 +3,7 @@
 // This is the core abstraction for the pull-based playback system.
 // Operations implement PlayableOp to provide samples at a given time.
 
-use super::types::{AudioSpec, PlaybackError, PlaybackResult, SampleTime};
-use std::sync::Arc;
+use super::types::{AudioSpec, PlaybackResult, SampleTime};
 
 /// Trait that operations must implement to be playable in the timeline.
 ///

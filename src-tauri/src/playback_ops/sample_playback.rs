@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use crate::playback::{AudioSpec, PlayableOp, PlaybackResult, SampleTime};
+
 pub struct SamplePlayableOp {
     /// The audio samples (interleaved for multi-channel)
     samples: Arc<Vec<f32>>,

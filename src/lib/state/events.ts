@@ -1,25 +1,5 @@
 import type { Channel } from '@tauri-apps/api/core';
 
-export type BufferAudioEvent =
-  | {
-      event: 'started';
-      data: {
-        contentLength: number;
-      };
-    }
-  | {
-      event: 'progress';
-      data: {
-        chunkLength: number;
-      };
-    }
-  | {
-      event: 'finished';
-      data: {
-        downloadId: number;
-      };
-    };
-
 export type CombineAudioEvent =
   | {
       event: 'started';

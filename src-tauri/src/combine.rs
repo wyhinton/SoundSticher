@@ -3,7 +3,6 @@ use crate::logging::{LogSystem, LoggingService};
 use crate::send_channel_event;
 use crate::state::{AppState, AudioFile};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs::File;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -46,36 +45,6 @@ pub struct StateChangeEvent {
     pub value: serde_json::Value,
 }
 
-pub fn generate_waveform_path(samples: &[i16], width: usize, height: usize, offset: f64) -> String {
-    let samples_per_pixel = samples.len() / width.max(1);
-    let mid_y = height as f32 / 2.0;
-    let amplitude_scale = mid_y / i16::MAX as f32;
-
-    let mut d = String::new();
-    for x in 0..width {
-        let start = x * samples_per_pixel;
-        let end = ((x + 1) * samples_per_pixel).min(samples.len());
-
-        let slice = &samples[start..end];
-        if slice.is_empty() {
-            continue;
-        }
-
-        let min = *slice.iter().min().unwrap_or(&0) as f32;
-        let max = *slice.iter().max().unwrap_or(&0) as f32;
-
-        let y1 = mid_y - max * amplitude_scale;
-        let y2 = mid_y - min * amplitude_scale;
-
-        let x_pos = x as f32 + offset as f32;
-
-        // Use vertical bars (like Logic Pro / SoundCloud style)
-        d.push_str(&format!("M{x_pos:.1},{y1:.1} L{x_pos:.1},{y2:.1} "));
-    }
-
-    d
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AudioSend {
     path: String,
@@ -86,152 +55,6 @@ pub struct AudioSend {
 pub struct Section {
     folder_path: String,
     paths: Vec<AudioSend>,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    tag = "event",
-    content = "data"
-)]
-pub enum BufferAudioEvent {
-    Started { content_length: usize },
-    Progress { chunk_length: usize },
-    Finished,
-}
-
-#[tauri::command]
-pub async fn update_inputs(
-    sections: Vec<Section>,
-    state: State<'_, Arc<AppState>>,
-    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
-    app_handle: tauri::AppHandle,
-    on_event: Channel<BufferAudioEvent>,
-) -> Result<String, Error> {
-    let state = state.inner().clone();
-    let logging_service = logging_service.inner().clone();
-    let _current_token = state.cancel_token.fetch_add(1, Ordering::SeqCst) + 1;
-
-    // Log operation start
-    if let Ok(logger) = logging_service.lock() {
-        logger.info(
-            LogSystem::Combine,
-            "Starting input updates",
-            Some("update_inputs"),
-        );
-    } else {
-        println!("RUNNING UPDATES");
-    }
-
-    // let count = state.combine_process.clone();
-    // *count.lock().unwrap() += 1;
-
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut audio_files = state.audio_files.lock().unwrap();
-        let mut inserted_count = 0;
-        let mut removed_count = 0;
-
-        let valid_paths: HashSet<String> = sections
-            .iter()
-            .flat_map(|section| section.paths.iter().map(|audio| audio.path.clone()))
-            .collect();
-
-        send_channel_event!(
-            on_event,
-            BufferAudioEvent::Started {
-                content_length: valid_paths.len(),
-            }
-        );
-
-        // Collect IDs of files that will be removed
-        let removed_ids: Vec<Uuid> = audio_files
-            .iter()
-            .filter_map(|(path, file)| {
-                if !valid_paths.contains(path) {
-                    Some(file.id)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        audio_files.retain(|path, _| {
-            if valid_paths.contains(path) {
-                true
-            } else {
-                removed_count += 1;
-                false
-            }
-        });
-
-        // Remove corresponding IDs from custom_order
-        if !removed_ids.is_empty() {
-            let mut custom_order = state.custom_order.lock().unwrap();
-            custom_order.retain(|id| !removed_ids.contains(id));
-            println!("Removed {} IDs from custom_order", removed_ids.len());
-        }
-
-        let mut combined: Vec<i16> = Vec::new();
-
-        // First pass: collect all samples and calculate total length
-        let mut new_files: Vec<(String, Vec<i16>)> = Vec::new();
-        let mut total_new_samples = 0;
-
-        for path in valid_paths.iter() {
-            if !audio_files.contains_key(path) {
-                let samples = get_samples(path)?;
-                total_new_samples += samples.len();
-                new_files.push((path.clone(), samples));
-            }
-        }
-
-        // Calculate total samples including existing files
-        let existing_total_samples: usize = audio_files.values().map(|f| f.samples.len()).sum();
-        let grand_total_samples = existing_total_samples + total_new_samples;
-
-        for (i, (path, samples)) in new_files.iter().enumerate() {
-            combined.extend(samples);
-
-            // Calculate proportional width based on relative length
-            let relative_length = samples.len() as f64 / grand_total_samples as f64;
-            let segment_width = 1000.0 * relative_length; // Proportional to 1000px total width
-
-            // Generate waveform path when first inserting the sample
-            let waveform_path = generate_waveform_path(
-                samples,
-                segment_width as usize, // Proportional width
-                70,                     // Height
-                0.0, // No offset, we'll translate this later based on start_offset
-            );
-
-            audio_files.insert(
-                path.clone(),
-                AudioFile {
-                    samples: samples.clone(),
-                    start_offset: 0.,
-                    waveform_path,
-                    id: Uuid::new_v4(),
-                    path: path.clone(),
-                    active: true, // Default to active
-                },
-            );
-            let progress = (i as f32) / ((new_files.len() - 1).max(1) as f32);
-            let _ = app_handle.emit("buffering-progress", progress);
-            inserted_count += 1;
-            println!("➡️📖 INSERTING {} into BTree", path.clone());
-        }
-
-        let mut combined_audio = state.combined_audio.lock().unwrap();
-        *combined_audio = Some(combined);
-        send_channel_event!(on_event, BufferAudioEvent::Finished);
-
-        Ok(format!(
-            "Inserted {}, removed {}.",
-            inserted_count, removed_count
-        ))
-    })
-    .await?
 }
 
 #[derive(Clone, Serialize)]

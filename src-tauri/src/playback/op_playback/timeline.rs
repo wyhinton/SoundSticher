@@ -11,7 +11,7 @@
 use super::op_source::PlayableOp;
 use super::types::{AudioSpec, PlaybackOpId, PlaybackResult, SampleTime};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 pub type BoxedPlayableOp = Box<dyn PlayableOp>;
 

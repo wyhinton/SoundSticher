@@ -3,13 +3,13 @@
 // This cache is not per-operation - waveforms are global view artifacts
 // that can be shared across multiple operations.
 
-use crate::combine::generate_waveform_path;
-use crate::waveform::types::*;
+use crate::waveform::{generate_waveform_path, types::*};
 use std::collections::HashMap;
 use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
-use symphonia::core::audio::SampleBuffer;
+use symphonia::core::audio::Signal;
+use symphonia::core::audio::{AudioBufferRef, SampleBuffer};
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
@@ -41,6 +41,12 @@ pub struct WaveformCache {
     max_entries: usize,
     /// Cache statistics
     stats: RwLock<CacheStats>,
+}
+
+struct DecodedAudio {
+    samples: Vec<f32>, // interleaved or mono (we’ll downmix)
+    sample_rate: u32,
+    channels: usize,
 }
 
 impl WaveformCache {
@@ -148,39 +154,85 @@ impl WaveformCache {
         audio_key: &AudioKey,
         spec: &WaveformSpec,
     ) -> Result<Waveform, WaveformError> {
-        let file_path = &audio_key.source_id;
+        let decoded = self.load_samples(&audio_key.source_id)?;
 
-        // Load samples using symphonia (same as combine.rs)
-        let samples = self.load_samples(file_path)?;
-
-        if samples.is_empty() {
+        if decoded.samples.is_empty() {
             return Ok(Waveform::empty());
         }
 
-        // Generate SVG path using the existing function from combine.rs
-        let svg_path =
-            generate_waveform_path(&samples, spec.width as usize, spec.height as usize, 0.0);
+        let mono_samples = downmix_to_mono(&decoded.samples, decoded.channels);
 
-        // Calculate peaks for alternative rendering
-        let peaks = self.calculate_peaks(&samples, spec.width as usize, spec.normalize);
+        let svg_path = generate_waveform_path(
+            &mono_samples,
+            spec.width as usize,
+            spec.height as usize,
+            0.0,
+        );
 
-        // Calculate duration (assuming 44100 sample rate for now)
-        let sample_rate = 44100u32;
-        let duration = samples.len() as f64 / sample_rate as f64;
+        let peaks = self.calculate_peaks_f32(&mono_samples, spec.width as usize, spec.normalize);
+
+        let duration = mono_samples.len() as f64 / decoded.sample_rate as f64;
 
         Ok(Waveform::new(
             svg_path,
             peaks,
-            sample_rate,
+            decoded.sample_rate,
             duration,
-            samples.len(),
+            mono_samples.len(),
             spec.width,
             spec.height,
         ))
     }
 
+    fn calculate_peaks_f32(
+        &self,
+        samples: &[f32],
+        width: usize,
+        normalize: bool,
+    ) -> Vec<(f32, f32)> {
+        if samples.is_empty() || width == 0 {
+            return Vec::new();
+        }
+
+        let samples_per_pixel = samples.len() / width.max(1);
+        let mut peaks = Vec::with_capacity(width);
+
+        let max_amp = if normalize {
+            samples
+                .iter()
+                .map(|s| s.abs())
+                .fold(0.0, f32::max)
+                .max(1e-6)
+        } else {
+            1.0
+        };
+
+        for x in 0..width {
+            let start = x * samples_per_pixel;
+            let end = ((x + 1) * samples_per_pixel).min(samples.len());
+
+            let slice = &samples[start..end];
+            if slice.is_empty() {
+                peaks.push((0.0, 0.0));
+                continue;
+            }
+
+            let mut min = f32::MAX;
+            let mut max = f32::MIN;
+
+            for &s in slice {
+                min = min.min(s);
+                max = max.max(s);
+            }
+
+            peaks.push((min / max_amp, max / max_amp));
+        }
+
+        peaks
+    }
     /// Load audio samples from a file
-    fn load_samples(&self, file_path: &str) -> Result<Vec<i16>, WaveformError> {
+
+    fn load_samples(&self, file_path: &str) -> Result<DecodedAudio, WaveformError> {
         let file = File::open(file_path).map_err(|e| WaveformError::FileNotFound(e.to_string()))?;
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -196,24 +248,84 @@ impl WaveformCache {
         let mut format = probed.format;
         let track = format
             .default_track()
-            .ok_or_else(|| WaveformError::DecodeError("No default track found".to_string()))?;
+            .ok_or_else(|| WaveformError::DecodeError("No default track".into()))?;
+
+        let sample_rate = track
+            .codec_params
+            .sample_rate
+            .ok_or_else(|| WaveformError::DecodeError("Missing sample rate".into()))?;
+
+        let channels = track.codec_params.channels.map(|c| c.count()).unwrap_or(1);
 
         let mut decoder = get_codecs()
             .make(&track.codec_params, &DecoderOptions::default())
             .map_err(|e| WaveformError::DecodeError(e.to_string()))?;
 
-        let mut samples: Vec<i16> = Vec::new();
+        let mut samples = Vec::<f32>::new();
 
         while let Ok(packet) = format.next_packet() {
-            if let Ok(decoded) = decoder.decode(&packet) {
-                let spec = *decoded.spec();
-                let mut sample_buf = SampleBuffer::<i16>::new(decoded.capacity() as u64, spec);
-                sample_buf.copy_interleaved_ref(decoded);
-                samples.extend(sample_buf.samples().iter().copied());
+            let decoded = match decoder.decode(&packet) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+
+            match decoded {
+                AudioBufferRef::F32(buf) => {
+                    samples.extend(buf.chan(0));
+                }
+                AudioBufferRef::U8(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::U8(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::S16(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::S16(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::S24(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::S24(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::S32(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::S32(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::F64(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::F64(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::U16(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::U16(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::U24(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::U24(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::U32(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::U32(buf));
+                    samples.extend(tmp.samples());
+                }
+                AudioBufferRef::S8(buf) => {
+                    let mut tmp = SampleBuffer::<f32>::new(buf.frames() as u64, *buf.spec());
+                    tmp.copy_interleaved_ref(AudioBufferRef::S8(buf));
+                    samples.extend(tmp.samples());
+                }
             }
         }
 
-        Ok(samples)
+        Ok(DecodedAudio {
+            samples,
+            sample_rate,
+            channels,
+        })
     }
 
     /// Calculate min/max peaks for waveform
@@ -284,6 +396,17 @@ impl WaveformCache {
         let key_str = cache_key.to_string_key();
         self.completed.read().unwrap().contains_key(&key_str)
     }
+}
+
+fn downmix_to_mono(samples: &[f32], channels: usize) -> Vec<f32> {
+    if channels == 1 {
+        return samples.to_vec();
+    }
+
+    samples
+        .chunks(channels)
+        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .collect()
 }
 
 /// Waveform cache error types
