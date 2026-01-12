@@ -2,7 +2,7 @@
 
 use crate::artifacts::{Artifact, AudioArtifact};
 use crate::ops::{Operation, OperationCategory, OperationContext, OperationError, OperationResult};
-use crate::playback::{AudioSpec, PlayableOp, SampleTime};
+use crate::playback::PlayableOp;
 use crate::util::id_utils;
 
 #[derive(Debug)]
@@ -182,11 +182,4 @@ impl MergeOperation {
         // - Apply to all samples
         Ok(())
     }
-}
-
-pub struct MergePlaybackNode {
-    inputs: Vec<Box<dyn PlayableOp>>,
-    offsets: Vec<SampleTime>,
-    total_duration: SampleTime,
-    spec: AudioSpec,
 }

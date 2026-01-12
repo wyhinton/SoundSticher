@@ -238,6 +238,46 @@ pub async fn get_waveforms_batch(
     Ok(result)
 }
 
+pub fn generate_waveform_path(samples: &[f32], width: usize, height: usize, offset: f64) -> String {
+    if samples.is_empty() || width == 0 {
+        return String::new();
+    }
+
+    let samples_per_pixel = samples.len() / width.max(1);
+    let mid_y = height as f32 / 2.0;
+    let amplitude_scale = mid_y; // because samples are already normalized [-1, 1]
+
+    let mut d = String::new();
+
+    for x in 0..width {
+        let start = x * samples_per_pixel;
+        let end = ((x + 1) * samples_per_pixel).min(samples.len());
+
+        let slice = &samples[start..end];
+        if slice.is_empty() {
+            continue;
+        }
+
+        let mut min = f32::MAX;
+        let mut max = f32::MIN;
+
+        for &s in slice {
+            min = min.min(s);
+            max = max.max(s);
+        }
+
+        let y1 = mid_y - max * amplitude_scale;
+        let y2 = mid_y - min * amplitude_scale;
+
+        let x_pos = x as f32 + offset as f32;
+
+        // Vertical bars (Logic / SoundCloud style)
+        d.push_str(&format!("M{x_pos:.1},{y1:.1} L{x_pos:.1},{y2:.1} "));
+    }
+
+    d
+}
+
 /// Invalidate cached waveform for a file
 #[tauri::command]
 pub fn invalidate_waveform(

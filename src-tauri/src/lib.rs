@@ -38,6 +38,7 @@ mod state;
 mod timeline_playback;
 mod util;
 mod waveform;
+mod playback_ops;
 
 pub struct Song {
     pub title: String,
@@ -179,10 +180,8 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
         let possible_paths = vec![
             std::path::PathBuf::from("C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd"),
             std::path::PathBuf::from("C:\\Program Files (x86)\\Microsoft VS Code\\bin\\code.cmd"),
-            std::path::PathBuf::from(
-                std::path::PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_default())
+            std::path::PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_default())
                     .join("Programs\\Microsoft VS Code\\bin\\code.cmd"),
-            ),
         ];
 
         // Try each path
@@ -191,10 +190,10 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
                 return Command::new(&code_path)
                     .args(&args)
                     .spawn()
-                    .and_then(|mut child| {
+                    .map(|mut child| {
                         // Don't wait for the process to finish, just let it run
                         let _ = child.kill();
-                        Ok(())
+                        ()
                     })
                     .map_err(|e| format!("Failed to launch VS Code: {}", e));
             }
@@ -346,7 +345,6 @@ pub fn run() {
             duration_service::invalidate_duration,
             duration_service::clear_duration_cache,
             combine::test_async,
-            combine::update_inputs,
             combine::combine_all_cached_samples,
             combine::combine_all_cached_samples_with_custom_order,
             combine::get_custom_order,

@@ -5,6 +5,7 @@
 warn-on-all-wildcard-imports = true
 disallowed-methods = []
 disallowed-types = []
+
 # Additional lints to enable
 # extra-lints = [
 #     "unused_imports",

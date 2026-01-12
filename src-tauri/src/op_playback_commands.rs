@@ -4,10 +4,10 @@
 // using the pull-based playback system.
 
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::sample::SampleOp;
 use crate::playback::op_playback::{
     AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
 };
+use crate::playback_ops::sample_playback::SamplePlayableOp;
 use crate::{emit_logged, log_debug, log_info};
 use rodio::{OutputStream, Sink};
 use std::collections::HashMap;
@@ -199,7 +199,7 @@ pub fn op_playback_build_graph(
         };
 
         // Create the playable operation
-        let op = Box::new(SampleOp::new(samples.clone(), spec));
+        let op = Box::new(SamplePlayableOp::new(samples.clone(), spec));
         let op_duration = op.duration().unwrap_or(SampleTime::new(0));
         let op_duration_seconds = op_duration.to_seconds(sample_rate);
 
@@ -767,7 +767,7 @@ fn start_playback_from_position(
     *state.sink.lock().unwrap() = Some(Arc::clone(&sink));
 
     // Progress tracking loop
-    let mut tracking_start = Instant::now();
+    let tracking_start = Instant::now();
     let mut pause_start: Option<Instant> = None;
     let mut total_pause_duration = Duration::from_secs(0);
     let total_duration_seconds = graph.duration().to_seconds(spec.sample_rate);
@@ -940,8 +940,8 @@ fn stop_current_playback(state: &OpPlaybackState) {
 
 fn load_audio_samples(
     file_path: &str,
-    _target_sample_rate: u32,
-    _target_channels: u16,
+    target_sample_rate: u32,
+    target_channels: u16,
 ) -> Result<Vec<f32>, String> {
     use std::fs::File;
 
@@ -978,6 +978,14 @@ fn load_audio_samples(
         .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
         .ok_or("No audio track found")?;
 
+    // Get source audio properties
+    let source_sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or("No sample rate found in audio file")?;
+
+    let source_channels = track.codec_params.channels.map(|c| c.count()).unwrap_or(1) as u16;
+
     let mut decoder = symphonia::default::get_codecs()
         .make(&track.codec_params, &DecoderOptions::default())
         .map_err(|e| format!("Failed to create decoder: {}", e))?;
@@ -985,6 +993,7 @@ fn load_audio_samples(
     let track_id = track.id;
     let mut samples: Vec<f32> = Vec::new();
 
+    // Decode all samples first
     loop {
         let packet = match format.next_packet() {
             Ok(packet) => packet,
@@ -1013,5 +1022,152 @@ fn load_audio_samples(
         samples.extend_from_slice(sample_buf.samples());
     }
 
+    // Apply channel conversion if needed
+    let samples = if source_channels != target_channels {
+        eprintln!(
+            "Converting audio channels: {} -> {} channels for file: {}",
+            source_channels, target_channels, file_path
+        );
+        convert_channels(&samples, source_channels, target_channels)?
+    } else {
+        samples
+    };
+
+    // Apply sample rate conversion if needed
+    let samples = if source_sample_rate != target_sample_rate {
+        eprintln!(
+            "Resampling audio: {}Hz -> {}Hz for file: {}",
+            source_sample_rate, target_sample_rate, file_path
+        );
+        resample_audio(
+            &samples,
+            source_sample_rate,
+            target_sample_rate,
+            target_channels,
+        )?
+    } else {
+        samples
+    };
+
+    eprintln!(
+        "Loaded audio file: {} ({}Hz, {} channels, {} samples)",
+        file_path,
+        target_sample_rate,
+        target_channels,
+        samples.len()
+    );
+
     Ok(samples)
+}
+
+/// Convert between different channel counts
+fn convert_channels(
+    samples: &[f32],
+    source_channels: u16,
+    target_channels: u16,
+) -> Result<Vec<f32>, String> {
+    if source_channels == target_channels {
+        return Ok(samples.to_vec());
+    }
+
+    let frames = samples.len() / source_channels as usize;
+    let mut output = Vec::with_capacity(frames * target_channels as usize);
+
+    for frame_idx in 0..frames {
+        let source_frame_start = frame_idx * source_channels as usize;
+
+        match (source_channels, target_channels) {
+            // Mono to Stereo: duplicate the mono channel
+            (1, 2) => {
+                let mono_sample = samples[source_frame_start];
+                output.push(mono_sample); // Left
+                output.push(mono_sample); // Right
+            }
+            // Stereo to Mono: average left and right channels
+            (2, 1) => {
+                let left = samples[source_frame_start];
+                let right = samples[source_frame_start + 1];
+                let mono = (left + right) * 0.5;
+                output.push(mono);
+            }
+            // Multi-channel to Stereo: downmix by averaging all channels
+            (src, 2) if src > 2 => {
+                let mut sum = 0.0;
+                for ch in 0..src {
+                    sum += samples[source_frame_start + ch as usize];
+                }
+                let avg = sum / src as f32;
+                output.push(avg); // Left
+                output.push(avg); // Right
+            }
+            // Multi-channel to Mono: downmix by averaging all channels
+            (src, 1) if src > 1 => {
+                let mut sum = 0.0;
+                for ch in 0..src {
+                    sum += samples[source_frame_start + ch as usize];
+                }
+                let avg = sum / src as f32;
+                output.push(avg);
+            }
+            // Unsupported conversion
+            (src, tgt) => {
+                return Err(format!(
+                    "Unsupported channel conversion: {} -> {} channels",
+                    src, tgt
+                ));
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+/// Simple linear interpolation resampler
+fn resample_audio(
+    samples: &[f32],
+    source_rate: u32,
+    target_rate: u32,
+    channels: u16,
+) -> Result<Vec<f32>, String> {
+    if source_rate == target_rate {
+        return Ok(samples.to_vec());
+    }
+
+    let source_frames = samples.len() / channels as usize;
+    let ratio = target_rate as f64 / source_rate as f64;
+    let target_frames = (source_frames as f64 * ratio).ceil() as usize;
+
+    let mut output = Vec::with_capacity(target_frames * channels as usize);
+
+    for target_frame in 0..target_frames {
+        let source_pos = target_frame as f64 / ratio;
+        let source_frame = source_pos.floor() as usize;
+        let frac = source_pos - source_frame as f64;
+
+        for ch in 0..channels {
+            let ch_idx = ch as usize;
+
+            // Get current sample
+            let current_idx = source_frame * channels as usize + ch_idx;
+            let current_sample = if current_idx < samples.len() {
+                samples[current_idx]
+            } else {
+                0.0 // Pad with silence if beyond end
+            };
+
+            // Get next sample for interpolation
+            let next_idx = (source_frame + 1) * channels as usize + ch_idx;
+            let next_sample = if next_idx < samples.len() {
+                samples[next_idx]
+            } else {
+                current_sample // Use current if no next sample
+            };
+
+            // Linear interpolation
+            let interpolated = current_sample + (next_sample - current_sample) * frac as f32;
+            output.push(interpolated);
+        }
+    }
+
+    Ok(output)
 }

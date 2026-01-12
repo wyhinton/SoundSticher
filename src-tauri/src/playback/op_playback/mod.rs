@@ -15,7 +15,6 @@ pub mod timeline;
 pub mod timeline_source;
 pub mod types;
 
-pub use context::*;
 pub use op_source::*;
 pub use timeline::*;
 pub use timeline_source::*;

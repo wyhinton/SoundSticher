@@ -287,7 +287,7 @@ macro_rules! log_error {
 #[macro_export]
 macro_rules! timeline_debug {
     ($logger:expr, $message:expr) => {
-        $logger.debug(crate::logging::LogSystem::Timeline, $message, None);
+        $logger.debug($crate::logging::LogSystem::Timeline, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.debug(
@@ -301,7 +301,7 @@ macro_rules! timeline_debug {
 #[macro_export]
 macro_rules! timeline_info {
     ($logger:expr, $message:expr) => {
-        $logger.info(crate::logging::LogSystem::Timeline, $message, None);
+        $logger.info($crate::logging::LogSystem::Timeline, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.info(
@@ -315,7 +315,7 @@ macro_rules! timeline_info {
 #[macro_export]
 macro_rules! timeline_warning {
     ($logger:expr, $message:expr) => {
-        $logger.warning(crate::logging::LogSystem::Timeline, $message, None);
+        $logger.warning($crate::logging::LogSystem::Timeline, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.warning(
@@ -329,7 +329,7 @@ macro_rules! timeline_warning {
 #[macro_export]
 macro_rules! timeline_error {
     ($logger:expr, $message:expr) => {
-        $logger.error(crate::logging::LogSystem::Timeline, $message, None);
+        $logger.error($crate::logging::LogSystem::Timeline, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.error(
@@ -344,7 +344,7 @@ macro_rules! timeline_error {
 #[macro_export]
 macro_rules! operation_debug {
     ($logger:expr, $message:expr) => {
-        $logger.debug(crate::logging::LogSystem::Operation, $message, None);
+        $logger.debug($crate::logging::LogSystem::Operation, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.debug(
@@ -358,7 +358,7 @@ macro_rules! operation_debug {
 #[macro_export]
 macro_rules! operation_info {
     ($logger:expr, $message:expr) => {
-        $logger.info(crate::logging::LogSystem::Operation, $message, None);
+        $logger.info($crate::logging::LogSystem::Operation, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.info(
@@ -372,7 +372,7 @@ macro_rules! operation_info {
 #[macro_export]
 macro_rules! operation_warning {
     ($logger:expr, $message:expr) => {
-        $logger.warning(crate::logging::LogSystem::Operation, $message, None);
+        $logger.warning($crate::logging::LogSystem::Operation, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.warning(
@@ -386,7 +386,7 @@ macro_rules! operation_warning {
 #[macro_export]
 macro_rules! operation_error {
     ($logger:expr, $message:expr) => {
-        $logger.error(crate::logging::LogSystem::Operation, $message, None);
+        $logger.error($crate::logging::LogSystem::Operation, $message, None);
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.error(
