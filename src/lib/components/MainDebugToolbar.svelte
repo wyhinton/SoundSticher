@@ -371,6 +371,137 @@ Project: Sound Stitch (Tauri + SvelteKit)
       testGetDuration();
     }
   }
+
+  // MCP Bridge API testing functions
+  async function testStartIPCMonitor() {
+    try {
+      await invoke('plugin:mcp-bridge|start_ipc_monitor');
+      console.log('🔧 MCP: IPC monitoring started');
+    } catch (error) {
+      console.error('MCP: Failed to start IPC monitor:', error);
+    }
+  }
+
+  async function testStopIPCMonitor() {
+    try {
+      await invoke('plugin:mcp-bridge|stop_ipc_monitor');
+      console.log('🔧 MCP: IPC monitoring stopped');
+    } catch (error) {
+      console.error('MCP: Failed to stop IPC monitor:', error);
+    }
+  }
+
+  async function testGetIPCEvents() {
+    try {
+      const events = await invoke('plugin:mcp-bridge|get_ipc_events');
+      console.log('🔧 MCP: IPC Events:', events);
+    } catch (error) {
+      console.error('MCP: Failed to get IPC events:', error);
+    }
+  }
+
+  async function testGetWindowInfo() {
+    try {
+      const windowInfo = await invoke('plugin:mcp-bridge|get_window_info');
+      console.log('🔧 MCP: Window Info:', windowInfo);
+    } catch (error) {
+      console.error('MCP: Failed to get window info:', error);
+    }
+  }
+
+  async function testGetBackendState() {
+    try {
+      const state = await invoke('plugin:mcp-bridge|get_backend_state');
+      console.log('🔧 MCP: Backend State:', state);
+    } catch (error) {
+      console.error('MCP: Failed to get backend state:', error);
+    }
+  }
+
+  async function testEmitCustomEvent() {
+    try {
+      await invoke('plugin:mcp-bridge|emit_event', {
+        eventName: 'debug-custom-event',
+        payload: { 
+          timestamp: new Date().toISOString(),
+          message: 'Debug test event from toolbar',
+          data: { test: true }
+        }
+      });
+      console.log('🔧 MCP: Custom event emitted: debug-custom-event');
+    } catch (error) {
+      console.error('MCP: Failed to emit custom event:', error);
+    }
+  }
+
+  async function testExecuteCommand() {
+    try {
+      // Test with a simple command that should exist
+      const result = await invoke('plugin:mcp-bridge|execute_command', {
+        command: 'get_app_state'
+      });
+      console.log('🔧 MCP: Command execution result:', result);
+    } catch (error) {
+      console.error('MCP: Failed to execute command:', error);
+    }
+  }
+
+  async function testListDevices() {
+    try {
+      const devices = await invoke('plugin:mcp-bridge|list_devices');
+      console.log('🔧 MCP: Mobile Devices:', devices);
+    } catch (error) {
+      console.error('MCP: Failed to list devices:', error);
+    }
+  }
+
+  async function testWebViewScreenshot() {
+    try {
+      const screenshot = await invoke('plugin:mcp-bridge|webview_screenshot', {
+        format: 'png',
+        maxWidth: 800
+      });
+      console.log('🔧 MCP: Screenshot captured (base64 length):', screenshot.length);
+      // Optionally display or download the screenshot
+    } catch (error) {
+      console.error('MCP: Failed to take screenshot:', error);
+    }
+  }
+
+  async function testWebViewExecuteJS() {
+    try {
+      const result = await invoke('plugin:mcp-bridge|webview_execute_js', {
+        script: 'document.title'
+      });
+      console.log('🔧 MCP: JS execution result (document.title):', result);
+    } catch (error) {
+      console.error('MCP: Failed to execute JS:', error);
+    }
+  }
+
+  async function testWebViewFindElement() {
+    try {
+      const element = await invoke('plugin:mcp-bridge|webview_find_element', {
+        selector: 'body',
+        strategy: 'css'
+      });
+      console.log('🔧 MCP: Found element:', element);
+    } catch (error) {
+      console.error('MCP: Failed to find element:', error);
+    }
+  }
+
+  async function testReadConsoleLogs() {
+    try {
+      const logs = await invoke('plugin:mcp-bridge|read_logs', {
+        source: 'console',
+        lines: 10
+      });
+      console.log('🔧 MCP: Console logs:', logs);
+    } catch (error) {
+      console.error('MCP: Failed to read console logs:', error);
+    }
+  }
 </script>
 
 {#if isVisible}
@@ -555,6 +686,93 @@ Project: Sound Stitch (Tauri + SvelteKit)
             </div>
           </div>
         {/if}
+      </div>
+
+      <div class="button-group">
+        <span class="group-title">MCP APIs</span>
+        
+        <!-- IPC Monitoring -->
+        <div class="mcp-subgroup">
+          <span class="subgroup-title">IPC Monitor</span>
+          <div class="subgroup-buttons">
+            <button class="btn btn-xs btn-outline-success" on:click={testStartIPCMonitor}>
+              <i class="fa fa-play"></i>
+              Start
+            </button>
+            <button class="btn btn-xs btn-outline-danger" on:click={testStopIPCMonitor}>
+              <i class="fa fa-stop"></i>
+              Stop
+            </button>
+            <button class="btn btn-xs btn-outline-info" on:click={testGetIPCEvents}>
+              <i class="fa fa-list"></i>
+              Events
+            </button>
+          </div>
+        </div>
+
+        <!-- Backend State & Window Info -->
+        <div class="mcp-subgroup">
+          <span class="subgroup-title">State & Window</span>
+          <div class="subgroup-buttons">
+            <button class="btn btn-xs btn-outline-primary" on:click={testGetBackendState}>
+              <i class="fa fa-server"></i>
+              Backend
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" on:click={testGetWindowInfo}>
+              <i class="fa fa-window-maximize"></i>
+              Window
+            </button>
+          </div>
+        </div>
+
+        <!-- WebView Automation -->
+        <div class="mcp-subgroup">
+          <span class="subgroup-title">WebView</span>
+          <div class="subgroup-buttons">
+            <button class="btn btn-xs btn-outline-warning" on:click={testWebViewScreenshot}>
+              <i class="fa fa-camera"></i>
+              Screenshot
+            </button>
+            <button class="btn btn-xs btn-outline-info" on:click={testWebViewExecuteJS}>
+              <i class="fa fa-code"></i>
+              Exec JS
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" on:click={testWebViewFindElement}>
+              <i class="fa fa-search"></i>
+              Find El
+            </button>
+          </div>
+        </div>
+
+        <!-- Events & Commands -->
+        <div class="mcp-subgroup">
+          <span class="subgroup-title">Events & Commands</span>
+          <div class="subgroup-buttons">
+            <button class="btn btn-xs btn-outline-success" on:click={testEmitCustomEvent}>
+              <i class="fa fa-broadcast-tower"></i>
+              Emit
+            </button>
+            <button class="btn btn-xs btn-outline-primary" on:click={testExecuteCommand}>
+              <i class="fa fa-terminal"></i>
+              Command
+            </button>
+          </div>
+        </div>
+
+        <!-- Mobile & Logs -->
+        <div class="mcp-subgroup">
+          <span class="subgroup-title">Mobile & Logs</span>
+          <div class="subgroup-buttons">
+            <button class="btn btn-xs btn-outline-info" on:click={testListDevices}>
+              <i class="fa fa-mobile"></i>
+              Devices
+            </button>
+            <button class="btn btn-xs btn-outline-secondary" on:click={testReadConsoleLogs}>
+              <i class="fa fa-file-text"></i>
+              Logs
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -801,6 +1019,43 @@ Project: Sound Stitch (Tauri + SvelteKit)
 
   .result-value.cache-hit {
     color: #51cf66;
+  }
+
+  /* MCP API styles */
+  .mcp-subgroup {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 3px;
+  }
+
+  .subgroup-title {
+    color: var(--bs-info);
+    font-size: 8px;
+    font-weight: 600;
+    margin: 0 0 1px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.2px;
+    opacity: 0.8;
+  }
+
+  .subgroup-buttons {
+    display: flex;
+    gap: 1px;
+    flex-wrap: wrap;
+  }
+
+  .subgroup-buttons .btn-xs {
+    font-size: 8px;
+    padding: 1px 3px;
+    min-height: 14px;
+    flex: 1;
+    min-width: 45px;
+  }
+
+  .subgroup-buttons .btn-xs i {
+    font-size: 7px;
+    margin-right: 1px;
   }
 
   /* Responsive adjustments */

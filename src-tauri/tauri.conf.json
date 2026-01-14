@@ -37,6 +37,7 @@
               "identifier": "fs:scope",
               "allow": ["**"]
             },
+            "mcp-bridge:default",
             "fs:default",
             "core:window:allow-close",
             "core:window:allow-destroy",
