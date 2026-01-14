@@ -623,35 +623,52 @@ export const operationWaveforms = createOperationWaveformStore();
 
 /**
  * Get file paths from an operation's sources
+ * Handles recursive merge operations
  */
 function getOperationFilePaths(operation: OperationDef | undefined): string[] {
   if (!operation) return [];
 
   const fileIds: string[] = [];
 
-  // For MergeOp, we need to get file paths from referenced SampleOps
-  if (operation.kind === 'merge') {
-    // Need to access the operations state to resolve operation references
-    const appStateValue = get(appState);
-    const operations = appStateValue.operations?.defs;
+  /**
+   * Recursively extract file paths from an operation (handles nested merge ops)
+   */
+  function extractFilePathsFromOperation(op: OperationDef): string[] {
+    const paths: string[] = [];
 
-    if (!operations) return [];
+    if (op.kind === 'sample') {
+      // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
+      for (const sampleSource of op.sources) {
+        if (sampleSource.type === 'file') {
+          paths.push(sampleSource.fileId);
+        }
+      }
+    } else if (op.kind === 'merge') {
+      // Need to access the operations state to resolve operation references
+      const appStateValue = get(appState);
+      const operations = appStateValue.operations?.defs;
 
-    // For each source in the MergeOp (which should be operation references)
-    for (const source of operation.sources) {
-      if (source.type === 'operation') {
-        // Get the referenced SampleOp
-        const sampleOp = operations[source.operationRef];
-        if (sampleOp && sampleOp.kind === 'sample') {
-          // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
-          for (const sampleSource of sampleOp.sources) {
-            if (sampleSource.type === 'file') {
-              fileIds.push(sampleSource.fileId);
-            }
+      if (!operations) return paths;
+
+      // Recursively process all sources in the nested merge op
+      for (const nestedSource of op.sources) {
+        if (nestedSource.type === 'operation') {
+          const nestedOp = operations[nestedSource.operationRef];
+          if (nestedOp) {
+            const nestedPaths = extractFilePathsFromOperation(nestedOp);
+            paths.push(...nestedPaths);
           }
         }
       }
     }
+
+    return paths;
+  }
+
+  // For MergeOp, we need to get file paths from referenced operations
+  if (operation.kind === 'merge') {
+    const paths = extractFilePathsFromOperation(operation);
+    fileIds.push(...paths);
   }
   // For SampleOp, directly get file from sources
   else if (operation.kind === 'sample') {
@@ -667,6 +684,7 @@ function getOperationFilePaths(operation: OperationDef | undefined): string[] {
 
 /**
  * Get file items from an operation's sources (with metadata)
+ * Handles recursive merge operations
  */
 function getOperationFileItems(operation: OperationDef | undefined): Array<{
   id: string;
@@ -676,42 +694,16 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
 }> {
   if (!operation) return [];
 
-  const fileItems: Array<{
+  let fileItems: Array<{
     id: string;
     path: string;
     active: boolean;
     index: number;
   }> = [];
 
-  // For MergeOp, we need to get file items from referenced SampleOps
+  // For MergeOp, we need to get file items from referenced operations (recursively)
   if (operation.kind === 'merge') {
-    // Need to access the operations state to resolve operation references
-    const appStateValue = get(appState);
-    const operations = appStateValue.operations?.defs;
-
-    if (!operations) return [];
-
-    let index = 0;
-    // For each source in the MergeOp (which should be operation references)
-    for (const source of operation.sources) {
-      if (source.type === 'operation') {
-        // Get the referenced SampleOp
-        const sampleOp = operations[source.operationRef];
-        if (sampleOp && sampleOp.kind === 'sample') {
-          // Extract file items from the SampleOp's sources
-          for (const sampleSource of sampleOp.sources) {
-            if (sampleSource.type === 'file') {
-              fileItems.push({
-                id: sampleSource.fileId,
-                path: sampleSource.fileId,
-                active: true, // Assume active since it's in the operation
-                index: index++,
-              });
-            }
-          }
-        }
-      }
-    }
+    fileItems = [...fileItems, ...getTimelineItemsForMergeOp(operation)];
   }
   // For SampleOp, directly get file items from sources
   else if (operation.kind === 'sample') {
@@ -728,6 +720,72 @@ function getOperationFileItems(operation: OperationDef | undefined): Array<{
     }
   }
 
+  return fileItems;
+}
+
+function getTimelineItemsForMergeOp(operation: OperationDef) {
+  let fileItems = [];
+  // Need to access the operations state to resolve operation references
+  const appStateValue = get(appState);
+  const operations = appStateValue.operations?.defs;
+
+  if (!operations) return [];
+
+  let index = 0;
+
+  /**
+   * Recursively extract file items from an operation (handles nested merge ops)
+   */
+  function extractFileItemsFromOperation(op: OperationDef): Array<{
+    id: string;
+    path: string;
+    active: boolean;
+    index: number;
+  }> {
+    const items = [];
+
+    if (op.kind === 'sample') {
+      // Extract file items from the SampleOp's sources
+      for (const sampleSource of op.sources) {
+        if (sampleSource.type === 'file') {
+          items.push({
+            id: sampleSource.fileId,
+            path: sampleSource.fileId,
+            active: true, // Assume active since it's in the operation
+            index: index++,
+          });
+        }
+      }
+    } else if (op.kind === 'merge') {
+      // Recursively process all sources in the nested merge op
+      console.log('Processing nested merge op:', op);
+      for (const nestedSource of op.sources) {
+        if (nestedSource.type === 'operation' && operations) {
+          const nestedOp = operations[nestedSource.operationRef];
+          if (nestedOp) {
+            const nestedItems = extractFileItemsFromOperation(nestedOp);
+            items.push(...nestedItems);
+          }
+        }
+      }
+    }
+
+    return items;
+  }
+
+  // For each source in the MergeOp (which should be operation references)
+  console.log(operation);
+  for (const source of operation.sources) {
+    if (source.type === 'operation') {
+      // Get the referenced operation (could be SampleOp or MergeOp)
+      const sourceOp = operations[source.operationRef];
+      console.log(sourceOp);
+      if (sourceOp) {
+        const extractedItems = extractFileItemsFromOperation(sourceOp);
+        fileItems.push(...extractedItems);
+      }
+    }
+  }
   return fileItems;
 }
 
@@ -752,14 +810,8 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
   ([$appState, $operationWaveforms]) => {
     const selectedOpName = $appState.uiSettings?.selectedOperationName;
 
-    // If no operation selected, return empty or fall back to legacy timeline items
     if (!selectedOpName || !$appState.operations?.defs) {
-      // Fall back to legacy timeline items for backward compatibility
-      const legacyItems = $appState.timelineItems || [];
-      if (legacyItems.length > 0) {
-        logger.waveform.info(`Using legacy timeline items (${legacyItems.length} items)`);
-      }
-      return legacyItems;
+      return $appState.timelineItems || [];
     }
 
     const operation = $appState.operations.defs[selectedOpName];

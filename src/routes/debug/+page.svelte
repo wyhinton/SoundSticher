@@ -72,7 +72,7 @@
 
   // Reactive derived state for simplified display
   $: svgDisplayMode = $appState.uiSettings?.svgPathDisplayMode || 'trim';
-  $: forPrint = processSvgPaths(
+  $: frontEndStateFormatted = processSvgPaths(
     {
       ...$appState,
       // sections property removed - operations no longer have sections
@@ -450,7 +450,7 @@
           </select>
         </div>
       </div>
-      <PrismWrapper data={forPrint} />
+      <PrismWrapper data={frontEndStateFormatted} />
     </div>
 
     <!-- Backend State Tab -->

@@ -964,6 +964,64 @@ export function deleteSectionFromCurrentOperation(index: number) {
 }
 
 /**
+ * Add a given operation as a source to the currently selected operation
+ * This will add the operation reference to the current MergeOp's sources array
+ */
+export function addOpAsSource(operationName: string) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  if (selectedOperationName === operationName) {
+    console.warn('Cannot add an operation as a source to itself');
+    return;
+  }
+
+  appState.update(state => {
+    const currentOperation = state.operations?.defs?.[selectedOperationName];
+    if (!currentOperation || currentOperation.kind !== 'merge') {
+      console.warn('Current operation is not a MergeOp');
+      return state;
+    }
+
+    const sourceOperation = state.operations?.defs?.[operationName];
+    if (!sourceOperation) {
+      console.warn(`Operation "${operationName}" not found`);
+      return state;
+    }
+
+    // Check if this operation is already a source
+    const alreadyExists = currentOperation.sources.some(
+      source => source.type === 'operation' && source.operationRef === operationName
+    );
+
+    if (alreadyExists) {
+      console.warn(
+        `Operation "${operationName}" is already a source of "${selectedOperationName}"`
+      );
+      return state;
+    }
+
+    // Add the new operation source
+    const newSource: OperationSource = { type: 'operation', operationRef: operationName };
+    currentOperation.sources.push(newSource);
+
+    // Update the operations version
+    if (state.operations) {
+      state.operations._version = (state.operations._version ?? 0) + 1;
+    }
+    state._rev = (state._rev ?? 0) + 1;
+
+    console.log(`Added operation "${operationName}" as source to "${selectedOperationName}"`);
+    return state;
+  });
+}
+
+/**
  * Create SampleOps for each file in a directory and add them to the current MergeOp
  * This function will scan the directory, create a SampleOp for each audio file,
  * and add those operations as sources to the currently selected MergeOp

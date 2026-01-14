@@ -2,7 +2,9 @@
   import { draggable } from '$lib/attachments/draggable';
   import { dragStore } from '$lib/state/dragStore';
   import type { OperationInfo } from '$lib/state/operation';
-  import { setSelectedOperationName } from '$lib/state/state.svelte';
+  import { setSelectedOperationName, addOpAsSource } from '$lib/state/state.svelte';
+  import ContextMenu from '$lib/components/ContextMenu/ContextMenu.svelte';
+  import type { ContextMenuItem, ContextMenuPosition } from '$lib/components/ContextMenu/types';
   import { get } from 'svelte/store';
 
   export let operationName: string;
@@ -10,6 +12,11 @@
   export let opInfo: OperationInfo | undefined;
   export let showDebugInfo: boolean = false;
   export let debugInfo: { x: number; y: number; zoom: number } = { x: 0, y: 0, zoom: 1 };
+
+  // Context menu state
+  let contextMenuVisible = false;
+  let contextMenuPosition: ContextMenuPosition = { x: 0, y: 0 };
+  let contextMenuItems: ContextMenuItem[] = [];
 
   function handleClick() {
     // Call setSelectedOperationName directly instead of dispatching event
@@ -28,6 +35,96 @@
       });
       dispatchEvent(toggleEvent);
     }
+  }
+
+  function handleContextMenu(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    contextMenuPosition = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+
+    contextMenuItems = [
+      {
+        type: 'item',
+        label: 'Add as source to current operation',
+        icon: 'fas fa-plus-circle',
+        action: () => addAsSource(),
+      },
+      {
+        type: 'separator',
+      },
+      {
+        type: 'item',
+        label: 'Copy operation name',
+        icon: 'fas fa-copy',
+        action: () => copyOperationName(),
+      },
+      {
+        type: 'item',
+        label: 'View operation details',
+        icon: 'fas fa-info-circle',
+        action: () => viewOperationDetails(),
+      },
+      {
+        type: 'separator',
+      },
+      {
+        type: 'item',
+        label: 'Toggle debug info',
+        icon: 'fas fa-bug',
+        shortcut: 'Ctrl+Shift+Space',
+        action: () => toggleDebugInfo(),
+      },
+    ];
+
+    contextMenuVisible = true;
+  }
+
+  function addAsSource() {
+    addOpAsSource(operationName);
+  }
+
+  function copyOperationName() {
+    navigator.clipboard
+      .writeText(operationName)
+      .then(() => {
+        console.log(`Copied "${operationName}" to clipboard`);
+      })
+      .catch(err => {
+        console.error('Failed to copy operation name:', err);
+      });
+  }
+
+  function viewOperationDetails() {
+    console.log('Operation details:', { operationName, opInfo, debugInfo });
+
+    // Dispatch event to show operation details
+    const viewDetailsEvent = new CustomEvent('viewDetails', {
+      detail: {
+        operationName,
+        opInfo,
+        debugInfo,
+      },
+      bubbles: true,
+    });
+    dispatchEvent(viewDetailsEvent);
+  }
+
+  function toggleDebugInfo() {
+    showDebugInfo = !showDebugInfo;
+
+    const toggleEvent = new CustomEvent('toggleDebug', {
+      detail: { showDebugInfo },
+      bubbles: true,
+    });
+    dispatchEvent(toggleEvent);
+  }
+
+  function closeContextMenu() {
+    contextMenuVisible = false;
   }
 
   //     on:dragstart={() => {
@@ -51,13 +148,14 @@
   tabindex="0"
   on:click={handleClick}
   on:keydown={handleKeydown}
+  on:contextmenu={handleContextMenu}
   use:draggable={{
     type: 'sample',
     data: operationName,
     sourceId: 'library',
   }}
   role="button"
-  aria-label="Operation flow header - Click to select, Press Ctrl+Shift+Space to toggle debug info"
+  aria-label="Operation flow header - Click to select, Right-click for context menu, Press Ctrl+Shift+Space to toggle debug info"
 >
   <span class="operation-icon">{opInfo?.icon || '🔗'}</span>
   <span class="operation-name fira font-size-12px">{operationName}</span>
@@ -71,6 +169,15 @@
     </div>
   {/if}
 </div>
+
+<!-- Context Menu -->
+<ContextMenu
+  bind:visible={contextMenuVisible}
+  position={contextMenuPosition}
+  items={contextMenuItems}
+  on:close={closeContextMenu}
+  on:itemClick={closeContextMenu}
+/>
 
 <style>
   .flow-header {
