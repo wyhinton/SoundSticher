@@ -14,13 +14,6 @@
   import { isPointInRect } from '../utils/dragdrop';
   import lottie from 'lottie-web';
 
-  import {
-    addNewFolderOnDrop,
-    clearUnderMouse,
-    positionStore,
-    setInputsUnderMouse,
-    setIsOverTableContainer,
-  } from '../state/position';
   import SourceRow from './SourceRow.svelte';
   import MainLeftPanel from './MainLeftPanel.svelte';
   import { generateProgressChannel, type SortAudioEvent } from '../state/events';
@@ -28,6 +21,7 @@
   import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
   import type { OperationSource } from '../state/operation';
   import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
+  import { dropzone } from '$lib/attachments/droppable';
 
   // Get sample op files for display
   function getSampleOpFiles(operationRef: string) {
@@ -205,109 +199,6 @@
     }
   }
 
-  onMount(async () => {
-    positionStore.reset();
-    const view = getCurrentWebview();
-    await view.onDragDropEvent(event => {
-      rects = getInputRects();
-      inputsUnderMouse = [];
-      const factor = view.window.scaleFactor();
-      factor.then(f => {
-        console.log(f);
-        scaleFactor = f;
-      });
-      switch (event.payload.type) {
-        case 'enter':
-          isOver = true;
-        case 'over':
-          x = (event.payload.position.x / scaleFactor).toString();
-          y = (event.payload.position.y / scaleFactor).toString();
-          let overEventUnderMouse = [];
-          rects.forEach((r, i) => {
-            if (isPointInRect(parseInt(x), parseInt(y), r)) {
-              overEventUnderMouse.push(i);
-              inputsUnderMouse.push(i);
-            }
-          });
-          isOverTableContainer = isPointInRect(x, y, getSourceTableRect());
-          setIsOverTableContainer(isOverTableContainer);
-          setInputsUnderMouse(overEventUnderMouse);
-        case 'drop':
-          let atDrop: number[] = [];
-          x = (event.payload.position.x / scaleFactor).toString();
-          y = (event.payload.position.y / scaleFactor).toString();
-          rects.forEach((r, i) => {
-            if (isPointInRect(parseInt(x), parseInt(y), r)) {
-              console.log(`%cHERE LINE :67 %c`, 'color: brown; font-weight: bold', '');
-              atDrop.push(i);
-              inputsUnderMouse.push(i);
-            }
-          });
-          if (event.payload.type === 'drop') {
-            console.log('Drop event detected:', event.payload.paths);
-            const paths = event.payload.paths;
-            const dropX = event.payload.position.x / scaleFactor;
-            const dropY = event.payload.position.y / scaleFactor;
-
-            // Use elementFromPoint to get the topmost element at drop coordinates
-            const elementAtPoint = document.elementFromPoint(dropX, dropY);
-
-            // Check if we're dropping on the favorites area or sources area
-            const favoritesElement = elementAtPoint?.closest('.favorites-container');
-            const sourcesElement = elementAtPoint?.closest('.sources-container');
-
-            console.log('Drop coordinates:', { dropX, dropY });
-            console.log('Element at point:', elementAtPoint);
-            console.log('Is favorites area:', !!favoritesElement);
-            console.log('Is sources area:', !!sourcesElement);
-
-            if (atDrop.length > 0) {
-              Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
-                v.forEach((filestat, index) => {
-                  const path = paths[index];
-                  if (filestat.isDirectory) {
-                    // If dropped on favorites area, add to favorites
-                    if (favoritesElement) {
-                      console.log('Adding folder to favorites:', path);
-                      addToFavorites(path);
-                    } else {
-                      // TODO: Implement drag-drop for operation sources
-                      console.log('Drag-drop needs to be reimplemented for operation sources');
-                    }
-                  }
-                });
-                positionStore.reset();
-                clearUnderMouse();
-              });
-              inputsUnderMouse = [];
-            } else if (addNewFolderOnDrop) {
-              // Handle drop when not over specific input areas
-              Promise.all(event.payload.paths.map(p => stat(p))).then(v => {
-                v.forEach((filestat, index) => {
-                  const path = paths[index];
-                  if (filestat.isDirectory) {
-                    // If dropped on favorites area (even outside specific inputs), add to favorites
-                    if (favoritesElement) {
-                      console.log('Adding folder to favorites (general area):', path);
-                      addToFavorites(path);
-                    }
-                  }
-                });
-              });
-            }
-            positionStore.reset();
-            clearUnderMouse();
-          }
-          break;
-        case 'leave':
-          isOver = false;
-          clearUnderMouse();
-          positionStore.reset();
-          console.log('No position data');
-          break;
-      }
-    });
-  });
   let animation;
   async function initLottie() {
     await tick(); // wait for DOM to update
@@ -398,10 +289,15 @@
 >
   <div
     class="sources-container"
-    class:drop-add={$addNewFolderOnDrop}
     style:background-color="rgb(15 21 27)"
     style:width="400px"
     id="sources-panel"
+    use:dropzone={{
+      accepts: ['sample'],
+      on_drop: ({ data, sourceId }) => {
+        console.log('Dropped sample:', data, sourceId);
+      },
+    }}
   >
     <!-- Main table section -->
     <section class="table-section">
@@ -409,7 +305,7 @@
         bind:this={tableContainer}
         class="table-responsive h-100 d-flex flex-column justify-content-between position-relative"
       >
-        {#if $currentOperationSources.length === 0 && !$addNewFolderOnDrop}
+        {#if $currentOperationSources.length === 0}
           <!-- <SineWaveShader></SineWaveShader> -->
           <div class="position-absolute no-inputs-warning d-flex flex-column">
             <div
@@ -434,11 +330,11 @@
             return '';
           })()}
         {/if}
-        {#if $addNewFolderOnDrop}
+        <!-- {#if $addNewFolderOnDrop}
           <div class="position-absolute no-inputs warning">
             <i class="fa fas-plus">+</i>
           </div>
-        {/if}
+        {/if} -->
 
         <table class="w-100 table m-0">
           <thead>

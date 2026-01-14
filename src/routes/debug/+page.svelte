@@ -6,7 +6,6 @@
     resetPerformance,
     type PerformanceMetric,
   } from '$lib/state/performance';
-  import { addNewFolderOnDrop, positionStore } from '$lib/state/position';
   import {
     appState,
     hoveredSourceItem,
@@ -35,6 +34,7 @@
     loggingState,
     listenerLogs,
   } from '$lib/state/logging';
+  import TestDrag from '$lib/components/TestDrag.svelte';
 
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
@@ -79,10 +79,6 @@
     },
     svgDisplayMode
   );
-
-  $: t = {
-    x: JSON.stringify($positionStore),
-  };
 
   let seconds = 0;
   let interval: number;
@@ -696,22 +692,7 @@
           <strong>Timer:</strong>
           <span>{seconds}ms</span>
         </div>
-        <div class="debug-item">
-          <strong>Is Over Table Container:</strong>
-          <span>{$positionStore.isOverTableContainer}</span>
-        </div>
-        <div class="debug-item">
-          <strong>Inputs Under Mouse:</strong>
-          <span>{$positionStore.inputsUnderMouse}</span>
-        </div>
-        <div class="debug-item">
-          <strong>Add New Folder on Drop:</strong>
-          <span>{$addNewFolderOnDrop}</span>
-        </div>
-        <div class="debug-item">
-          <strong>Position Store:</strong>
-          <PrismWrapper data={$positionStore} maxHeight="200px" fontSize="11px" />
-        </div>
+
         {#if appStateDebug}
           <div class="debug-item">
             <strong>Backend Debug:</strong>

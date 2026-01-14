@@ -42,6 +42,7 @@
     type DragDropState,
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
+  import { dropzone } from '$lib/attachments/droppable';
 
   const dispatch = createEventDispatcher();
 
@@ -481,6 +482,12 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
+    use:dropzone={{
+      accepts: ['sample'],
+      on_drop: ({ data, sourceId }) => {
+        console.log('Dropped sample:', data, sourceId);
+      },
+    }}
     on:click={e => {
       handleClick(e);
     }}

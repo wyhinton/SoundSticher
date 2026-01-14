@@ -8,6 +8,7 @@ export interface LoggingState {
   groupsLog: boolean;
   selectionLog: boolean;
   dragdropLog: boolean;
+  dragStoreLog: boolean;
   operationsLog: boolean;
   waveformLog: boolean;
   opPlaybackLog: boolean;
@@ -58,6 +59,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   groupsLog: false,
   selectionLog: false,
   dragdropLog: false,
+  dragStoreLog: false,
   operationsLog: false,
   waveformLog: false,
   opPlaybackLog: false,
@@ -372,6 +374,78 @@ export const logger = {
       if (isLoggingEnabled('dragdropLog')) {
         console.error(
           `%c❌ DragDrop %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
+  dragStore: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.log(
+          `%c💾 DragStore %c${message}`,
+          'background: #607D8B; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #607D8B; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    set: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.log(
+          `%c✏️ DragStore-Set %c${message}`,
+          'background: #2196F3; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #2196F3; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    clear: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.log(
+          `%c🧹 DragStore-Clear %c${message}`,
+          'background: #9E9E9E; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #9E9E9E; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    dragItem: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.log(
+          `%c🎁 DragStore-Item %c${message}`,
+          'background: #FF5722; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF5722; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    overTarget: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.log(
+          `%c🎯 DragStore-OverTarget %c${message}`,
+          'background: #FF9800; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF9800; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    state: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.log(
+          `%c📊 DragStore-State %c${message}`,
+          'background: #3F51B5; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #3F51B5; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('dragStoreLog')) {
+        console.error(
+          `%c❌ DragStore %c${message}`,
           'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
           'color: #f44336; font-weight: normal;',
           ...args

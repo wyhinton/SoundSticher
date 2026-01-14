@@ -86,7 +86,7 @@
 </div>
 
 {#if showDropdown}
-  <Portal target="body">
+  <!-- <Portal target="body">
     <div
       bind:this={dropdownElement}
       use:floatingContent
@@ -110,7 +110,7 @@
         </button>
       {/each}
     </div>
-  </Portal>
+  </Portal> -->
 {/if}
 
 <style>

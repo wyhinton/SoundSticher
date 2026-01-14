@@ -12,6 +12,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "dragDropEnabled": false,
         "label": "main",
         "title": "Sound Stitch",
         "width": 1266,

@@ -17,6 +17,9 @@
   // Visibility state
   let isVisible = false;
 
+  // CSS Debug outline state
+  let cssOutlineEnabled = false;
+
   // Duration test state
   let durationTestFilePath = '';
   let durationTestResult: DurationResponse | null = null;
@@ -371,6 +374,31 @@ Project: Sound Stitch (Tauri + SvelteKit)
       testGetDuration();
     }
   }
+
+  // Toggle CSS debug outlines
+  function toggleCssOutlines() {
+    cssOutlineEnabled = !cssOutlineEnabled;
+
+    if (cssOutlineEnabled) {
+      // Add the debug outline styles to the document
+      const style = document.createElement('style');
+      style.id = 'debug-outlines';
+      style.textContent = `
+        * {
+          outline: 4px solid rgba(255,0,0,1) !important;
+        }
+      `;
+      document.head.appendChild(style);
+      console.log('🔧 Debug: CSS outlines enabled');
+    } else {
+      // Remove the debug outline styles
+      const existingStyle = document.getElementById('debug-outlines');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+      console.log('🔧 Debug: CSS outlines disabled');
+    }
+  }
 </script>
 
 {#if isVisible}
@@ -441,6 +469,16 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <button class="btn btn-xs btn-outline-danger" on:click={clearAppState}>
           <i class="fa fa-trash"></i>
           Clear
+        </button>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-secondary={!cssOutlineEnabled}
+          class:btn-secondary={cssOutlineEnabled}
+          on:click={toggleCssOutlines}
+          title="Toggle CSS debug outlines for all elements"
+        >
+          <i class="fa fa-border-all"></i>
+          CSS Outlines
         </button>
       </div>
 
@@ -565,7 +603,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
           ? 'ON'
           : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Call Sites: {$callSiteTrackingEnabled
           ? 'ON'
-          : 'OFF'} |
+          : 'OFF'} | CSS Outlines: {cssOutlineEnabled ? 'ON' : 'OFF'} |
         {#each loggingCategories as category}
           {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
         {/each}

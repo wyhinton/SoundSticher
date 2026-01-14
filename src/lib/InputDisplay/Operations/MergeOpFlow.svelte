@@ -8,15 +8,12 @@
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
-  import { createEventDispatcher } from 'svelte';
+  import OpFlowHeader from './OpFlowHeader.svelte';
+  import { dropzone } from '$lib/attachments/droppable';
 
   export let operation: MergeOp;
   export let operationName: string;
   export let isSelected: boolean = false;
-
-  const dispatch = createEventDispatcher<{
-    operationSelect: { operationName: string };
-  }>();
 
   $: opInfo = OperationInfoDictionary[operation.kind];
 
@@ -170,11 +167,6 @@
     }
   }
 
-  // Handle flow header click for operation selection
-  function handleFlowHeaderClick() {
-    dispatch('operationSelect', { operationName });
-  }
-
   // Update debug information from flow instance
   function updateDebugInfo() {
     if (flowInstance) {
@@ -228,28 +220,26 @@
       <Background gap={0} size={0} />
     </SvelteFlow>
 
-    <!-- Overlaid header -->
-    <div
-      class="flow-header"
-      class:selected={isSelected}
-      tabindex="0"
-      on:click={handleFlowHeaderClick}
-      on:keydown={handleKeydown}
-      role="button"
-      aria-label="Operation flow header - Click to select, Press Ctrl+Shift+Space to toggle debug info"
-    >
-      <span class="operation-icon">{opInfo?.icon || '🔗'}</span>
-      <span class="operation-name fira font-size-12px">{operationName}</span>
-
-      {#if showDebugInfo}
-        <div class="debug-info">
-          <span class="debug-label">Debug:</span>
-          <span class="debug-value">x: {debugInfo.x}</span>
-          <span class="debug-value">y: {debugInfo.y}</span>
-          <span class="debug-value">zoom: {debugInfo.zoom}</span>
-        </div>
-      {/if}
-    </div>
+    <!-- Operation flow header component -->
+    <OpFlowHeader
+      {operationName}
+      {isSelected}
+      {opInfo}
+      bind:showDebugInfo
+      bind:debugInfo
+      on:toggleDebug={({ detail }) => {
+        showDebugInfo = detail.showDebugInfo;
+        if (showDebugInfo) {
+          updateDebugInfo();
+          debugUpdateInterval = setInterval(updateDebugInfo, 100);
+        } else {
+          if (debugUpdateInterval) {
+            clearInterval(debugUpdateInterval);
+            debugUpdateInterval = null;
+          }
+        }
+      }}
+    />
   </div>
 </div>
 
@@ -262,73 +252,6 @@
     display: flex;
     flex-direction: column;
     border-right: 1px solid #374151;
-  }
-
-  .flow-header {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    padding: 2px 2px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    z-index: 10;
-    outline: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .flow-header:hover {
-    background: rgba(0, 0, 0, 0.8);
-    transform: translateY(-1px);
-  }
-
-  .flow-header:focus {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-  }
-
-  .flow-header.selected {
-    background: rgba(59, 130, 246, 0.3);
-    border: 1px solid rgba(59, 130, 246, 0.6);
-  }
-
-  .flow-header.selected:hover {
-    background: rgba(59, 130, 246, 0.4);
-  }
-
-  .debug-info {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: 8px;
-    padding: 2px 4px;
-    background: rgba(59, 130, 246, 0.2);
-    border-radius: 4px;
-    font-family: 'Fira Code', monospace;
-    font-size: 10px;
-  }
-
-  .debug-label {
-    color: #60a5fa;
-    font-weight: bold;
-  }
-
-  .debug-value {
-    color: #e5e7eb;
-    font-weight: normal;
-  }
-
-  .operation-icon {
-    font-size: 1rem;
-  }
-
-  .operation-name {
-    color: #ffffff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
-    white-space: nowrap;
   }
 
   .flow-content {
