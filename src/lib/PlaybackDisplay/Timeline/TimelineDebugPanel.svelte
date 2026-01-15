@@ -82,7 +82,7 @@
         class:selected={selectedSegments.has(i)}
       >
         <b>#{i}</b>
-        <span class="item-type">[{item.type}]</span>
+        <span class="item-type">[{item.kind}]</span>
         {getDisplayName(item)} | Start: {(item.startOffset * 100).toFixed(1)}% | Size: {(
           getItemSize(item) * 100
         ).toFixed(1)}% | Active: {isItemActive(item)} | X: {(
@@ -94,7 +94,7 @@
           originalPathWidth *
           scaleX
         ).toFixed(0)}px
-        {#if item.type === 'audio-file'}
+        {#if item.kind === 'sample' || item.kind === 'merge'}
           <div>
             {#if item.svgPath}
               {#if showFullSvgPath}

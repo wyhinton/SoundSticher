@@ -19,6 +19,13 @@ import { opPlaybackService, type AddOpRequest } from './opPlaybackService';
 import { invokeWithPerf } from './performance';
 import { durationCache } from './durationCache';
 
+import {
+  type FlattenedTimelineItem,
+  type TimelineHierarchy,
+  buildHierarchyMaps,
+  getIndicesToMoveOnDrag,
+} from './timelineGraph';
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -789,6 +796,221 @@ function getTimelineItemsForMergeOp(operation: OperationDef) {
   return fileItems;
 }
 
+// ============================================================================
+// HIERARCHY-AWARE TIMELINE ITEM EXTRACTION
+// ============================================================================
+
+/**
+ * Metadata for a timeline item with hierarchy information
+ */
+interface TimelineItemWithHierarchy {
+  id: string;
+  path: string;
+  active: boolean;
+  index: number;
+  kind: 'sample' | 'merge';
+  operationName: string;
+  depth: number;
+  parentId: string | undefined;
+  children: string[];
+  isGroup: boolean;
+}
+
+/**
+ * Flatten an operation graph into timeline items while preserving hierarchy
+ *
+ * This walks the operation graph recursively and produces a flat array
+ * where each item knows its:
+ * - kind ('sample' or 'merge')
+ * - depth (nesting level)
+ * - parentId (immediate parent MergeOp)
+ * - children (for MergeOps, the IDs of direct children)
+ * - isGroup (true for MergeOps)
+ */
+function flattenOperationToTimelineItems(
+  operation: OperationDef | undefined,
+  operationName: string,
+  operations: Record<string, OperationDef>,
+  depth: number = 0,
+  parentId: string | undefined = undefined
+): TimelineItemWithHierarchy[] {
+  if (!operation) return [];
+
+  const items: TimelineItemWithHierarchy[] = [];
+  let globalIndex = 0;
+
+  function processOperation(
+    op: OperationDef,
+    opName: string,
+    currentDepth: number,
+    currentParentId: string | undefined
+  ): TimelineItemWithHierarchy[] {
+    const result: TimelineItemWithHierarchy[] = [];
+
+    if (op.kind === 'sample') {
+      // Leaf node - extract file from sources
+      for (const source of op.sources) {
+        if (source.type === 'file') {
+          result.push({
+            id: source.fileId,
+            path: source.fileId,
+            active: true,
+            index: globalIndex++,
+            kind: 'sample',
+            operationName: opName,
+            depth: currentDepth,
+            parentId: currentParentId,
+            children: [],
+            isGroup: false,
+          });
+        }
+      }
+    } else if (op.kind === 'merge') {
+      // MergeOp - this is a group container
+      const mergeId = `merge:${opName}`;
+      const childIds: string[] = [];
+      const childItems: TimelineItemWithHierarchy[] = [];
+
+      // Process each source in the MergeOp
+      for (const source of op.sources) {
+        if (source.type === 'operation') {
+          const childOp = operations[source.operationRef];
+          if (childOp) {
+            // Recursively process child operations
+            const childResult = processOperation(
+              childOp,
+              source.operationRef,
+              currentDepth + 1,
+              mergeId
+            );
+
+            // Collect child IDs (direct children only, not grandchildren)
+            for (const item of childResult) {
+              if (item.depth === currentDepth + 1) {
+                childIds.push(item.id);
+              }
+            }
+
+            childItems.push(...childResult);
+          }
+        }
+      }
+
+      // Add the MergeOp itself as a group container (at the current depth)
+      // Note: We insert the MergeOp BEFORE its children for proper ordering
+      result.push({
+        id: mergeId,
+        path: opName,
+        active: true,
+        index: globalIndex++,
+        kind: 'merge',
+        operationName: opName,
+        depth: currentDepth,
+        parentId: currentParentId,
+        children: childIds,
+        isGroup: true,
+      });
+
+      // Add all child items after the MergeOp
+      result.push(...childItems);
+    }
+
+    return result;
+  }
+
+  return processOperation(operation, operationName, depth, parentId);
+}
+
+/**
+ * Get flattened timeline items with hierarchy for the root operation
+ * This is used when we want to show nested MergeOps as distinct visual groups
+ */
+function getHierarchicalTimelineItems(
+  operation: OperationDef | undefined,
+  operationName: string
+): TimelineItemWithHierarchy[] {
+  if (!operation) return [];
+
+  const appStateValue = get(appState);
+  const operations = appStateValue.operations?.defs;
+
+  if (!operations) return [];
+
+  // For the root operation, we only show its contents, not the root itself
+  // (the root is implied by the selection)
+  if (operation.kind === 'merge') {
+    const items: TimelineItemWithHierarchy[] = [];
+    let globalIndex = 0;
+
+    // Process each source in the root MergeOp
+    for (const source of operation.sources) {
+      if (source.type === 'operation') {
+        const childOp = operations[source.operationRef];
+        if (childOp) {
+          // Check if this child is itself a MergeOp
+          if (childOp.kind === 'merge') {
+            // This is a nested MergeOp - flatten it with depth tracking
+            const nestedItems = flattenOperationToTimelineItems(
+              childOp,
+              source.operationRef,
+              operations,
+              0, // Start at depth 0 for nested MergeOps (they're top-level within our view)
+              undefined
+            );
+            // Re-index the items
+            for (const item of nestedItems) {
+              item.index = globalIndex++;
+            }
+            items.push(...nestedItems);
+          } else if (childOp.kind === 'sample') {
+            // Regular sample - add as leaf
+            for (const sampleSource of childOp.sources) {
+              if (sampleSource.type === 'file') {
+                items.push({
+                  id: sampleSource.fileId,
+                  path: sampleSource.fileId,
+                  active: true,
+                  index: globalIndex++,
+                  kind: 'sample',
+                  operationName: source.operationRef,
+                  depth: 0,
+                  parentId: undefined,
+                  children: [],
+                  isGroup: false,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return items;
+  } else if (operation.kind === 'sample') {
+    // Single sample operation
+    const items: TimelineItemWithHierarchy[] = [];
+    for (const source of operation.sources) {
+      if (source.type === 'file') {
+        items.push({
+          id: source.fileId,
+          path: source.fileId,
+          active: true,
+          index: 0,
+          kind: 'sample',
+          operationName: operationName,
+          depth: 0,
+          parentId: undefined,
+          children: [],
+          isGroup: false,
+        });
+      }
+    }
+    return items;
+  }
+
+  return [];
+}
+
 /**
  * Derived store that provides timeline items for the currently selected operation.
  *
@@ -804,6 +1026,7 @@ function getTimelineItemsForMergeOp(operation: OperationDef) {
  * - Waveform from $operationWaveforms.waveforms -> purely visual (svgPath)
  * - Timeline layout is stable as soon as durations are loaded
  * - Waveforms can arrive later without affecting layout
+ * - MergeOps are flattened but preserve hierarchy info (kind, depth, parentId, children)
  */
 export const operationTimelineItems: Readable<TimelineItem[]> = derived(
   [appState, operationWaveforms],
@@ -820,10 +1043,10 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
       return [];
     }
 
-    // Get file items from the operation sources
-    const fileItems = getOperationFileItems(operation);
+    // Get hierarchical file items from the operation sources
+    const hierarchicalItems = getHierarchicalTimelineItems(operation, selectedOpName);
 
-    if (fileItems.length === 0) {
+    if (hierarchicalItems.length === 0) {
       logger.waveform.info(`No files found in operation "${selectedOpName}"`);
       return [];
     }
@@ -841,49 +1064,133 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
     }
 
     // Log waveform loading status (informational, doesn't affect layout)
+    const sampleItems = hierarchicalItems.filter(item => item.kind === 'sample');
     const loadedWaveforms = $operationWaveforms.waveforms.size;
-    if (loadedWaveforms < fileItems.length) {
+    if (loadedWaveforms < sampleItems.length) {
       logger.waveform.info(
-        `Operation "${selectedOpName}" has ${loadedWaveforms}/${fileItems.length} waveforms loaded (layout is stable)`
+        `Operation "${selectedOpName}" has ${loadedWaveforms}/${sampleItems.length} waveforms loaded (layout is stable)`
       );
     }
 
     // Build timeline items with start offsets based on DURATIONS (not waveforms)
+    // We need to handle both samples (have durations) and MergeOps (span their children)
     const items: TimelineItem[] = [];
     let currentOffset = 0;
 
-    for (const file of fileItems) {
-      // ✅ Get duration from duration cache (source of truth)
-      const duration = durations.get(file.path);
-      if (!duration || duration <= 0) {
-        logger.waveform.warning(`No valid duration for ${file.path}, skipping`);
-        continue;
+    // First pass: compute offsets and sizes for samples
+    const sampleOffsets = new Map<string, { offset: number; size: number }>();
+
+    for (const item of hierarchicalItems) {
+      if (item.kind === 'sample') {
+        const duration = durations.get(item.path);
+        if (!duration || duration <= 0) {
+          logger.waveform.warning(`No valid duration for ${item.path}, skipping`);
+          continue;
+        }
+
+        const size = duration / totalDuration;
+        sampleOffsets.set(item.id, { offset: currentOffset, size });
+        currentOffset += size;
       }
-
-      // ✅ Calculate size from duration (stable layout)
-      const size = duration / totalDuration;
-
-      // Waveform is optional - purely visual
-      const waveform = $operationWaveforms.waveforms.get(file.path);
-
-      items.push({
-        type: 'audio-file',
-        id: file.id,
-        fileName: file.path,
-        // svgPath may be empty/undefined until waveform loads - that's OK
-        svgPath: waveform?.svgPath || '',
-        startOffset: currentOffset,
-        size,
-        active: file.active,
-        // Include duration for potential component use
-        duration,
-      } as AudioFileTimelineItem);
-
-      currentOffset += size;
     }
 
+    // Second pass: build timeline items with hierarchy info
+    // MergeOps span from their first child to their last child
+    for (const item of hierarchicalItems) {
+      if (item.kind === 'sample') {
+        const layout = sampleOffsets.get(item.id);
+        if (!layout) continue;
+
+        const duration = durations.get(item.path);
+        const waveform = $operationWaveforms.waveforms.get(item.path);
+
+        items.push({
+          kind: 'sample',
+          id: item.id,
+          fileName: item.path,
+          svgPath: waveform?.svgPath || '',
+          startOffset: layout.offset,
+          size: layout.size,
+          active: item.active,
+          duration,
+          // Hierarchy properties
+          children: [],
+          parentId: item.parentId,
+          depth: item.depth,
+          isGroup: false,
+          operationName: item.operationName,
+        } as AudioFileTimelineItem);
+      } else if (item.kind === 'merge') {
+        // Calculate MergeOp span from its descendant samples
+        let minOffset = 1;
+        let maxEnd = 0;
+
+        // Find all descendant samples to compute span
+        const findDescendantOffsets = (itemId: string): void => {
+          const targetItem = hierarchicalItems.find(i => i.id === itemId);
+          if (!targetItem) return;
+
+          if (targetItem.kind === 'sample') {
+            const layout = sampleOffsets.get(targetItem.id);
+            if (layout) {
+              minOffset = Math.min(minOffset, layout.offset);
+              maxEnd = Math.max(maxEnd, layout.offset + layout.size);
+            }
+          } else if (targetItem.kind === 'merge') {
+            for (const childId of targetItem.children) {
+              findDescendantOffsets(childId);
+            }
+          }
+        };
+
+        for (const childId of item.children) {
+          findDescendantOffsets(childId);
+        }
+
+        // Only add MergeOp if it spans some samples
+        if (maxEnd > minOffset) {
+          items.push({
+            kind: 'merge',
+            id: item.id,
+            fileName: item.operationName,
+            svgPath: '', // MergeOps don't have waveforms
+            startOffset: minOffset,
+            size: maxEnd - minOffset,
+            active: item.active,
+            duration: totalDuration * (maxEnd - minOffset),
+            // Hierarchy properties
+            children: item.children,
+            parentId: item.parentId,
+            depth: item.depth,
+            isGroup: true,
+            operationName: item.operationName,
+          } as AudioFileTimelineItem);
+        }
+      }
+    }
+
+    // Sort by startOffset to ensure proper rendering order
+    items.sort((a, b) => {
+      // MergeOps should render before their children (background)
+      const aItem = a as AudioFileTimelineItem;
+      const bItem = b as AudioFileTimelineItem;
+
+      // First sort by depth (lower depth = render first = background)
+      const depthA = aItem.depth ?? 0;
+      const depthB = bItem.depth ?? 0;
+      if (depthA !== depthB) {
+        return depthA - depthB;
+      }
+
+      // Then by startOffset
+      return a.startOffset - b.startOffset;
+    });
+
     logger.waveform.info(
-      `Generated ${items.length} timeline items for operation "${selectedOpName}" (total duration: ${totalDuration.toFixed(1)}s)`
+      `Generated ${items.length} timeline items for operation "${selectedOpName}" ` +
+        `(${items.filter(i => (i as AudioFileTimelineItem).kind === 'merge').length} groups, ` +
+        `${items.filter(i => (i as AudioFileTimelineItem).kind === 'sample').length} samples, ` +
+        `total duration: ${totalDuration.toFixed(1)}s)`
     );
     return items;
   }
@@ -921,6 +1228,44 @@ export const operationWaveformsLoading: Readable<boolean> = derived(
 export const operationVisualsLoading: Readable<boolean> = derived(
   operationWaveforms,
   $operationWaveforms => $operationWaveforms.loadingWaveforms
+);
+
+/**
+ * Derived store that provides hierarchy information for drag/selection operations
+ *
+ * This builds the hierarchy maps from the timeline items, enabling:
+ * - Group drag behavior (dragging a MergeOp moves all descendants)
+ * - Finding parent/child relationships
+ * - Resolving which items to move together
+ */
+export const operationTimelineHierarchy: Readable<TimelineHierarchy | null> = derived(
+  operationTimelineItems,
+  $items => {
+    if ($items.length === 0) return null;
+
+    // Convert TimelineItems to FlattenedTimelineItems for hierarchy building
+    const flattenedItems: FlattenedTimelineItem[] = $items.map(item => {
+      const audioItem = item as AudioFileTimelineItem;
+      return {
+        kind: (audioItem.kind || 'sample') as 'sample' | 'merge',
+        id: audioItem.id,
+        fileName: audioItem.fileName,
+        svgPath: audioItem.svgPath,
+        startOffset: audioItem.startOffset,
+        size: audioItem.size,
+        active: audioItem.active,
+        duration: audioItem.duration,
+        children: audioItem.children || [],
+        parentId: audioItem.parentId,
+        depth: audioItem.depth ?? 0,
+        isGroup: audioItem.isGroup ?? false,
+        operationName: audioItem.operationName || '',
+        rootGroupId: undefined,
+      };
+    });
+
+    return buildHierarchyMaps(flattenedItems);
+  }
 );
 
 // ============================================================================

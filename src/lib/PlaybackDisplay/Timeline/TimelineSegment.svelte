@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as d3 from 'd3';
-  import { hoveredSourceItem, appState } from '../../state/state.svelte';
+  import { hoveredSourceItem, appState, type TimelineItemKind } from '../../state/state.svelte';
   import { tweened } from 'svelte/motion';
   import { cubicOut } from 'svelte/easing';
   export let index: number;
@@ -24,6 +24,12 @@
     undefined;
   export let onSegmentToggle: ((index: number) => void) | undefined = undefined;
 
+  // NEW: Hierarchy-related props for MergeOp support
+  export let kind: TimelineItemKind = 'sample';
+  export let depth: number = 0;
+  export let isGroup: boolean = false;
+  export let childCount: number = 0;
+
   // Theme colors from app state
   $: previewBackgroundColor =
     $appState.uiSettings?.theme?.previewBackgroundColor || 'rgba(255, 165, 0, 0.25)';
@@ -42,6 +48,16 @@
 
   // Adjusted X for text: apply only translate, not scale
   $: textX = zoomTransform.applyX(rectX); // applies translate & scale to position
+
+  // Y offset based on depth (for visual nesting)
+  // MergeOps render slightly higher to create visual grouping
+  const laneHeight = 8; // pixels per depth level
+  $: depthYOffset = depth * laneHeight;
+
+  // MergeOps are rendered taller to visually contain their children
+  $: isMergeOp = kind === 'merge';
+  $: segmentHeight = isMergeOp ? 160 : 150; // MergeOps slightly taller
+  $: yPosition = isMergeOp ? -25 - depthYOffset : -20 - depthYOffset;
 
   // Animated fill alpha (0 → 0.15 when mounted)
   const fillAlpha = tweened(0.15, {
@@ -138,21 +154,22 @@
   transform={`scale(${scaleX}, 1)`}
   class="segment-rect"
   class:dragging={isDragging}
+  class:merge-op={isMergeOp}
 >
-  <!-- Render waveform path if available -->
-  {#if svgPath}
+  <!-- Render waveform path if available (only for samples, not MergeOps) -->
+  {#if svgPath && !isMergeOp}
     <path
       d={svgPath}
       fill="none"
       stroke={waveformStrokeColor}
       stroke-width="1"
-      transform={`translate(${rectX}, 0)`}
+      transform={`translate(${rectX}, ${depthYOffset})`}
       class="waveform-path"
       class:dragging={isDragging}
     />
   {/if}
 
-  <foreignObject x={rectX} y={-20} width={rectWidth} height="150">
+  <foreignObject x={rectX} y={yPosition} width={rectWidth} height={segmentHeight}>
     <div
       bind:this={timelineDiv}
       xmlns="http://www.w3.org/1999/xhtml"
@@ -163,32 +180,48 @@
       class:inactive={!active}
       class:dragging={isDragging}
       class:non-draggable={!canBeDragged}
+      class:merge-op={isMergeOp}
+      class:is-group={isGroup}
       data-timeline-segment
       data-segment-index={index}
       data-segment-id={id}
       data-segment-active={active}
+      data-segment-kind={kind}
+      data-segment-depth={depth}
       on:click={handleSegmentClick}
       on:keydown={handleSegmentKeyDown}
       role="button"
       tabindex="0"
-      aria-label="Timeline segment {index + 1}"
+      aria-label="{isMergeOp ? 'Group' : 'Timeline segment'} {index + 1}{isMergeOp
+        ? ` (${childCount} items)`
+        : ''}"
       style="
         width: 100%;
-        height: 150px;
-        background-color: {itemColor
-        .replace('rgb(', 'rgba(')
-        .replace(
-          ')',
-          `, ${
+        height: {segmentHeight}px;
+        background-color: {isMergeOp
+        ? `rgba(255, 200, 100, ${
             isSelected
-              ? 0.3
+              ? 0.25
               : isInPreview && isPreviewActive
-                ? 0.25
+                ? 0.2
                 : $hoveredSourceItem == index
-                  ? 0.4
-                  : $fillAlpha
+                  ? 0.3
+                  : 0.1
           })`
-        )};
+        : itemColor
+            .replace('rgb(', 'rgba(')
+            .replace(
+              ')',
+              `, ${
+                isSelected
+                  ? 0.3
+                  : isInPreview && isPreviewActive
+                    ? 0.25
+                    : $hoveredSourceItem == index
+                      ? 0.4
+                      : $fillAlpha
+              })`
+            )};
         opacity: {active ? 1.0 : 0.4};
         box-sizing: border-box;
         pointer-events: all;
@@ -220,6 +253,34 @@
     color: white;
     font-weight: 500;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  /* MergeOp (group) specific styling */
+  .timeline-segment-div.merge-op {
+    border: 2px dashed rgba(255, 200, 100, 0.5);
+    border-radius: 6px;
+    background-color: rgba(255, 200, 100, 0.1) !important;
+  }
+
+  .timeline-segment-div.merge-op:hover {
+    border-color: rgba(255, 200, 100, 0.8);
+    background-color: rgba(255, 200, 100, 0.2) !important;
+  }
+
+  .timeline-segment-div.merge-op.selected {
+    border-color: rgba(255, 200, 100, 1);
+    background-color: rgba(255, 200, 100, 0.25) !important;
+    box-shadow: 0 0 8px rgba(255, 200, 100, 0.4);
+  }
+
+  .timeline-segment-div.merge-op.dragging {
+    border-color: rgba(0, 200, 255, 1);
+    background-color: rgba(0, 200, 255, 0.2) !important;
+  }
+
+  /* SVG group styling for MergeOps */
+  .segment-rect.merge-op {
+    pointer-events: all;
   }
 
   .timeline-segment-div:hover {

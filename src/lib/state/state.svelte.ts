@@ -105,16 +105,27 @@ interface FileMetadata {
   id: string;
 }
 
-export type TimelineItemType = 'audio-file' | 'spacer';
+/** Kind of timeline item - represents both the item type and operation type */
+export type TimelineItemKind = 'sample' | 'merge' | 'spacer';
 
 export interface BaseTimelineItem {
   id: string; // useful for identifying items
-  type: TimelineItemType;
+  kind: TimelineItemKind; // replaces both type and kind
   startOffset: number; // common field
+  /** IDs of child timeline items (for MergeOps that contain other ops) */
+  children?: string[];
+  /** ID of the parent timeline item (for items inside a MergeOp) */
+  parentId?: string;
+  /** Visual nesting depth (0 = root level) */
+  depth?: number;
+  /** Semantic hint that this item is a group container */
+  isGroup?: boolean;
+  /** The operation name this item came from */
+  operationName?: string;
 }
 
 export interface AudioFileTimelineItem extends BaseTimelineItem {
-  type: 'audio-file';
+  kind: 'sample' | 'merge'; // audio files can be samples or merge operations
   svgPath: string;
   fileName: string;
   size: number;
@@ -124,7 +135,7 @@ export interface AudioFileTimelineItem extends BaseTimelineItem {
 }
 
 export interface SpacerTimelineItem extends BaseTimelineItem {
-  type: 'spacer'; // discriminator
+  kind: 'spacer'; // discriminator
   length: number; // unique property
 }
 

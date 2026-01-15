@@ -29,8 +29,10 @@
     operationTimelineItems,
     operationDuration,
     operationWaveformsLoading,
+    operationTimelineHierarchy,
     initWaveformService,
   } from '../state/waveformCache';
+  import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
   // Import operation playback service
   import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
 
@@ -122,6 +124,9 @@
 
   // Loading state for operation waveforms
   $: isLoadingWaveforms = $operationWaveformsLoading;
+
+  // Hierarchy information for drag operations
+  $: timelineHierarchy = $operationTimelineHierarchy;
 
   // Check if we have no active samples
   $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;
@@ -434,9 +439,24 @@
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
     if (!dragDropManager) return;
 
+    const draggedIndex = event.detail.index;
+    const draggedItem = timelineItems[draggedIndex] as any; // Cast to access hierarchy props
+
     // If the dragged segment is not in the current selection, clear the selection
-    if (!selectedSegments.has(event.detail.index)) {
+    if (!selectedSegments.has(draggedIndex)) {
       handleClearSelection();
+    }
+
+    // If this is a MergeOp (group), we need to drag all its descendants too
+    if (draggedItem?.kind === 'merge' && draggedItem?.isGroup && timelineHierarchy) {
+      // Get all indices that should move with this group
+      const indicesToMove = getIndicesToMoveOnDrag(
+        draggedIndex,
+        timelineHierarchy.flatItems,
+        timelineHierarchy
+      );
+      // Set these on the drag manager
+      dragDropManager.setSegmentsToMove(new Set(indicesToMove));
     }
 
     dragDropManager.handleDragStart(event.detail);
@@ -534,6 +554,7 @@
           <g class="timeline-segments">
             {#if timelineItems.length > 0}
               {#each timelineItems as timelineItem, i}
+                {@const audioItem = timelineItem as any}
                 <TimelineSegment
                   {scaleX}
                   index={i}
@@ -552,6 +573,10 @@
                   canBeDragged={canItemBeDragged(timelineItem)}
                   itemColor={getItemColor(timelineItem)}
                   svgPath={getItemSvgPath(timelineItem)}
+                  kind={audioItem.kind || 'sample'}
+                  depth={audioItem.depth ?? 0}
+                  isGroup={audioItem.isGroup ?? false}
+                  childCount={audioItem.children?.length ?? 0}
                   {DEBUG_MODE}
                   on:dragStart={handleDragStart}
                   on:dragMove={handleDragMove}
