@@ -1,14 +1,117 @@
-// Timeline source - Rodio-compatible source that pulls from operations
-//
-
-// playback library. The TimelineSource pulls samples from the PlaybackGraph
-// on demand, mixing active operations together.
-//
-// Key features:
-// - Zero intermediate files
-// - Zero full buffer allocations
-// - Live evaluation of operations
-// - Seamless seeking
+//! # Timeline Source - Real-time Audio Playback Engine
+//!
+//! This module provides the `TimelineSource` - a Rodio-compatible audio source that renders
+//! complex operation graphs in real-time with zero intermediate files or full buffer allocations.
+//!
+//! ## 🎵 What is TimelineSource?
+//!
+//! Think of TimelineSource as a **smart audio player** that can play multiple audio files
+//! simultaneously, apply effects, and mix everything together - all happening **live** as
+//! you listen, without creating any temporary files.
+//!
+//! Instead of:
+//! 1. ❌ Pre-rendering entire timeline to a file
+//! 2. ❌ Loading everything into memory
+//! 3. ❌ Playing the rendered file
+//!
+//! We do:
+//! 1. ✅ Stream small chunks of audio (512 samples at a time)
+//! 2. ✅ Render operations **on-demand** as playback progresses
+//! 3. ✅ Mix multiple operations together in real-time
+//! 4. ✅ Support seeking, looping, and live updates
+//!
+//! ## 🔄 How Playback Works - The Big Picture
+//!
+//! ### Step 1: Frontend Request
+//! ```
+//! User clicks "Play" → Frontend calls backend → OpPlaybackService receives request
+//! ```
+//!
+//! ### Step 2: Graph Building
+//! ```
+//! OpPlaybackService → PlaybackGraph → Timeline + OperationRegistry
+//!                                  ↓
+//!                              TimelineSource (this file!)
+//! ```
+//!
+//! ### Step 3: Real-time Rendering (this is where TimelineSource shines!)
+//! ```
+//! Rodio requests samples → TimelineSource.next()
+//!                       ↓
+//!                    fill_buffer() - renders 512 samples
+//!                       ↓
+//!                    Timeline.get_active_events() - "what operations should play now?"
+//!                       ↓
+//!                    For each active operation:
+//!                      - Operation.render_at() - "give me 512 samples starting at time X"
+//!                      - Mix all operations together
+//!                       ↓
+//!                    Return mixed audio to Rodio → speakers! 🔊
+//! ```
+//!
+//! ## 🧩 Key Components in the Playback Pipeline
+//!
+//! 1. **PlaybackGraph** (`timeline.rs`)
+//!    - Contains the Timeline (when operations start/stop)
+//!    - Contains the OperationRegistry (how to render each operation)
+//!
+//! 2. **Timeline** (`timeline.rs`)
+//!    - Knows which operations should be playing at any given time
+//!    - `get_active_events(position)` returns what's currently active
+//!
+//! 3. **Operations** (`operation.rs`)
+//!    - SampleOp: plays audio files
+//!    - MergeOp: combines multiple operations
+//!    - Each has `render_at(time, buffer)` method
+//!
+//! 4. **TimelineSource** (this file!)
+//!    - Bridges the gap between our operation system and Rodio
+//!    - Implements `Iterator<Item=f32>` and `rodio::Source`
+//!    - Renders operations in small chunks (512 samples = ~11ms at 44.1kHz)
+//!
+//! ## 🚀 Performance Features
+//!
+//! - **Block-based rendering**: Only renders 512 samples at a time (low latency)
+//! - **Zero intermediate files**: Everything happens in memory, in real-time
+//! - **Lazy evaluation**: Operations only run when their audio is actually needed
+//! - **Memory efficient**: No full-timeline buffers, just small working buffers
+//! - **Seekable**: Jump to any position instantly without re-rendering everything
+//! - **Loopable**: Seamlessly restart from beginning when reaching the end
+//!
+//! ## 🎛️ Usage Examples
+//!
+//! ```rust
+//! // Basic playback
+//! let source = TimelineSource::new(graph, AudioSpec::cd_quality());
+//! rodio_sink.append(source);
+//!
+//! // With looping
+//! let source = TimelineSourceBuilder::new()
+//!     .looping(true)
+//!     .start_position_seconds(10.0)
+//!     .build(graph);
+//!
+//! // Seeking during playback
+//! source.seek_to_seconds(30.0);
+//! ```
+//!
+//! ## 🔧 Internal Architecture
+//!
+//! The TimelineSource maintains several key pieces of state:
+//! - **position**: Current playback position in samples
+//! - **buffer**: Small internal buffer (512 samples × channels)
+//! - **context**: Mixing context for combining operations
+//! - **graph**: The PlaybackGraph containing timeline and operations
+//!
+//! The rendering loop works like this:
+//! 1. Rodio asks for next sample via `Iterator::next()`
+//! 2. If buffer is empty, call `fill_buffer()`
+//! 3. `fill_buffer()` asks timeline "what's active at current position?"
+//! 4. For each active operation, render 512 samples into scratch buffer
+//! 5. Mix all operations together with their gain settings
+//! 6. Store result in internal buffer
+//! 7. Return samples one by one until buffer is empty
+//! 8. Repeat!
 
 use super::context::PlaybackContext;
 use super::timeline::PlaybackGraph;
