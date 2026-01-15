@@ -351,40 +351,65 @@ export function updateOperation(
 }
 
 /**
- * Delete an operation
+ * Delete multiple operations
  */
-export function deleteOperation(name: string): void {
+export function deleteOperations(names: string[]): void {
   const isLogging = get(loggingState).operationsLog;
 
   if (isLogging) {
-    console.log(`🗑️ Operations: Deleting operation "${name}"`);
+    console.log(`🗑️ Operations: Deleting operations`, names);
   }
 
   appState.update(s => {
-    if (!s.operations?.defs?.[name]) {
+    if (!s.operations) {
       if (isLogging) {
-        console.warn(`⚠️ Operations: Cannot delete "${name}" - not found`);
+        console.warn(`⚠️ Operations: Cannot delete operations - operations state not initialized`);
       }
       return s;
     }
 
-    delete s.operations.defs[name];
+    let deletedAny = false;
+
+    for (const name of names) {
+      if (!s.operations.defs[name]) {
+        if (isLogging) {
+          console.warn(`⚠️ Operations: Cannot delete "${name}" - not found`);
+        }
+        continue;
+      }
+
+      delete s.operations.defs[name];
+      deletedAny = true;
+
+      if (isLogging) {
+        console.log(`✅ Operations: Deleted "${name}"`);
+      }
+    }
 
     // Also remove from any pipelines
-    if (s.operations.pipelines) {
+    if (deletedAny && s.operations.pipelines) {
       for (const pipelineName of Object.keys(s.operations.pipelines)) {
         const pipeline = s.operations.pipelines[pipelineName];
         if (pipeline) {
-          s.operations.pipelines[pipelineName] = pipeline.filter(op => op !== name);
+          s.operations.pipelines[pipelineName] = pipeline.filter(op => !names.includes(op));
         }
       }
     }
 
-    s.operations._version = (s.operations._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
+    if (deletedAny) {
+      s.operations._version = (s.operations._version ?? 0) + 1;
+      s._rev = (s._rev ?? 0) + 1;
+    }
 
     return s;
   });
+}
+
+/**
+ * Delete a single operation (backward compatibility wrapper)
+ */
+export function deleteOperation(name: string): void {
+  deleteOperations([name]);
 }
 
 /**
@@ -436,78 +461,7 @@ export function addToPipeline(pipelineName: string, operationName: string): void
   });
 }
 
-/**
- * Remove operation from a pipeline
- */
-export function removeFromPipeline(pipelineName: string, operationName: string): void {
-  appState.update(s => {
-    if (!s.operations?.pipelines?.[pipelineName]) return s;
-
-    s.operations.pipelines[pipelineName] = s.operations.pipelines[pipelineName].filter(
-      op => op !== operationName
-    );
-    s.operations._version = (s.operations._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
-
-    return s;
-  });
-}
-
-// ============================================================================
-// TEST/EXAMPLE OPERATIONS
-// ============================================================================
-
 export interface NamedOperationDef {
   name: string;
   def: OperationDef;
-}
-
-export const testOperations: NamedOperationDef[] = [
-  {
-    name: 'combine_active',
-    def: {
-      outputPath:
-        'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\static\\tests\\test.wav',
-      gapSeconds: 0,
-      format: 'wav',
-      sources: [{ type: 'active' }],
-      kind: 'merge',
-    },
-  },
-  {
-    name: 'master_pipeline',
-    def: {
-      kind: 'pipeline',
-      sources: [{ type: 'active' }],
-      operations: ['combine_active'],
-    },
-  },
-];
-
-/**
- * Add test operations to state (for development/debugging)
- */
-export function addTestOperations(): void {
-  appState.update(state => {
-    if (!state.operations) {
-      state.operations = { defs: {}, pipelines: {}, _version: 1 };
-    }
-
-    testOperations.forEach(op => {
-      state.operations!.defs[op.name] = op.def;
-    });
-
-    state.operations.pipelines = {
-      ...state.operations.pipelines,
-      'Audio Processing': ['normalize_all', 'fade_section_0', 'trim_silence'],
-      'Final Output': ['combine_active', 'master_pipeline'],
-    };
-
-    state.operations._version = (state.operations._version ?? 0) + 1;
-    state._rev = (state._rev ?? 0) + 1;
-
-    return state;
-  });
-
-  console.log('🧪 Test operations added');
 }

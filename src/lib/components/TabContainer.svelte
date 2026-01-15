@@ -92,6 +92,8 @@
         <slot name="listeners" />
       {:else if activeTab === 'invoke-history'}
         <slot name="invoke-history" />
+      {:else if activeTab === 'selection'}
+        <slot name="selection" />
       {:else}
         <slot {activeTab} />
       {/if}
@@ -125,16 +127,15 @@
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
-    background-color: rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     gap: 2px;
     height: 40px;
-    padding: 0 8px;
+    padding: 0 2px;
     align-items: flex-end;
   }
 
   .tab {
-    padding: 8px 16px;
+    padding: 4px 8px;
     cursor: pointer;
     position: relative;
     background: rgba(255, 255, 255, 0.05);

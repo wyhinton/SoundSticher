@@ -30,20 +30,25 @@ interface VisualSample {
 interface Operation {}
 
 export interface AppState {
-  playingSong?: string;
-  playingSection?: number;
-  playProgress?: number;
+  _rev?: number; // content revision (groups + geometry + operations)
+
+  _version?: number; // Internal version tracking for migrations
+  combineAudioFileProgress?: number;
   combinedFile?: VisualSample;
   combinedFileLength?: number;
-  isCombiningFile: boolean;
-  combineAudioFileProgress?: number;
-  playingCombined: boolean;
-  timelineItems: TimelineItem[];
-  sortKey?: keyof AudioFileItem;
-  sortDirection?: 'asc' | 'desc';
-  isLoopingTimelineAudio: boolean;
-  hasNoActiveSamples: boolean;
   favorites: Favorite[];
+  groups?: GroupsState;
+  hasNoActiveSamples: boolean;
+  isCombiningFile: boolean;
+  isLoopingTimelineAudio: boolean;
+  operations?: OperationsState;
+  playingCombined: boolean;
+  playingSection?: number;
+  playingSong?: string;
+  playProgress?: number;
+  sortDirection?: 'asc' | 'desc';
+  sortKey?: keyof AudioFileItem;
+  timelineItems: TimelineItem[];
   uiSettings?: {
     activeTab?: string;
     debugActiveTab?: string;
@@ -53,6 +58,10 @@ export interface AppState {
     showFullSvgPath?: boolean;
     svgPathDisplayMode?: 'full' | 'trim' | 'hide';
     callSiteTrackingEnabled?: boolean;
+    debugPanelPrismDisplay?: {
+      frontend: any;
+      backend: any;
+    };
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -65,15 +74,9 @@ export interface AppState {
         dropdown?: number;
         menu?: number;
       };
-    };
-    // Add other UI settings here in the future
+    }; // Add other UI settings here in the future
   };
-  _version?: number; // Internal version tracking for migrations
-  groups?: GroupsState;
-  operations?: OperationsState;
-  _rev?: number; // content revision (groups + geometry + operations)
 }
-
 export interface AudioFileItem {
   index: number;
   path: string;
@@ -169,6 +172,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
       callSiteTrackingEnabled: false,
+      debugPanelPrismDisplay: {
+        frontend: {},
+        backend: {},
+      },
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',

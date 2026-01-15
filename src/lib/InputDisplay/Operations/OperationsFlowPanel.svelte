@@ -1,11 +1,6 @@
 <script lang="ts">
   import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
-  import {
-    type MergeOp,
-    addOperation,
-    deleteAllOperations,
-    addTestOperations,
-  } from '$lib/state/operation';
+  import { type MergeOp, addOperation, deleteAllOperations } from '$lib/state/operation';
 
   import MergeOpFlow from './MergeOpFlow.svelte';
   import { dropzone } from '$lib/attachments/droppable';
@@ -117,14 +112,6 @@
       </div>
     </div>
     <div class="header-actions">
-      <button
-        class="btn btn-xs btn-outline-primary"
-        onclick={addTestOperations}
-        title="Add test operations"
-        aria-label="Add test operations"
-      >
-        <i class="fa fa-flask"></i>
-      </button>
       <button
         class="btn btn-xs btn-outline-danger"
         onclick={() => {

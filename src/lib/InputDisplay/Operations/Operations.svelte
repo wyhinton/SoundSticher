@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
-  import { deleteOperation, OperationInfoDictionary } from '$lib/state/operation';
+  import { deleteOperations, OperationInfoDictionary } from '$lib/state/operation';
   import type { OperationDef, MergeOp, PipelineOp } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
 
@@ -212,7 +212,7 @@
 
   function handleDeleteOperation() {
     if (selectedOperationName && confirm('Delete operation "' + selectedOperationName + '"?')) {
-      deleteOperation(selectedOperationName);
+      deleteOperations([selectedOperationName]);
       // Clear selection after deletion in global state
       setSelectedOperationName(null);
     }

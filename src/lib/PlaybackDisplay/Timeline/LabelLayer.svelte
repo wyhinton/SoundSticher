@@ -8,6 +8,8 @@
     getItemTextColor,
     shouldShowLabel,
   } from '../../utils/timelineHelpers';
+  import { selectionService } from '../../state/selection.svelte';
+  import { clear } from 'tauri-plugin-clipboard-api';
 
   export let items: TimelineItem[] = [];
   export let originalPathWidth: number;
@@ -16,11 +18,6 @@
   export let isDragging: boolean;
   export let segmentsToMove: number[] = [];
 
-  /* ============================================================================
-   * Layout constants
-   * ============================================================================
-   */
-
   const fontSize = 11;
   const paddingY = 2;
   const headerHeight = fontSize + paddingY * 2;
@@ -28,11 +25,6 @@
   const rowGap = 0;
 
   const rowHeight = headerHeight + rowGap;
-
-  /* ============================================================================
-   * CHILD LABEL DERIVED ARRAYS (mostly unchanged)
-   * ============================================================================
-   */
 
   $: rectXArr = items.map(t => t.startOffset * originalPathWidth * scaleX * currentTransform.k);
 
@@ -48,64 +40,26 @@
   // Vertical stacking: child labels sit BELOW their parents
   $: labelYArr = items.map(item => (item.depth + 0) * rowHeight);
 
-  /* ============================================================================
-   * PARENT LABEL DERIVATION (NEW)
-   * ============================================================================
-   */
+  // Handle clicks on labels for selection (only for depth > 1)
+  function handleLabelClick(event: MouseEvent, item: TimelineItem, index: number) {
+    console.log(`%cHERE LINE :45 %c`, 'color: yellow; font-weight: bold', '');
+    console.log(item);
 
-  type ParentLabel = {
-    id: string;
-    name: string;
-    startOffset: number;
-    endOffset: number;
-    depth: number;
-  };
-
-  $: parentLabels = (() => {
-    const map = new Map<string, ParentLabel>();
-
-    for (const item of items) {
-      if (!item.parentId) continue;
-
-      const parent = items.find(i => i.id === item.parentId);
-      if (!parent || parent.kind !== 'merge') continue;
-
-      let entry = map.get(parent.id);
-
-      const start = item.startOffset;
-      const end = item.startOffset + getItemSize(item);
-
-      if (!entry) {
-        map.set(parent.id, {
-          id: parent.id,
-          name: getDisplayName(parent),
-          startOffset: start,
-          endOffset: end,
-          depth: parent.depth,
-        });
-      } else {
-        entry.startOffset = Math.min(entry.startOffset, start);
-        entry.endOffset = Math.max(entry.endOffset, end);
-      }
+    // Convert item.id to number for selection system (assuming it's numeric)
+    const itemId = index;
+    console.log(itemId);
+    if (isNaN(itemId)) {
+      console.warn('Cannot select item with non-numeric ID:', item.id);
+      return;
     }
 
-    return [...map.values()];
-  })();
-
-  $: parentRects = parentLabels.map(p => ({
-    ...p,
-    x: p.startOffset * originalPathWidth * scaleX * currentTransform.k,
-    width: (p.endOffset - p.startOffset) * originalPathWidth * scaleX * currentTransform.k,
-    y: p.depth * rowHeight,
-  }));
-
-  /* ============================================================================
-   * UTIL
-   * ============================================================================
-   */
-
-  function isParentDragging(parentId: string): boolean {
-    return segmentsToMove.some(i => items[i]?.parentId === parentId);
+    console.log(itemId);
+    // Use the selection service to handle the click with modifier key support
+    selectionService.handleClick(itemId, {
+      isMultiSelect: event.ctrlKey || event.metaKey,
+      isShiftSelect: event.shiftKey,
+      source: 'timeline',
+    });
   }
 </script>
 
@@ -114,7 +68,6 @@
     {#if showLabelArr[i] && rectXArr[i] !== undefined && rectWidthArr[i] !== undefined}
       <g
         transform={`translate(${currentTransform.x}, 0)`}
-        cursor={isDragging ? 'grabbing' : 'grab'}
         class:dragging={segmentsToMove.includes(i)}
       >
         <clipPath id={`header-clip-${i}`}>
@@ -139,6 +92,15 @@
           fill={bgColorArr[i]}
           clip-path={`url(#header-clip-${i})`}
           class="draggable-header"
+          class:selectable={t.depth && t.depth > 1}
+          style:cursor={t.depth && t.depth > 1
+            ? isDragging
+              ? 'grabbing'
+              : 'pointer'
+            : isDragging
+              ? 'grabbing'
+              : 'grab'}
+          on:click={e => handleLabelClick(e, t, i)}
         />
 
         <text
@@ -165,5 +127,16 @@
 
   .draggable-header:hover {
     fill: rgb(58, 165, 255);
+  }
+
+  .draggable-header.selectable:hover {
+    fill: rgb(34, 197, 94);
+    opacity: 0.9;
+  }
+
+  .draggable-header.selectable {
+    transition:
+      fill 0.15s ease,
+      opacity 0.15s ease;
   }
 </style>

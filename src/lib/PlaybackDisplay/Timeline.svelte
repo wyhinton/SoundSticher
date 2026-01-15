@@ -45,6 +45,7 @@
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
+  import { deleteOperations } from '$lib/state/operation';
 
   const dispatch = createEventDispatcher();
 
@@ -325,17 +326,20 @@
         Array.from(selectedSegments).forEach(index => {
           if (index < timelineItems.length) {
             const item = timelineItems[index];
-            if (item && isAudioFileItem(item)) selectedFileIds.push(item.id);
+            if (item) {
+              selectedFileIds.push(item.id);
+            }
           }
         });
       }
-
-      if (selectedFileIds.length > 0) {
-        audioFileStateManager
-          .setFilesActive(selectedFileIds, false)
-          .then(() => handleClearSelection())
-          .catch(error => console.error('Failed to deactivate segments:', error));
-      }
+      console.log(selectedFileIds);
+      deleteOperations(selectedFileIds);
+      // if (selectedFileIds.length > 0) {
+      //   audioFileStateManager
+      //     .setFilesActive(selectedFileIds, false)
+      //     .then(() => handleClearSelection())
+      //     .catch(error => console.error('Failed to deactivate segments:', error));
+      // }
     }
   }
 

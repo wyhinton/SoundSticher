@@ -1,8 +1,7 @@
 <script lang="ts">
   import {
-    addTestOperations,
     deleteAllOperations,
-    deleteOperation,
+    deleteOperations,
     OperationInfoDictionary,
     type OperationsState,
   } from '$lib/state/operation';
@@ -139,14 +138,6 @@
         <i class="fa fa-trash"></i>
         Delete All
       </button>
-      <button
-        class="btn btn-xs btn-outline-primary"
-        onclick={addTestOperations}
-        title="Add test operations"
-      >
-        <i class="fa fa-flask"></i>
-        Add Tests
-      </button>
     </div>
 
     <div class="button-group">
@@ -187,7 +178,7 @@
             <span class="op-category category-{info.category}">{info.category}</span>
             <button
               class="btn-delete"
-              onclick={() => deleteOperation(name)}
+              onclick={() => deleteOperations([name])}
               title="Delete operation"
               aria-label="Delete operation {name}"
             >
