@@ -5,7 +5,6 @@
     currentOperationSources,
     addSourceToCurrentOperation,
   } from '../state/state.svelte';
-  import { addNewFolderOnDrop } from '../state/position';
   import SourceRow from './SourceRow.svelte';
   import lottie from 'lottie-web';
 
@@ -88,11 +87,11 @@
       return '';
     })()}
   {/if}
-  {#if $addNewFolderOnDrop}
+  <!-- {#if $addNewFolderOnDrop}
     <div class="position-absolute no-inputs warning">
       <i class="fa fas-plus">+</i>
     </div>
-  {/if}
+  {/if} -->
 
   {#if $currentOperationSources.length > 0}
     <!-- <SourceToolbar

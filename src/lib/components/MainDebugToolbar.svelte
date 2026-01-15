@@ -17,6 +17,9 @@
   // Visibility state
   let isVisible = false;
 
+  // CSS Debug outline state
+  let cssOutlineEnabled = false;
+
   // Duration test state
   let durationTestFilePath = '';
   let durationTestResult: DurationResponse | null = null;
@@ -422,11 +425,11 @@ Project: Sound Stitch (Tauri + SvelteKit)
     try {
       await invoke('plugin:mcp-bridge|emit_event', {
         eventName: 'debug-custom-event',
-        payload: { 
+        payload: {
           timestamp: new Date().toISOString(),
           message: 'Debug test event from toolbar',
-          data: { test: true }
-        }
+          data: { test: true },
+        },
       });
       console.log('🔧 MCP: Custom event emitted: debug-custom-event');
     } catch (error) {
@@ -438,7 +441,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
     try {
       // Test with a simple command that should exist
       const result = await invoke('plugin:mcp-bridge|execute_command', {
-        command: 'get_app_state'
+        command: 'get_app_state',
       });
       console.log('🔧 MCP: Command execution result:', result);
     } catch (error) {
@@ -459,7 +462,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
     try {
       const screenshot = await invoke('plugin:mcp-bridge|webview_screenshot', {
         format: 'png',
-        maxWidth: 800
+        maxWidth: 800,
       });
       console.log('🔧 MCP: Screenshot captured (base64 length):', screenshot.length);
       // Optionally display or download the screenshot
@@ -471,7 +474,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
   async function testWebViewExecuteJS() {
     try {
       const result = await invoke('plugin:mcp-bridge|webview_execute_js', {
-        script: 'document.title'
+        script: 'document.title',
       });
       console.log('🔧 MCP: JS execution result (document.title):', result);
     } catch (error) {
@@ -483,7 +486,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
     try {
       const element = await invoke('plugin:mcp-bridge|webview_find_element', {
         selector: 'body',
-        strategy: 'css'
+        strategy: 'css',
       });
       console.log('🔧 MCP: Found element:', element);
     } catch (error) {
@@ -495,11 +498,36 @@ Project: Sound Stitch (Tauri + SvelteKit)
     try {
       const logs = await invoke('plugin:mcp-bridge|read_logs', {
         source: 'console',
-        lines: 10
+        lines: 10,
       });
       console.log('🔧 MCP: Console logs:', logs);
     } catch (error) {
       console.error('MCP: Failed to read console logs:', error);
+    }
+  }
+
+  // Toggle CSS debug outlines
+  function toggleCssOutlines() {
+    cssOutlineEnabled = !cssOutlineEnabled;
+
+    if (cssOutlineEnabled) {
+      // Add the debug outline styles to the document
+      const style = document.createElement('style');
+      style.id = 'debug-outlines';
+      style.textContent = `
+        * {
+          outline: 4px solid rgba(255,0,0,1) !important;
+        }
+      `;
+      document.head.appendChild(style);
+      console.log('🔧 Debug: CSS outlines enabled');
+    } else {
+      // Remove the debug outline styles
+      const existingStyle = document.getElementById('debug-outlines');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+      console.log('🔧 Debug: CSS outlines disabled');
     }
   }
 </script>
@@ -572,6 +600,16 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <button class="btn btn-xs btn-outline-danger" on:click={clearAppState}>
           <i class="fa fa-trash"></i>
           Clear
+        </button>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-secondary={!cssOutlineEnabled}
+          class:btn-secondary={cssOutlineEnabled}
+          on:click={toggleCssOutlines}
+          title="Toggle CSS debug outlines for all elements"
+        >
+          <i class="fa fa-border-all"></i>
+          CSS Outlines
         </button>
       </div>
 
@@ -690,7 +728,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
 
       <div class="button-group">
         <span class="group-title">MCP APIs</span>
-        
+
         <!-- IPC Monitoring -->
         <div class="mcp-subgroup">
           <span class="subgroup-title">IPC Monitor</span>
@@ -783,7 +821,7 @@ Project: Sound Stitch (Tauri + SvelteKit)
           ? 'ON'
           : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Call Sites: {$callSiteTrackingEnabled
           ? 'ON'
-          : 'OFF'} |
+          : 'OFF'} | CSS Outlines: {cssOutlineEnabled ? 'ON' : 'OFF'} |
         {#each loggingCategories as category}
           {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
         {/each}

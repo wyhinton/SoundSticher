@@ -8,6 +8,7 @@
   } from '$lib/state/operation';
 
   import MergeOpFlow from './MergeOpFlow.svelte';
+  import { dropzone } from '$lib/attachments/droppable';
 
   // Panel visibility
   export let isExpanded = true;
@@ -54,11 +55,6 @@
       gapSeconds: 0,
       format: 'wav',
     });
-  }
-
-  // Handle operation selection
-  function handleOperationSelect(event: CustomEvent<{ operationName: string }>) {
-    setSelectedOperationName(event.detail.operationName);
   }
 
   // Resize functionality
@@ -147,13 +143,20 @@
       <div class="flow-container">
         {#if mergeOperations.length > 0}
           <!-- Show MergeOpFlow components for each merge operation -->
-          <div class="merge-flows-row h-100 d-flex">
+          <div
+            class="merge-flows-row h-100 d-flex"
+            use:dropzone={{
+              accepts: ['sample'],
+              on_drop: ({ data, sourceId }) => {
+                console.log('Dropped sample:', data, sourceId);
+              },
+            }}
+          >
             {#each mergeOperations as mergeOp (mergeOp.revisionKey)}
               <MergeOpFlow
                 operation={mergeOp.operation}
                 operationName={mergeOp.name}
                 isSelected={selectedOperationName === mergeOp.name}
-                on:operationSelect={handleOperationSelect}
               />
             {/each}
           </div>

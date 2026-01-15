@@ -55,6 +55,8 @@ export class DragDropManager {
   private container: HTMLElement | null = null;
   private appStateStore: Writable<AppState>;
   private selectedSegments: Set<number> = new Set();
+  /** Pre-computed segments to move (for group drag operations) */
+  private precomputedSegmentsToMove: Set<number> | null = null;
 
   constructor(appStateStore: Writable<AppState>) {
     this.appStateStore = appStateStore;
@@ -65,6 +67,15 @@ export class DragDropManager {
    */
   setSelectedSegments(selectedSegments: Set<number>): void {
     this.selectedSegments = new Set(selectedSegments);
+  }
+
+  /**
+   * Set pre-computed segments to move (for MergeOp group drag)
+   * Call this before handleDragStart when dragging a group
+   */
+  setSegmentsToMove(segments: Set<number>): void {
+    this.precomputedSegmentsToMove = new Set(segments);
+    logger.dragdrop.info(`Pre-computed ${segments.size} segments for group drag`);
   }
 
   private setState(next: DragDropState) {
@@ -92,7 +103,17 @@ export class DragDropManager {
 
     // Determine which segments to move
     let segmentsToMove: number[];
-    if (this.selectedSegments.size > 1 && this.selectedSegments.has(event.index)) {
+
+    // Check if we have pre-computed segments for group drag (MergeOp)
+    if (this.precomputedSegmentsToMove && this.precomputedSegmentsToMove.size > 0) {
+      segmentsToMove = Array.from(this.precomputedSegmentsToMove).sort((a, b) => a - b);
+      logger.dragdrop.info(
+        `Using pre-computed group drag: ${segmentsToMove.length} segments:`,
+        segmentsToMove
+      );
+      // Clear the pre-computed segments after use
+      this.precomputedSegmentsToMove = null;
+    } else if (this.selectedSegments.size > 1 && this.selectedSegments.has(event.index)) {
       // Move all selected segments as a group
       segmentsToMove = Array.from(this.selectedSegments).sort((a, b) => a - b);
       logger.dragdrop.info(`Will move ${segmentsToMove.length} selected segments:`, segmentsToMove);
@@ -282,6 +303,7 @@ export class DragDropManager {
    * Reset the drag state
    */
   private resetDragState(): void {
+    this.precomputedSegmentsToMove = null;
     this.setState(DEFAULT_DD);
   }
 

@@ -7,41 +7,44 @@ import { formatFileName } from './format';
 
 // Type guards
 export function isAudioFileItem(item: TimelineItem): item is AudioFileTimelineItem {
-  return item.type === 'audio-file';
+  return item.kind === 'sample' || item.kind === 'merge';
 }
 
 export function isSpacerItem(item: TimelineItem): item is SpacerTimelineItem {
-  return item.type === 'spacer';
+  return item.kind === 'spacer';
 }
 
 // Common display properties
 export function getDisplayName(item: TimelineItem): string {
-  switch (item.type) {
-    case 'audio-file':
-      return formatFileName(item.fileName);
+  switch (item.kind) {
+    case 'sample':
+    case 'merge':
+      return formatFileName((item as AudioFileTimelineItem).fileName);
     case 'spacer':
-      return `Spacer (${item.length}s)`;
+      return `Spacer (${(item as SpacerTimelineItem).length}s)`;
     default:
       return 'Unknown Item';
   }
 }
 
 export function getItemSize(item: TimelineItem): number {
-  switch (item.type) {
-    case 'audio-file':
-      return item.size;
+  switch (item.kind) {
+    case 'sample':
+    case 'merge':
+      return (item as AudioFileTimelineItem).size;
     case 'spacer':
       // Convert spacer length to relative size - adjust this logic as needed
-      return item.length / 100; // Assuming length is in seconds and we need a normalized value
+      return (item as SpacerTimelineItem).length / 100; // Assuming length is in seconds and we need a normalized value
     default:
       return 0;
   }
 }
 
 export function isItemActive(item: TimelineItem): boolean {
-  switch (item.type) {
-    case 'audio-file':
-      return item.active ?? true;
+  switch (item.kind) {
+    case 'sample':
+    case 'merge':
+      return (item as AudioFileTimelineItem).active ?? true;
     case 'spacer':
       return true; // Spacers are always "active"
     default:
@@ -50,8 +53,9 @@ export function isItemActive(item: TimelineItem): boolean {
 }
 
 export function canItemBeDragged(item: TimelineItem): boolean {
-  switch (item.type) {
-    case 'audio-file':
+  switch (item.kind) {
+    case 'sample':
+    case 'merge':
       return true; // Audio files can be dragged
     case 'spacer':
       return false; // Spacers might not be draggable
@@ -61,9 +65,11 @@ export function canItemBeDragged(item: TimelineItem): boolean {
 }
 
 export function getItemColor(item: TimelineItem): string {
-  switch (item.type) {
-    case 'audio-file':
-      return 'rgb(48, 145, 241)'; // Blue for audio files
+  switch (item.kind) {
+    case 'sample':
+      return 'rgb(48, 145, 241)'; // Blue for samples
+    case 'merge':
+      return 'rgb(255, 200, 100)'; // Orange for merge operations
     case 'spacer':
       return '#666666'; // Gray for spacers
     default:
@@ -72,8 +78,9 @@ export function getItemColor(item: TimelineItem): string {
 }
 
 export function getItemTextColor(item: TimelineItem): string {
-  switch (item.type) {
-    case 'audio-file':
+  switch (item.kind) {
+    case 'sample':
+    case 'merge':
       return 'rgba(0, 0, 0, 0.6)'; // Dark text for audio files
     case 'spacer':
       return 'rgba(255, 255, 255, 0.8)'; // Light text for spacers
@@ -107,8 +114,9 @@ export function getItemSvgPath(item: TimelineItem): string | null {
 
 // Helper for determining if item should show a label
 export function shouldShowLabel(item: TimelineItem): boolean {
-  switch (item.type) {
-    case 'audio-file':
+  switch (item.kind) {
+    case 'sample':
+    case 'merge':
       return true; // Always show labels for audio files
     case 'spacer':
       return false; // Maybe don't show labels for spacers, or only if they're long enough
@@ -120,7 +128,7 @@ export function shouldShowLabel(item: TimelineItem): boolean {
 // Example usage functions demonstrating type-safe operations
 export function processTimelineItems(items: TimelineItem[]) {
   items.forEach((item, index) => {
-    console.log(`Processing item ${index}: ${item.type}`);
+    console.log(`Processing item ${index}: ${item.kind}`);
 
     // Type-safe operations
     if (isAudioFileItem(item)) {
@@ -147,9 +155,9 @@ export function getTotalSpacerTime(items: TimelineItem[]): number {
     .reduce((total, spacer) => total + spacer.length, 0);
 }
 
-export function getItemsOfType<T extends TimelineItem['type']>(
+export function getItemsOfKind<T extends TimelineItem['kind']>(
   items: TimelineItem[],
-  type: T
-): Extract<TimelineItem, { type: T }>[] {
-  return items.filter(item => item.type === type) as Extract<TimelineItem, { type: T }>[];
+  kind: T
+): Extract<TimelineItem, { kind: T }>[] {
+  return items.filter(item => item.kind === kind) as Extract<TimelineItem, { kind: T }>[];
 }

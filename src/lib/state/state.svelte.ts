@@ -105,16 +105,27 @@ interface FileMetadata {
   id: string;
 }
 
-export type TimelineItemType = 'audio-file' | 'spacer';
+/** Kind of timeline item - represents both the item type and operation type */
+export type TimelineItemKind = 'sample' | 'merge' | 'spacer';
 
 export interface BaseTimelineItem {
   id: string; // useful for identifying items
-  type: TimelineItemType;
+  kind: TimelineItemKind; // replaces both type and kind
   startOffset: number; // common field
+  /** IDs of child timeline items (for MergeOps that contain other ops) */
+  children?: string[];
+  /** ID of the parent timeline item (for items inside a MergeOp) */
+  parentId?: string;
+  /** Visual nesting depth (0 = root level) */
+  depth?: number;
+  /** Semantic hint that this item is a group container */
+  isGroup?: boolean;
+  /** The operation name this item came from */
+  operationName?: string;
 }
 
 export interface AudioFileTimelineItem extends BaseTimelineItem {
-  type: 'audio-file';
+  kind: 'sample' | 'merge'; // audio files can be samples or merge operations
   svgPath: string;
   fileName: string;
   size: number;
@@ -124,7 +135,7 @@ export interface AudioFileTimelineItem extends BaseTimelineItem {
 }
 
 export interface SpacerTimelineItem extends BaseTimelineItem {
-  type: 'spacer'; // discriminator
+  kind: 'spacer'; // discriminator
   length: number; // unique property
 }
 
@@ -961,6 +972,64 @@ export function deleteSectionFromCurrentOperation(index: number) {
     'deleteSectionFromCurrentOperation is deprecated - operations no longer have sections'
   );
   // No-op for now
+}
+
+/**
+ * Add a given operation as a source to the currently selected operation
+ * This will add the operation reference to the current MergeOp's sources array
+ */
+export function addOpAsSource(operationName: string) {
+  const currentState = get(appState);
+  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+
+  if (!selectedOperationName) {
+    console.warn('No operation currently selected');
+    return;
+  }
+
+  if (selectedOperationName === operationName) {
+    console.warn('Cannot add an operation as a source to itself');
+    return;
+  }
+
+  appState.update(state => {
+    const currentOperation = state.operations?.defs?.[selectedOperationName];
+    if (!currentOperation || currentOperation.kind !== 'merge') {
+      console.warn('Current operation is not a MergeOp');
+      return state;
+    }
+
+    const sourceOperation = state.operations?.defs?.[operationName];
+    if (!sourceOperation) {
+      console.warn(`Operation "${operationName}" not found`);
+      return state;
+    }
+
+    // Check if this operation is already a source
+    const alreadyExists = currentOperation.sources.some(
+      source => source.type === 'operation' && source.operationRef === operationName
+    );
+
+    if (alreadyExists) {
+      console.warn(
+        `Operation "${operationName}" is already a source of "${selectedOperationName}"`
+      );
+      return state;
+    }
+
+    // Add the new operation source
+    const newSource: OperationSource = { type: 'operation', operationRef: operationName };
+    currentOperation.sources.push(newSource);
+
+    // Update the operations version
+    if (state.operations) {
+      state.operations._version = (state.operations._version ?? 0) + 1;
+    }
+    state._rev = (state._rev ?? 0) + 1;
+
+    console.log(`Added operation "${operationName}" as source to "${selectedOperationName}"`);
+    return state;
+  });
 }
 
 /**
