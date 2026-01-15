@@ -7,6 +7,7 @@ use crate::logging::{LogSystem, LoggingService};
 use crate::playback::op_playback::{
     AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
 };
+use crate::playback_ops::merge_playback::MergePlaybackOp;
 use crate::playback_ops::sample_playback::SamplePlayableOp;
 use crate::{emit_logged, log_debug, log_info};
 use rodio::{OutputStream, Sink};
@@ -86,12 +87,44 @@ impl Default for OpPlaybackState {
     }
 }
 
+/// The type of playback operation
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum OpType {
+    /// A simple sample-based operation (default)
+    #[default]
+    Sample,
+    /// A merge operation that combines multiple inputs
+    Merge,
+}
+
+/// Child input for a merge operation
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeInputRequest {
+    /// File path to load samples from
+    pub file_path: Option<String>,
+
+    /// Pre-loaded samples (f32, interleaved)
+    pub samples: Option<Vec<f32>>,
+
+    /// Offset time in seconds within the merge operation
+    pub offset: f64,
+
+    /// Gain for this input (0.0 to 1.0+)
+    pub gain: Option<f32>,
+}
+
 /// Request to add an operation to the playback graph
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddOpRequest {
     /// Unique name for this operation
     pub name: String,
+
+    /// Type of operation (sample or merge)
+    #[serde(default)]
+    pub op_type: OpType,
 
     /// File path to load samples from (for sample-based ops)
     pub file_path: Option<String>,
@@ -107,6 +140,9 @@ pub struct AddOpRequest {
 
     /// Gain for this operation (0.0 to 1.0+)
     pub gain: Option<f32>,
+
+    /// Child inputs for merge operations
+    pub inputs: Option<Vec<MergeInputRequest>>,
 }
 
 /// Response after adding an operation
@@ -185,21 +221,67 @@ pub fn op_playback_build_graph(
     let mut op_id_map = HashMap::new();
 
     for op_request in &request.operations {
-        // Get samples (either from file or directly provided)
-        let samples = if let Some(ref samples) = op_request.samples {
-            samples.clone()
-        } else if let Some(ref file_path) = op_request.file_path {
-            // Load samples from file
-            load_audio_samples(file_path, sample_rate, channels)?
-        } else {
-            return Err(format!(
-                "Operation '{}' must have either 'samples' or 'filePath'",
-                op_request.name
-            ));
+        // Create the playable operation based on type
+        let op: Box<dyn PlayableOp> = match op_request.op_type {
+            OpType::Sample => {
+                // Get samples (either from file or directly provided)
+                let samples = if let Some(ref samples) = op_request.samples {
+                    samples.clone()
+                } else if let Some(ref file_path) = op_request.file_path {
+                    // Load samples from file
+                    load_audio_samples(file_path, sample_rate, channels)?
+                } else {
+                    return Err(format!(
+                        "Sample operation '{}' must have either 'samples' or 'filePath'",
+                        op_request.name
+                    ));
+                };
+
+                Box::new(SamplePlayableOp::new(samples, spec))
+            }
+            OpType::Merge => {
+                // Build a merge operation from child inputs
+                let inputs = op_request.inputs.as_ref().ok_or_else(|| {
+                    format!(
+                        "Merge operation '{}' must have 'inputs' array",
+                        op_request.name
+                    )
+                })?;
+
+                if inputs.is_empty() {
+                    return Err(format!(
+                        "Merge operation '{}' must have at least one input",
+                        op_request.name
+                    ));
+                }
+
+                let mut builder = MergePlaybackOp::builder(spec);
+
+                for (i, input) in inputs.iter().enumerate() {
+                    // Get samples for this input
+                    let samples = if let Some(ref samples) = input.samples {
+                        samples.clone()
+                    } else if let Some(ref file_path) = input.file_path {
+                        load_audio_samples(file_path, sample_rate, channels)?
+                    } else {
+                        return Err(format!(
+                            "Merge input {} in operation '{}' must have either 'samples' or 'filePath'",
+                            i, op_request.name
+                        ));
+                    };
+
+                    // TODO: Per-input gain could be supported by wrapping in a GainOp
+                    // For now, gain is applied at the merge operation level
+                    let child_op = SamplePlayableOp::new(samples, spec);
+
+                    let offset = SampleTime::from_seconds(input.offset, sample_rate);
+                    builder = builder.add_input(Box::new(child_op), offset);
+                }
+
+                Box::new(builder.build())
+            }
         };
 
-        // Create the playable operation
-        let op = Box::new(SamplePlayableOp::new(samples.clone(), spec));
         let op_duration = op.duration().unwrap_or(SampleTime::new(0));
         let op_duration_seconds = op_duration.to_seconds(sample_rate);
 

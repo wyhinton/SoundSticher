@@ -24,6 +24,7 @@ export interface LoggingState {
   timelineBackendLog: boolean;
   operationLog: boolean;
   eventEmitsLog: boolean;
+  durationLog: boolean;
   // Add future logging categories here
   // performanceLog?: boolean;
   // audioLog?: boolean;
@@ -74,6 +75,7 @@ export const loggingState = persisted<LoggingState>('loggingState', {
   timelineBackendLog: false,
   operationLog: false,
   eventEmitsLog: false,
+  durationLog: false,
 });
 
 // Store for backend log messages
@@ -148,6 +150,7 @@ export const initializeBackendLogListener = () => {
       timeline: { bg: '#FF6F00', color: 'white' },
       operation: { bg: '#E91E63', color: 'white' },
       eventEmits: { bg: '#00BCD4', color: 'white' },
+      duration: { bg: '#00BCD4', color: 'white' },
     };
 
     const levelEmojis = {
@@ -190,6 +193,7 @@ export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) 
       timeline_enabled: config.timelineBackendLog ?? false,
       operation_enabled: config.operationLog ?? false,
       event_emits_enabled: config.eventEmitsLog ?? false,
+      duration_enabled: config.durationLog ?? false,
     };
 
     await invoke('update_logging_config', { config: backendConfig });

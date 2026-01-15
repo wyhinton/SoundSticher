@@ -15,7 +15,7 @@ import { writable, derived, get, type Writable, type Readable } from 'svelte/sto
 import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
 import type { OperationDef, MergeOp } from './operation';
 import { logger } from './logging';
-import { opPlaybackService, type AddOpRequest } from './opPlaybackService';
+import { opPlaybackService, type AddOpRequest, type MergeInputRequest } from './opPlaybackService';
 import { invokeWithPerf } from './performance';
 import { durationCache } from './durationCache';
 
@@ -519,33 +519,30 @@ function createOperationWaveformStore() {
 }
 
 /**
- * Build a playback graph from the currently selected MergeOp
+ * Build a playbook graph from the currently selected operation (MergeOp or SampleOp)
  *
  * IMPORTANT: Uses duration cache for timing, NOT waveforms
- * Waveforms are purely visual and should not affect playback timing
+ * Waveforms are purely visual and should not affect playbook timing
  */
 async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   const appStateValue = get(appState);
   const selectedOpName = appStateValue.uiSettings?.selectedOperationName;
 
   if (!selectedOpName) {
-    logger.waveform.operation('No operation selected, cannot build playback graph');
+    logger.waveform.operation('No operation selected, cannot build playbook graph');
     return;
   }
 
   const operation = appStateValue.operations?.defs?.[selectedOpName];
-  if (!operation || operation.kind !== 'merge') {
+  if (!operation) {
     logger.waveform.operation(
-      `Operation "${selectedOpName}" is not a MergeOp, cannot build playback graph`
+      `Operation "${selectedOpName}" not found, cannot build playbook graph`
     );
     return;
   }
 
-  logger.waveform.operation(
-    `Building playback graph for MergeOp "${selectedOpName}" (${operation.sources.length} sources)`
-  );
+  logger.waveform.operation(`Building playbook graph for ${operation.kind}Op "${selectedOpName}"`);
 
-  const operations: AddOpRequest[] = [];
   const operationDefs = appStateValue.operations?.defs;
 
   if (!operationDefs) {
@@ -556,53 +553,127 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   // Get duration store state for cached durations
   const opWaveformsState = get(operationWaveforms);
 
-  let currentTime = 0;
+  const operations: AddOpRequest[] = [];
 
-  // Iterate through the MergeOp's sources
-  for (let i = 0; i < operation.sources.length; i++) {
-    const source = operation.sources[i];
-    if (!source) continue;
+  // Recursive function to convert operations to AddOpRequest
+  function convertOperationToAddOpRequest(
+    op: OperationDef,
+    opName: string,
+    startTime: number
+  ): { operations: AddOpRequest[]; totalDuration: number } {
+    const result: AddOpRequest[] = [];
+    let totalDuration = 0;
 
-    if (source.type === 'operation') {
-      // Get the referenced SampleOp
-      const sampleOp = operationDefs[source.operationRef];
-      if (sampleOp && sampleOp.kind === 'sample') {
-        // Get the file path from the SampleOp's sources
-        const fileSource = sampleOp.sources.find(s => s.type === 'file');
-        if (fileSource && fileSource.type === 'file') {
-          // ✅ Get duration from duration cache, NOT waveform
-          const duration = opWaveformsState.durations.get(fileSource.fileId);
+    if (op.kind === 'sample') {
+      // Handle sample operation
+      const fileSource = op.sources.find(s => s.type === 'file');
+      if (fileSource && fileSource.type === 'file') {
+        const duration = opWaveformsState.durations.get(fileSource.fileId);
 
-          if (!duration) {
-            logger.waveform.warning(
-              `No duration cached for ${fileSource.fileId}, skipping from playback graph`
-            );
-            continue;
+        if (!duration) {
+          logger.waveform.warning(
+            `No duration cached for ${fileSource.fileId}, skipping from playbook graph`
+          );
+          return { operations: result, totalDuration: 0 };
+        }
+
+        result.push({
+          name: `${opName}_sample`,
+          opType: 'sample',
+          filePath: fileSource.fileId,
+          startTime: startTime,
+          endTime: startTime + duration,
+          gain: 1.0,
+        });
+
+        totalDuration = duration;
+      }
+    } else if (op.kind === 'merge') {
+      // Handle merge operation - create separate operations for each source
+      let currentOffset = startTime;
+      const mergeInputs: MergeInputRequest[] = [];
+
+      for (let i = 0; i < op.sources.length; i++) {
+        const source = op.sources[i];
+        if (!source || source.type !== 'operation') {
+          logger.waveform.warning(`Unsupported source type "${source?.type}" in MergeOp, skipping`);
+          continue;
+        }
+
+        const sourceOp = operationDefs?.[source.operationRef];
+        if (!sourceOp) {
+          logger.waveform.warning(`Referenced operation "${source.operationRef}" not found`);
+          continue;
+        }
+
+        if (sourceOp.kind === 'sample') {
+          // For sample operations, add them as merge inputs
+          const fileSource = sourceOp.sources.find(s => s.type === 'file');
+          if (fileSource && fileSource.type === 'file') {
+            const duration = opWaveformsState.durations.get(fileSource.fileId);
+
+            if (!duration) {
+              logger.waveform.warning(
+                `No duration cached for ${fileSource.fileId}, skipping from merge`
+              );
+              continue;
+            }
+
+            mergeInputs.push({
+              filePath: fileSource.fileId,
+              offset: currentOffset - startTime, // Offset relative to merge start
+              gain: 1.0,
+            });
+
+            currentOffset += duration;
+
+            // Add gap if specified in MergeOp
+            if (op.gapSeconds > 0) {
+              currentOffset += op.gapSeconds;
+            }
           }
+        } else if (sourceOp.kind === 'merge') {
+          // For nested merge operations, recursively convert them
+          const nestedResult = convertOperationToAddOpRequest(
+            sourceOp,
+            `${opName}_nested_${i}`,
+            currentOffset
+          );
 
-          operations.push({
-            name: source.operationRef,
-            filePath: fileSource.fileId,
-            startTime: currentTime,
-            endTime: currentTime + duration,
-            gain: 1.0,
-          });
-
-          currentTime += duration;
+          result.push(...nestedResult.operations);
+          currentOffset += nestedResult.totalDuration;
 
           // Add gap if specified in MergeOp
-          if (operation.gapSeconds > 0) {
-            currentTime += operation.gapSeconds;
+          if (op.gapSeconds > 0) {
+            currentOffset += op.gapSeconds;
           }
         }
       }
-    } else {
-      logger.waveform.warning(`Unsupported source type "${source.type}" in MergeOp, skipping`);
+
+      // If we have merge inputs, create a merge operation
+      if (mergeInputs.length > 0) {
+        result.push({
+          name: `${opName}_merge`,
+          opType: 'merge',
+          startTime: startTime,
+          endTime: currentOffset,
+          gain: 1.0,
+          inputs: mergeInputs,
+        });
+      }
+
+      totalDuration = currentOffset - startTime;
     }
+
+    return { operations: result, totalDuration };
   }
 
+  // Convert the selected operation
+  const conversionResult = convertOperationToAddOpRequest(operation, selectedOpName, 0);
+  operations.push(...conversionResult.operations);
+
   if (operations.length === 0) {
-    logger.waveform.warning('No operations to build playback graph');
+    logger.waveform.warning('No valid operations to build playbook graph');
     return;
   }
 
