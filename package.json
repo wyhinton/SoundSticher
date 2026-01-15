@@ -55,6 +55,7 @@
     "tauri-plugin-clipboard-api": "^2.1.11"
   },
   "devDependencies": {
+    "@hypothesi/tauri-plugin-mcp-bridge": "^0.7.0",
     "@sveltejs/adapter-static": "^3.0.1",
     "@sveltejs/kit": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
@@ -66,6 +67,7 @@
     "eslint-plugin-only-warn": "^1.1.0",
     "eslint-plugin-svelte": "^3.10.1",
     "eslint-plugin-unused-imports": "^4.2.0",
+    "install-mcp": "^1.10.2",
     "internal-ip": "^7.0.0",
     "prettier": "^3.6.2",
     "svader": "^0.5.4",

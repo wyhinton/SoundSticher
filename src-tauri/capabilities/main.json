@@ -179,6 +179,7 @@
     "fs:read-meta",
     "clipboard:allow-write-text",
     "dialog:allow-save",
-    "dialog:default"
+    "dialog:default",
+    "mcp-bridge:default"
   ]
 }
