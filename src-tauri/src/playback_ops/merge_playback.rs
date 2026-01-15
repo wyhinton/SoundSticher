@@ -1,13 +1,13 @@
 use crate::playback::op_playback::{AudioSpec, PlayableOp, PlaybackResult, SampleTime};
 
-pub struct MergePlaybackNode {
+pub struct MergePlaybackOp {
     inputs: Vec<Box<dyn PlayableOp>>,
     offsets: Vec<SampleTime>,
     total_duration: SampleTime,
     spec: AudioSpec,
 }
 
-impl PlayableOp for MergePlaybackNode {
+impl PlayableOp for MergePlaybackOp {
     fn render_at(
         &mut self,
         t: SampleTime,
