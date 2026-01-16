@@ -23,12 +23,12 @@
   import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
   import { dropzone } from '$lib/attachments/droppable';
 
-  // Get sample op files for display
-  function getSampleOpFiles(operationRef: string) {
+  // Get sample op files for display using operationId
+  function getSampleOpFiles(operationId: string) {
     const operations = $appState.operations?.defs;
     if (!operations) return [];
 
-    const sampleOp = operations[operationRef];
+    const sampleOp = operations[operationId];
     if (!sampleOp || sampleOp.kind !== 'sample') return [];
 
     // For sample ops, there should be exactly one source with type 'file'
@@ -349,12 +349,11 @@
               {#if source.type === 'operation'}
                 <tr class:table-warning={selectedRows.has(sourceIndex)}>
                   <td>
-                    <small class="text-muted" title={source.operationRef}
-                      >{source.operationRef}</small
+                    <small class="text-muted" title={source.operationId}>{source.operationId}</small
                     >
                   </td>
                   <td class="text-center">
-                    {#each getSampleOpFiles(source.operationRef) as fileId}
+                    {#each getSampleOpFiles(source.operationId) as fileId}
                       <small class="text-info" title={fileId}>{fileId}</small>
                     {/each}
                   </td>
@@ -362,7 +361,7 @@
                     <DropDownActionsButton
                       dropdownId="source-actions-{sourceIndex}"
                       buttonTitle="Source actions"
-                      buttonAriaLabel="Source actions for {source.operationRef}"
+                      buttonAriaLabel="Source actions for {source.operationId}"
                       actions={[
                         {
                           id: 'remove',

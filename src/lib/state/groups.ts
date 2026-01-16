@@ -391,24 +391,36 @@ export const groupRegistry = new GroupRegistry(() => {
   return get(appState).groups?.defs;
 });
 
-let lastRev = get(appState)._rev ?? 0;
+let lastRev: number | undefined;
+let subscriptionInitialized = false;
 
-appState.subscribe(state => {
-  const currentRev = state._rev ?? 0;
-  const isLogging = get(loggingState).groupsLog;
+/**
+ * Initialize the appState subscription for cache invalidation.
+ * Call this after all modules are loaded to avoid circular dependencies.
+ */
+export function initializeGroupsSubscription() {
+  if (subscriptionInitialized) return;
 
-  // If content revision changed, cached group results are invalid
-  if (currentRev !== lastRev) {
-    if (isLogging) {
-      logger.groups.warning(
-        `Content revision changed from ${lastRev} to ${currentRev} - invalidating cache`
-      );
+  lastRev = get(appState)._rev ?? 0;
+  subscriptionInitialized = true;
+
+  appState.subscribe(state => {
+    const currentRev = state._rev ?? 0;
+    const isLogging = get(loggingState).groupsLog;
+
+    // If content revision changed, cached group results are invalid
+    if (currentRev !== lastRev) {
+      if (isLogging) {
+        logger.groups.warning(
+          `Content revision changed from ${lastRev} to ${currentRev} - invalidating cache`
+        );
+      }
+
+      groupRegistry.invalidateAll();
+      lastRev = currentRev;
     }
-
-    groupRegistry.invalidateAll();
-    lastRev = currentRev;
-  }
-});
+  });
+}
 
 function mulberry32(seed: number) {
   let t = seed >>> 0;

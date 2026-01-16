@@ -14,6 +14,8 @@
   import { get } from 'svelte/store';
   import { initializeStateSynchronization } from './state/stateSynchronization';
   import { initWaveformService } from './state/waveformCache';
+  import { initializeGroupsSubscription } from './state/groups';
+  import { initializeOperationsSubscription } from './state/operation';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
@@ -54,6 +56,11 @@
   onMount(() => {
     // Initialize state synchronization
     initializeStateSynchronization();
+
+    // Initialize subscriptions to avoid circular dependency issues
+    initializeGroupsSubscription();
+    initializeOperationsSubscription();
+
     // document.addEventListener('dragover', event => {
     //   event.preventDefault();
     // });

@@ -526,22 +526,24 @@ function createOperationWaveformStore() {
  */
 async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   const appStateValue = get(appState);
-  const selectedOpName = appStateValue.uiSettings?.selectedOperationName;
+  const selectedOpId =
+    appStateValue.uiSettings?.selectedOperationId ??
+    appStateValue.uiSettings?.selectedOperationName;
 
-  if (!selectedOpName) {
+  if (!selectedOpId) {
     logger.waveform.operation('No operation selected, cannot build playbook graph');
     return;
   }
 
-  const operation = appStateValue.operations?.defs?.[selectedOpName];
+  const operation = appStateValue.operations?.defs?.[selectedOpId];
   if (!operation) {
-    logger.waveform.operation(
-      `Operation "${selectedOpName}" not found, cannot build playbook graph`
-    );
+    logger.waveform.operation(`Operation "${selectedOpId}" not found, cannot build playbook graph`);
     return;
   }
 
-  logger.waveform.operation(`Building playbook graph for ${operation.kind}Op "${selectedOpName}"`);
+  logger.waveform.operation(
+    `Building playbook graph for ${operation.kind}Op "${operation.name}" (id: ${selectedOpId})`
+  );
 
   const operationDefs = appStateValue.operations?.defs;
 
@@ -558,7 +560,7 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   // Recursive function to convert operations to AddOpRequest
   function convertOperationToAddOpRequest(
     op: OperationDef,
-    opName: string,
+    opId: string,
     startTime: number
   ): { operations: AddOpRequest[]; totalDuration: number } {
     const result: AddOpRequest[] = [];
@@ -578,7 +580,7 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
         }
 
         result.push({
-          name: `${opName}_sample`,
+          name: `${op.name}_sample`,
           opType: 'sample',
           filePath: fileSource.fileId,
           startTime: startTime,
@@ -600,9 +602,9 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
           continue;
         }
 
-        const sourceOp = operationDefs?.[source.operationRef];
+        const sourceOp = operationDefs?.[source.operationId];
         if (!sourceOp) {
-          logger.waveform.warning(`Referenced operation "${source.operationRef}" not found`);
+          logger.waveform.warning(`Referenced operation id="${source.operationId}" not found`);
           continue;
         }
 
@@ -634,11 +636,7 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
           }
         } else if (sourceOp.kind === 'merge') {
           // For nested merge operations, recursively convert them
-          const nestedResult = convertOperationToAddOpRequest(
-            sourceOp,
-            `${opName}_nested_${i}`,
-            currentOffset
-          );
+          const nestedResult = convertOperationToAddOpRequest(sourceOp, sourceOp.id, currentOffset);
 
           result.push(...nestedResult.operations);
           currentOffset += nestedResult.totalDuration;
@@ -653,7 +651,7 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
       // If we have merge inputs, create a merge operation
       if (mergeInputs.length > 0) {
         result.push({
-          name: `${opName}_merge`,
+          name: `${op.name}_merge`,
           opType: 'merge',
           startTime: startTime,
           endTime: currentOffset,
@@ -669,7 +667,7 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   }
 
   // Convert the selected operation
-  const conversionResult = convertOperationToAddOpRequest(operation, selectedOpName, 0);
+  const conversionResult = convertOperationToAddOpRequest(operation, selectedOpId, 0);
   operations.push(...conversionResult.operations);
 
   if (operations.length === 0) {
@@ -731,7 +729,7 @@ function getOperationFilePaths(operation: OperationDef | undefined): string[] {
       // Recursively process all sources in the nested merge op
       for (const nestedSource of op.sources) {
         if (nestedSource.type === 'operation') {
-          const nestedOp = operations[nestedSource.operationRef];
+          const nestedOp = operations[nestedSource.operationId];
           if (nestedOp) {
             const nestedPaths = extractFilePathsFromOperation(nestedOp);
             paths.push(...nestedPaths);
@@ -839,7 +837,7 @@ function getTimelineItemsForMergeOp(operation: OperationDef) {
       console.log('Processing nested merge op:', op);
       for (const nestedSource of op.sources) {
         if (nestedSource.type === 'operation' && operations) {
-          const nestedOp = operations[nestedSource.operationRef];
+          const nestedOp = operations[nestedSource.operationId];
           if (nestedOp) {
             const nestedItems = extractFileItemsFromOperation(nestedOp);
             items.push(...nestedItems);
@@ -855,8 +853,8 @@ function getTimelineItemsForMergeOp(operation: OperationDef) {
   console.log(operation);
   for (const source of operation.sources) {
     if (source.type === 'operation') {
-      // Get the referenced operation (could be SampleOp or MergeOp)
-      const sourceOp = operations[source.operationRef];
+      // Get the referenced operation by ID (could be SampleOp or MergeOp)
+      const sourceOp = operations[source.operationId];
       console.log(sourceOp);
       if (sourceOp) {
         const extractedItems = extractFileItemsFromOperation(sourceOp);
@@ -873,14 +871,18 @@ function getTimelineItemsForMergeOp(operation: OperationDef) {
 
 /**
  * Metadata for a timeline item with hierarchy information
+ *
+ * IMPORTANT: operationId is the stable identifier for the operation that
+ * produced this timeline item. Use this for deletion and updates, NOT names.
  */
 interface TimelineItemWithHierarchy {
-  id: string;
+  id: string; // Timeline item ID (sample file ID or merge group ID)
   path: string;
   active: boolean;
   index: number;
   kind: 'sample' | 'merge';
-  operationName: string;
+  operationId: string; // 🔑 Immutable operation ID (source of truth)
+  operationName: string; // Display name (for UI only)
   depth: number;
   parentId: string | undefined;
   children: string[];
@@ -900,7 +902,7 @@ interface TimelineItemWithHierarchy {
  */
 function flattenOperationToTimelineItems(
   operation: OperationDef | undefined,
-  operationName: string,
+  operationId: string,
   operations: Record<string, OperationDef>,
   depth: number = 0,
   parentId: string | undefined = undefined
@@ -912,7 +914,7 @@ function flattenOperationToTimelineItems(
 
   function processOperation(
     op: OperationDef,
-    opName: string,
+    opId: string,
     currentDepth: number,
     currentParentId: string | undefined
   ): TimelineItemWithHierarchy[] {
@@ -928,7 +930,8 @@ function flattenOperationToTimelineItems(
             active: true,
             index: globalIndex++,
             kind: 'sample',
-            operationName: opName,
+            operationId: op.id,
+            operationName: op.name,
             depth: currentDepth,
             parentId: currentParentId,
             children: [],
@@ -938,19 +941,19 @@ function flattenOperationToTimelineItems(
       }
     } else if (op.kind === 'merge') {
       // MergeOp - this is a group container
-      const mergeId = `merge:${opName}`;
+      const mergeId = `merge:${op.id}`;
       const childIds: string[] = [];
       const childItems: TimelineItemWithHierarchy[] = [];
 
       // Process each source in the MergeOp
       for (const source of op.sources) {
         if (source.type === 'operation') {
-          const childOp = operations[source.operationRef];
+          const childOp = operations[source.operationId];
           if (childOp) {
             // Recursively process child operations
             const childResult = processOperation(
               childOp,
-              source.operationRef,
+              source.operationId,
               currentDepth + 1,
               mergeId
             );
@@ -971,11 +974,12 @@ function flattenOperationToTimelineItems(
       // Note: We insert the MergeOp BEFORE its children for proper ordering
       result.push({
         id: mergeId,
-        path: opName,
+        path: op.name,
         active: true,
         index: globalIndex++,
         kind: 'merge',
-        operationName: opName,
+        operationId: op.id,
+        operationName: op.name,
         depth: currentDepth,
         parentId: currentParentId,
         children: childIds,
@@ -989,7 +993,7 @@ function flattenOperationToTimelineItems(
     return result;
   }
 
-  return processOperation(operation, operationName, depth, parentId);
+  return processOperation(operation, operationId, depth, parentId);
 }
 
 /**
@@ -998,7 +1002,7 @@ function flattenOperationToTimelineItems(
  */
 function getHierarchicalTimelineItems(
   operation: OperationDef | undefined,
-  operationName: string
+  operationId: string
 ): TimelineItemWithHierarchy[] {
   if (!operation) return [];
 
@@ -1016,14 +1020,14 @@ function getHierarchicalTimelineItems(
     // Process each source in the root MergeOp
     for (const source of operation.sources) {
       if (source.type === 'operation') {
-        const childOp = operations[source.operationRef];
+        const childOp = operations[source.operationId];
         if (childOp) {
           // Check if this child is itself a MergeOp
           if (childOp.kind === 'merge') {
             // This is a nested MergeOp - flatten it with depth tracking
             const nestedItems = flattenOperationToTimelineItems(
               childOp,
-              source.operationRef,
+              childOp.id,
               operations,
               0, // Start at depth 0 for nested MergeOps (they're top-level within our view)
               undefined
@@ -1043,7 +1047,8 @@ function getHierarchicalTimelineItems(
                   active: true,
                   index: globalIndex++,
                   kind: 'sample',
-                  operationName: source.operationRef,
+                  operationId: childOp.id,
+                  operationName: childOp.name,
                   depth: 0,
                   parentId: undefined,
                   children: [],
@@ -1068,7 +1073,8 @@ function getHierarchicalTimelineItems(
           active: true,
           index: 0,
           kind: 'sample',
-          operationName: operationName,
+          operationId: operation.id,
+          operationName: operation.name,
           depth: 0,
           parentId: undefined,
           children: [],
@@ -1087,7 +1093,7 @@ function getHierarchicalTimelineItems(
  *
  * This is the key store that the Timeline component should use instead of
  * appState.timelineItems. It reactively updates when:
- * - The selected operation changes
+ * - The selected operation changes (uiSettings.selectedOperationId)
  * - The operation's sections change
  * - Durations are loaded (layout changes)
  * - Waveforms are loaded (visual updates only)
@@ -1102,23 +1108,23 @@ function getHierarchicalTimelineItems(
 export const operationTimelineItems: Readable<TimelineItem[]> = derived(
   [appState, operationWaveforms],
   ([$appState, $operationWaveforms]) => {
-    const selectedOpName = $appState.uiSettings?.selectedOperationName;
-
-    if (!selectedOpName || !$appState.operations?.defs) {
+    const selectedOpId =
+      $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationName;
+    if (!selectedOpId || !$appState.operations?.defs) {
       return $appState.timelineItems || [];
     }
 
-    const operation = $appState.operations.defs[selectedOpName];
+    const operation = $appState.operations.defs[selectedOpId];
     if (!operation) {
-      logger.waveform.warning(`Operation "${selectedOpName}" not found in definitions`);
+      logger.waveform.warning(`Operation id="${selectedOpId}" not found in definitions`);
       return [];
     }
 
     // Get hierarchical file items from the operation sources
-    const hierarchicalItems = getHierarchicalTimelineItems(operation, selectedOpName);
+    const hierarchicalItems = getHierarchicalTimelineItems(operation, selectedOpId);
 
     if (hierarchicalItems.length === 0) {
-      logger.waveform.info(`No files found in operation "${selectedOpName}"`);
+      logger.waveform.info(`No files found in operation "${operation.name}" (id: ${selectedOpId})`);
       return [];
     }
 
@@ -1129,7 +1135,7 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
     // If durations aren't loaded yet, we can't compute layout
     if (durations.size === 0 || totalDuration === 0) {
       logger.waveform.info(
-        `Operation "${selectedOpName}" waiting for durations (${durations.size} loaded)`
+        `Operation "${operation.name}" waiting for durations (${durations.size} loaded)`
       );
       return [];
     }
@@ -1139,7 +1145,7 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
     const loadedWaveforms = $operationWaveforms.waveforms.size;
     if (loadedWaveforms < sampleItems.length) {
       logger.waveform.info(
-        `Operation "${selectedOpName}" has ${loadedWaveforms}/${sampleItems.length} waveforms loaded (layout is stable)`
+        `Operation "${operation.name}" has ${loadedWaveforms}/${sampleItems.length} waveforms loaded (layout is stable)`
       );
     }
 
@@ -1189,6 +1195,7 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
           parentId: item.parentId,
           depth: item.depth,
           isGroup: false,
+          operationId: item.operationId,
           operationName: item.operationName,
         } as AudioFileTimelineItem);
       } else if (item.kind === 'merge') {
@@ -1234,6 +1241,7 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
             parentId: item.parentId,
             depth: item.depth,
             isGroup: true,
+            operationId: item.operationId,
             operationName: item.operationName,
           } as AudioFileTimelineItem);
         }
@@ -1258,11 +1266,12 @@ export const operationTimelineItems: Readable<TimelineItem[]> = derived(
     });
 
     logger.waveform.info(
-      `Generated ${items.length} timeline items for operation "${selectedOpName}" ` +
+      `Generated ${items.length} timeline items for operation "${operation.name}" (id: ${selectedOpId}) ` +
         `(${items.filter(i => (i as AudioFileTimelineItem).kind === 'merge').length} groups, ` +
         `${items.filter(i => (i as AudioFileTimelineItem).kind === 'sample').length} samples, ` +
         `total duration: ${totalDuration.toFixed(1)}s)`
     );
+    console.log(items);
     return items;
   }
 );
@@ -1343,7 +1352,7 @@ export const operationTimelineHierarchy: Readable<TimelineHierarchy | null> = de
 // SUBSCRIPTION TO SELECTED OPERATION CHANGES
 // ============================================================================
 
-let lastSelectedOperationName: string | null = null;
+let lastSelectedOperationId: string | null = null;
 let lastOperationRevision: string | null = null;
 let unsubscribe: (() => void) | null = null;
 
@@ -1351,16 +1360,16 @@ let unsubscribe: (() => void) | null = null;
  * Create a revision key for an operation based on its content
  */
 function createOperationRevisionKey(
-  operationName: string,
+  operationId: string,
   operation: OperationDef | undefined,
   globalRev: number
 ): string {
-  if (!operation) return `${operationName}:empty:${globalRev}`;
+  if (!operation) return `${operationId}:empty:${globalRev}`;
 
   // Create a hash based on the operation's sources and key properties
   const sourcesHash = JSON.stringify(operation.sources || []);
 
-  return `${operationName}:${sourcesHash}:${globalRev}`;
+  return `${operationId}:${sourcesHash}:${globalRev}`;
 }
 
 /**ope
@@ -1370,40 +1379,40 @@ export function initWaveformService(): () => void {
   logger.waveform.info('Initializing waveform service');
 
   unsubscribe = appState.subscribe($appState => {
-    const selectedOpName = $appState.uiSettings?.selectedOperationName || null;
+    const selectedOpId = $appState.uiSettings?.selectedOperationId || null;
     const globalRev = $appState._rev || 0;
     const operation =
-      selectedOpName && $appState.operations?.defs
-        ? $appState.operations.defs[selectedOpName]
+      selectedOpId && $appState.operations?.defs
+        ? $appState.operations.defs[selectedOpId]
         : undefined;
 
-    // Create revision key that includes both operation name and content
+    // Create revision key that includes both operation ID and content
     const currentRevision = createOperationRevisionKey(
-      selectedOpName || 'none',
+      selectedOpId || 'none',
       operation,
       globalRev
     );
 
-    // React if either the operation name or its content changed
+    // React if either the operation ID or its content changed
     if (currentRevision !== lastOperationRevision) {
-      const operationNameChanged = selectedOpName !== lastSelectedOperationName;
+      const operationIdChanged = selectedOpId !== lastSelectedOperationId;
       const operationContentChanged =
-        !operationNameChanged && currentRevision !== lastOperationRevision;
+        !operationIdChanged && currentRevision !== lastOperationRevision;
 
-      if (operationNameChanged) {
+      if (operationIdChanged) {
         logger.waveform.operation(
-          `Operation changed: "${lastSelectedOperationName}" → "${selectedOpName}"`
+          `Operation changed: "${lastSelectedOperationId}" → "${selectedOpId}"`
         );
       } else if (operationContentChanged) {
         logger.waveform.operation(
-          `Operation "${selectedOpName}" content changed, reloading waveforms`
+          `Operation "${selectedOpId}" content changed, reloading waveforms`
         );
       }
 
-      lastSelectedOperationName = selectedOpName;
+      lastSelectedOperationId = selectedOpId;
       lastOperationRevision = currentRevision;
 
-      if (!selectedOpName || !$appState.operations?.defs) {
+      if (!selectedOpId || !$appState.operations?.defs) {
         logger.waveform.operation('No operation selected, clearing waveforms');
         operationWaveforms.clear();
         return;
@@ -1413,12 +1422,12 @@ export function initWaveformService(): () => void {
         const filePaths = getOperationFilePaths(operation);
         if (filePaths.length > 0) {
           logger.waveform.operation(
-            `Loading waveforms for operation "${selectedOpName}" (${filePaths.length} files)`
+            `Loading waveforms for operation "${operation.name}" (id: ${selectedOpId}, ${filePaths.length} files)`
           );
-          operationWaveforms.loadForOperation(selectedOpName, filePaths);
+          operationWaveforms.loadForOperation(operation.name, filePaths);
         } else {
           logger.waveform.operation(
-            `No files found in operation "${selectedOpName}", clearing waveforms`
+            `No files found in operation "${operation.name}" (id: ${selectedOpId}), clearing waveforms`
           );
           operationWaveforms.clear();
         }
@@ -1432,7 +1441,7 @@ export function initWaveformService(): () => void {
       unsubscribe();
       unsubscribe = null;
     }
-    lastSelectedOperationName = null;
+    lastSelectedOperationId = null;
     lastOperationRevision = null;
   };
 }

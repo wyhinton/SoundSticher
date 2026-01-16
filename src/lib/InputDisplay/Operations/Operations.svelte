@@ -1,12 +1,12 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
-  import { deleteOperations, OperationInfoDictionary } from '$lib/state/operation';
-  import type { OperationDef, MergeOp, PipelineOp } from '$lib/state/operation';
+  import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
+  import { deleteOperationsById, OperationInfoDictionary } from '$lib/state/operation';
+  import type { OperationDef, MergeOp, PipelineOp, OperationId } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
 
-  // Use selected operation from global state
-  $: selectedOperationName = $appState.uiSettings?.selectedOperationName || null;
+  // Use selected operation ID from global state
+  $: selectedOperationId = $appState.uiSettings?.selectedOperationId || null;
 
   // Operation parameters with validation - will be dynamic based on operation type
   let operationParams: Record<string, any> = {};
@@ -119,8 +119,8 @@
 
   // Derived data about the selected operation
   $: selectedOperation =
-    selectedOperationName && $appState.operations?.defs
-      ? $appState.operations.defs[selectedOperationName]
+    selectedOperationId && $appState.operations?.defs
+      ? $appState.operations.defs[selectedOperationId]
       : null;
 
   $: operationInfo = selectedOperation ? OperationInfoDictionary[selectedOperation.kind] : null;
@@ -211,10 +211,14 @@
   }
 
   function handleDeleteOperation() {
-    if (selectedOperationName && confirm('Delete operation "' + selectedOperationName + '"?')) {
-      deleteOperations([selectedOperationName]);
+    if (
+      selectedOperationId &&
+      selectedOperation &&
+      confirm('Delete operation "' + selectedOperation.name + '"?')
+    ) {
+      deleteOperationsById([selectedOperationId]);
       // Clear selection after deletion in global state
-      setSelectedOperationName(null);
+      setSelectedOperationId(null);
     }
   }
 
@@ -232,9 +236,9 @@
         case 'section':
           return 'Section ' + source.sectionIndex;
         case 'operation':
-          return `From: ${source.operationRef}`;
+          return `From: ${source.operationId}`;
         case 'previousOperation':
-          return 'Output from: ' + source.operationRef;
+          return 'Output from: ' + source.operationId;
         default:
           return 'Unknown source';
       }
@@ -243,13 +247,13 @@
 </script>
 
 <div class="operations-panel">
-  {#if selectedOperationName && selectedOperation && operationInfo}
+  {#if selectedOperationId && selectedOperation && operationInfo}
     <div class="operation-details">
       <div class="operation-header">
         <div class="operation-title">
           <span class="operation-icon">{operationInfo.icon}</span>
           <div class="operation-text">
-            <h4 class="operation-name">{selectedOperationName}</h4>
+            <h4 class="operation-name">{selectedOperation.name}</h4>
             <span class="operation-type">{operationInfo.label} ({operationInfo.category})</span>
           </div>
         </div>
@@ -385,7 +389,7 @@
       <!-- Debug Panel Component -->
       <OperationParamsDebugPanel
         {selectedOperation}
-        {selectedOperationName}
+        {selectedOperationId}
         {operationParams}
         {validateParameters}
       />

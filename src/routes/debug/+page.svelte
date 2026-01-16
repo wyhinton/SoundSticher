@@ -14,31 +14,23 @@
     setSvgPathDisplayMode,
     callSiteTrackingEnabled,
     toggleCallSiteTrackingEnabled,
+    addToFavorites,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
   import { toSource } from '$lib/utils/format';
   import { examples } from '$lib/utils/examples';
   import { onDestroy, onMount } from 'svelte';
-  import { Channel, invoke } from '@tauri-apps/api/core';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
-  import type { CombineAudioEvent, ExportAudioEvent } from '$lib/state/events';
   import { exportState } from '$lib/state/export';
   import TabContainer from '$lib/components/TabContainer.svelte';
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
   import LoggingControls from '$lib/components/LoggingControls.svelte';
   import {
-    selectionService,
-    previewService,
-    selectedIds,
-    previewIds,
     selectedCount,
     previewCount,
     selectionSource,
-    previewSource,
     selectionDisplayData as selectionDisplayDataStore,
-    previewActive,
   } from '$lib/state/selection.svelte';
   import {
     initializeBackendLogListener,
@@ -46,8 +38,7 @@
     loggingState,
     listenerLogs,
   } from '$lib/state/logging';
-  import TestDrag from '$lib/components/TestDrag.svelte';
-
+  
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
     if (obj === null || obj === undefined) {
@@ -121,7 +112,7 @@
     if (exampleState) {
       appState.set(exampleState);
     }
-  };
+  }; 
 
   function test_async() {
     invokeWithPerf('test_async');
@@ -186,6 +177,19 @@
   }
 
   let appStateDebug: undefined | AppStateDebug = undefined;
+
+  const addTestFavorites = () => {
+    const testFavoritePaths = [
+      'C:\\Users\\Primary User\\Desktop\\AUDIO\\A_NUMBERED_SMALL',
+      'C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\808-bass-drums',
+    ];
+
+    testFavoritePaths.forEach(path => {
+      addToFavorites(path);
+    });
+
+    console.log('Added test favorites:', testFavoritePaths);
+  };
 
   const addTwoSections = () => {
     addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley');
@@ -400,6 +404,13 @@
         'warning'
       )}
       {@render actionButton(() => addTwoSections(), 'fa-plus', 'Add Sections', false, 'secondary')}
+      {@render actionButton(
+        () => addTestFavorites(),
+        'fa-heart',
+        'Add Test Favorites',
+        false,
+        'primary'
+      )}
     </div>
   </div>
 
