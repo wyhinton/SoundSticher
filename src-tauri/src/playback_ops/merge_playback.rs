@@ -1,13 +1,74 @@
 use crate::playback::op_playback::{AudioSpec, PlayableOp, PlaybackResult, SampleTime};
 
-pub struct MergePlaybackNode {
+pub struct MergePlaybackOp {
     inputs: Vec<Box<dyn PlayableOp>>,
     offsets: Vec<SampleTime>,
     total_duration: SampleTime,
     spec: AudioSpec,
 }
 
-impl PlayableOp for MergePlaybackNode {
+impl MergePlaybackOp {
+    /// Create a new MergePlaybackOp with the given inputs and their offsets
+    pub fn new(
+        inputs: Vec<Box<dyn PlayableOp>>,
+        offsets: Vec<SampleTime>,
+        spec: AudioSpec,
+    ) -> Self {
+        // Calculate total duration as the maximum end time of all inputs
+        let total_duration = inputs
+            .iter()
+            .zip(offsets.iter())
+            .map(|(input, offset)| {
+                let input_duration = input.duration().unwrap_or(SampleTime::new(0));
+                *offset + input_duration
+            })
+            .max()
+            .unwrap_or(SampleTime::new(0));
+
+        Self {
+            inputs,
+            offsets,
+            total_duration,
+            spec,
+        }
+    }
+
+    /// Create a builder for MergePlaybackOp
+    pub fn builder(spec: AudioSpec) -> MergePlaybackOpBuilder {
+        MergePlaybackOpBuilder::new(spec)
+    }
+}
+
+/// Builder for MergePlaybackOp
+pub struct MergePlaybackOpBuilder {
+    inputs: Vec<Box<dyn PlayableOp>>,
+    offsets: Vec<SampleTime>,
+    spec: AudioSpec,
+}
+
+impl MergePlaybackOpBuilder {
+    pub fn new(spec: AudioSpec) -> Self {
+        Self {
+            inputs: Vec::new(),
+            offsets: Vec::new(),
+            spec,
+        }
+    }
+
+    /// Add an input with its offset
+    pub fn add_input(mut self, input: Box<dyn PlayableOp>, offset: SampleTime) -> Self {
+        self.inputs.push(input);
+        self.offsets.push(offset);
+        self
+    }
+
+    /// Build the MergePlaybackOp
+    pub fn build(self) -> MergePlaybackOp {
+        MergePlaybackOp::new(self.inputs, self.offsets, self.spec)
+    }
+}
+
+impl PlayableOp for MergePlaybackOp {
     fn render_at(
         &mut self,
         t: SampleTime,

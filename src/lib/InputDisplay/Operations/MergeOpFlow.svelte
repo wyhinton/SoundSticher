@@ -3,7 +3,7 @@
   import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
-  import type { MergeOp, OperationSource } from '$lib/state/operation';
+  import type { MergeOp, OperationSource, OperationId } from '$lib/state/operation';
   import { OperationInfoDictionary } from '$lib/state/operation';
 
   import SourceNode from './SourceNode.svelte';
@@ -12,6 +12,7 @@
   import { dropzone } from '$lib/attachments/droppable';
 
   export let operation: MergeOp;
+  export let operationId: OperationId;
   export let operationName: string;
   export let isSelected: boolean = false;
 
@@ -50,7 +51,7 @@
     let nodeIndex = 0;
 
     sources.forEach((source, sourceIndex) => {
-      const sourceNodeId = `merge-source-${operationName}-${sourceIndex}`;
+      const sourceNodeId = `merge-source-${operationId}-${sourceIndex}`;
       sourceNodeIds.push(sourceNodeId);
 
       // Calculate grid position
@@ -80,13 +81,14 @@
     const gridRows = Math.ceil(totalSources / GRID_COLUMNS);
     const gridCenterY = START_Y + ((gridRows - 1) * VERTICAL_SPACING) / 2;
     const gridWidth = (GRID_COLUMNS - 1) * 150;
-    const opNodeId = `merge-op-${operationName}`;
+    const opNodeId = `merge-op-${operationId}`;
 
     nodes.push({
       id: opNodeId,
       type: 'operation',
       position: { x: START_X + gridWidth + HORIZONTAL_SPACING, y: gridCenterY },
       data: {
+        id: operationId,
         name: operationName,
         kind: operation.kind,
         icon: opInfo?.icon || '🔗',
@@ -111,7 +113,7 @@
     // Create edges from each source node to the operation node
     sourceNodeIds.forEach((sourceNodeId, index) => {
       edges.push({
-        id: `merge-edge-${index}-${operationName}`,
+        id: `merge-edge-${index}-${operationId}`,
         source: sourceNodeId,
         target: opNodeId,
         type: 'bezier',
@@ -139,9 +141,9 @@
       case 'section':
         return `Section ${source.sectionIndex}`;
       case 'operation':
-        return `From: ${source.operationRef}`;
+        return `From: ${source.operationId}`;
       case 'previousOperation':
-        return `From: ${source.operationRef}`;
+        return `From: ${source.operationId}`;
       default:
         return 'Unknown Source';
     }
@@ -222,6 +224,7 @@
 
     <!-- Operation flow header component -->
     <OpFlowHeader
+      {operationId}
       {operationName}
       {isSelected}
       {opInfo}

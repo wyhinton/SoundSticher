@@ -1,10 +1,6 @@
 <script lang="ts">
   import { toCssRgb } from '../utils/colors';
-  import {
-    addToFavorites,
-    isFavorite,
-    deleteSectionFromCurrentOperation,
-  } from '../state/state.svelte';
+  import { addToFavorites, isFavorite } from '../state/state.svelte';
   import type { Section } from '../state/state.svelte';
   import EditableInput from './EditableInput.svelte';
   import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
@@ -49,7 +45,6 @@
 
   function handleDelete(event: MouseEvent) {
     event.stopPropagation();
-    deleteSectionFromCurrentOperation(sectionIndex);
   }
 
   function handleRowClick(event: MouseEvent) {

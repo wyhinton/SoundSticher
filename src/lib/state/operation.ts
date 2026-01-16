@@ -7,28 +7,42 @@ import { groupRegistry, GroupResult } from './groups';
 // TYPES & INTERFACES
 // ============================================================================
 
+/** Unique, immutable identifier for operations (UUID/nanoid/ulid format) */
+export type OperationId = string;
+
 export interface OperationsState {
-  defs: Record<string, OperationDef>; // serialized operation definitions
-  pipelines?: Record<string, string[]>; // optional grouping of operations into pipelines
+  defs: Record<OperationId, OperationDef>; // serialized operation definitions keyed by ID
+  order?: OperationId[]; // optional ordering of operations for UI display
+  pipelines?: Record<string, OperationId[]>; // optional grouping of operations into pipelines
   _version?: number;
 }
 
 /**
  * An operation can be either a file rendering operation (produces output files)
  * or a sample editing operation (modifies audio in-place).
+ *
+ * IMPORTANT: Operations have:
+ * - `id`: Immutable, unique identifier (used for lookup and references)
+ * - `name`: Mutable, user-visible display label
  */
 export type OperationDef = MergeOp | PipelineOp | SampleOp;
+
+/** Base interface for all operations with common fields */
+export interface BaseOperation {
+  id: OperationId; // stable, immutable identity (UUID/nanoid)
+  name: string; // user-visible, editable display label
+}
 
 // ============================================================================
 // FILE RENDERING OPERATIONS (produce new output files)
 // ============================================================================
 
-export interface SampleOp {
+export interface SampleOp extends BaseOperation {
   kind: 'sample';
   sources: OperationSource[];
 }
 
-export interface MergeOp {
+export interface MergeOp extends BaseOperation {
   kind: 'merge';
   sources: OperationSource[];
   outputPath: string;
@@ -36,10 +50,10 @@ export interface MergeOp {
   format: string;
 }
 
-export interface PipelineOp {
+export interface PipelineOp extends BaseOperation {
   kind: 'pipeline';
-  /** Ordered list of operation references to execute in sequence */
-  operations: string[];
+  /** Ordered list of operation IDs to execute in sequence */
+  operations: OperationId[];
   /** Sources for the first operation in the pipeline */
   sources: OperationSource[];
 }
@@ -51,15 +65,15 @@ export type OperationSource =
   | { type: 'all' }
   | { type: 'active' }
   | { type: 'section'; sectionIndex: number }
-  | { type: 'operation'; operationRef: string }
-  | { type: 'previousOperation'; operationRef: string };
+  | { type: 'operation'; operationId: OperationId }
+  | { type: 'previousOperation'; operationId: OperationId };
 
 export type AudioFormat = 'wav' | 'mp3' | 'flac' | 'ogg' | 'aiff';
 
 export type OperationStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface OperationResult {
-  operationId: string;
+  operationId: OperationId;
   status: OperationStatus;
   progress?: number; // 0-100
   message?: string;
@@ -67,6 +81,20 @@ export interface OperationResult {
   outputFiles?: string[];
   startTime?: number;
   endTime?: number;
+}
+
+// ============================================================================
+// ID GENERATION
+// ============================================================================
+
+/**
+ * Generate a unique operation ID using timestamp + random component
+ * Format: op_<timestamp>_<random> for debugging friendliness
+ */
+export function generateOperationId(): OperationId {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8);
+  return `op_${timestamp}_${random}`;
 }
 
 // ============================================================================
@@ -116,46 +144,47 @@ export type OperationExecutor = (
 ) => Promise<OperationResult>;
 
 export class OperationRegistry {
-  private cache = new Map<string, { version: number; fileIds: Set<string> }>();
+  private cache = new Map<OperationId, { version: number; fileIds: Set<string> }>();
 
-  constructor(private getDefs: () => Record<string, OperationDef> | undefined) {}
+  constructor(private getDefs: () => Record<OperationId, OperationDef> | undefined) {}
 
   /**
-   * Resolve the source files for an operation
+   * Resolve the source files for an operation by ID
    */
-  resolveSource(name: string, state: AppState): Set<string> {
+  resolveSource(id: OperationId, state: AppState): Set<string> {
     const version = state._version ?? 0;
     const isLogging = get(loggingState).operationsLog;
 
     // Check cache
-    const cached = this.cache.get(name);
+    const cached = this.cache.get(id);
     if (cached && cached.version === version) {
       if (isLogging) {
-        console.log(`💾 Operations: Using cached source for "${name}" (version ${version})`);
+        console.log(`💾 Operations: Using cached source for id="${id}" (version ${version})`);
       }
       return cached.fileIds;
     }
 
     const defs = this.getDefs();
-    const def = defs?.[name];
+    const def = defs?.[id];
 
     if (!def) {
       if (isLogging) {
-        console.error(`❌ Operations: Unknown operation "${name}"`);
+        console.error(`❌ Operations: Unknown operation id="${id}"`);
       }
-      throw new Error(`Unknown operation "${name}"`);
+      throw new Error(`Unknown operation id="${id}"`);
     }
 
     if (isLogging) {
-      console.log(`🔍 Operations: Resolving source for "${name}"`, def);
-    } // Pass the operation name to resolve from operation's sources
+      console.log(`🔍 Operations: Resolving source for id="${id}" name="${def.name}"`, def);
+    }
+
     let fileIds: Set<string>;
 
     if (def.kind === 'merge' || def.kind === 'sample' || def.kind === 'pipeline') {
       // All operations now have sources array
       const allFileIds = new Set<string>();
       for (const source of def.sources) {
-        const sourceFileIds = this.resolveOperationSource(source, state, name);
+        const sourceFileIds = this.resolveOperationSource(source, state, id);
         sourceFileIds.forEach(id => allFileIds.add(id));
       }
       fileIds = allFileIds;
@@ -163,11 +192,11 @@ export class OperationRegistry {
       fileIds = new Set();
     }
 
-    this.cache.set(name, { version, fileIds });
+    this.cache.set(id, { version, fileIds });
 
     if (isLogging) {
       console.log(
-        `✅ Operations: Resolved "${name}" -> ${fileIds.size} files`,
+        `✅ Operations: Resolved id="${id}" -> ${fileIds.size} files`,
         Array.from(fileIds)
       );
     }
@@ -177,17 +206,12 @@ export class OperationRegistry {
 
   /**
    * Resolve an OperationSource to a set of file IDs
-   * Operations no longer have sections - this needs to be updated based on new data structure
    */
   private resolveOperationSource(
     source: OperationSource,
     state: AppState,
-    operationName?: string
+    operationId?: OperationId
   ): Set<string> {
-    // Operations no longer have sections - return empty set for now
-    // This method needs to be updated based on the new operation structure
-    console.warn(`resolveOperationSource needs to be updated - operations no longer have sections`);
-
     switch (source.type) {
       case 'group':
         return groupRegistry.eval(source.groupRef, state);
@@ -199,20 +223,19 @@ export class OperationRegistry {
         return new Set(source.fileIds);
 
       case 'operation':
-        // Reference to another operation's output
+        // Reference to another operation's output by ID
         console.warn('operation source type requires execution context');
         return new Set();
 
       case 'all':
       case 'active':
       case 'section':
-        // These cases previously used sections - now need different implementation
+        // These cases need different implementation
         console.warn(`Operation source type "${source.type}" needs updated implementation`);
         return new Set();
 
       case 'previousOperation':
         // For pipeline operations, this would reference output from previous op
-        // For now, return empty set as this requires execution context
         console.warn('previousOperation source type requires execution context');
         return new Set();
 
@@ -222,18 +245,25 @@ export class OperationRegistry {
   }
 
   /**
-   * Get the definition for an operation
+   * Get the definition for an operation by ID
    */
-  getDefinition(name: string): OperationDef | undefined {
-    return this.getDefs()?.[name];
+  getDefinition(id: OperationId): OperationDef | undefined {
+    return this.getDefs()?.[id];
   }
 
   /**
-   * Get all operation names
+   * Get all operation IDs
    */
-  getOperationNames(): string[] {
+  getOperationIds(): OperationId[] {
     const defs = this.getDefs();
     return defs ? Object.keys(defs) : [];
+  }
+
+  /**
+   * @deprecated Use getOperationIds() instead
+   */
+  getOperationNames(): string[] {
+    return this.getOperationIds();
   }
 
   /**
@@ -259,72 +289,115 @@ export const operationRegistry = new OperationRegistry(() => {
   return get(appState).operations?.defs;
 });
 
-// Subscribe to appState changes to invalidate cache
-let lastRev = get(appState)._rev ?? 0;
+let lastRev: number | undefined;
+let subscriptionInitialized = false;
 
-appState.subscribe(state => {
-  const currentRev = state._rev ?? 0;
-  const isLogging = get(loggingState).operationsLog;
+/**
+ * Initialize the appState subscription for cache invalidation.
+ * Call this after all modules are loaded to avoid circular dependencies.
+ */
+export function initializeOperationsSubscription() {
+  if (subscriptionInitialized) return;
 
-  if (currentRev !== lastRev) {
-    if (isLogging) {
-      console.log(
-        `🔄 Operations: Content revision changed from ${lastRev} to ${currentRev} - invalidating cache`
-      );
+  lastRev = get(appState)._rev ?? 0;
+  subscriptionInitialized = true;
+
+  appState.subscribe(state => {
+    const currentRev = state._rev ?? 0;
+    const isLogging = get(loggingState).operationsLog;
+
+    if (currentRev !== lastRev) {
+      if (isLogging) {
+        console.log(
+          `🔄 Operations: Content revision changed from ${lastRev} to ${currentRev} - invalidating cache`
+        );
+      }
+
+      operationRegistry.invalidateAll();
+      lastRev = currentRev;
     }
-
-    operationRegistry.invalidateAll();
-    lastRev = currentRev;
-  }
-});
+  });
+}
 
 // ============================================================================
 // CRUD OPERATIONS FOR OPERATIONS STATE
 // ============================================================================
 
+/** Type-safe definitions for creating new operations without id/name */
+export type NewMergeOp = Omit<MergeOp, 'id' | 'name'>;
+export type NewPipelineOp = Omit<PipelineOp, 'id' | 'name'>;
+export type NewSampleOp = Omit<SampleOp, 'id' | 'name'>;
+export type NewOperationDef = NewMergeOp | NewPipelineOp | NewSampleOp;
+
 /**
- * Add a new operation definition
+ * Create and add a new operation definition.
+ * Generates a new unique ID for the operation.
+ *
+ * @param name - Display name for the operation (user-visible, editable)
+ * @param defWithoutId - Operation definition without id/name (these will be set automatically)
+ * @returns The generated operation ID
  */
-export function addOperation(name: string, def: OperationDef): void {
+export function createOperation(name: string, defWithoutId: NewOperationDef): OperationId {
   const isLogging = get(loggingState).operationsLog;
+  const id = generateOperationId();
+
+  const def = {
+    ...defWithoutId,
+    id,
+    name,
+  } as OperationDef;
 
   if (isLogging) {
-    console.log(`➕ Operations: Adding operation "${name}"`, def);
+    console.log(`➕ Operations: Creating operation id="${id}" name="${name}"`, def);
   }
 
   appState.update(s => {
     if (!s.operations) {
-      s.operations = { defs: {}, _version: 1 };
+      s.operations = { defs: {}, order: [], _version: 1 };
+    }
+    if (!s.operations.order) {
+      s.operations.order = Object.keys(s.operations.defs);
     }
 
-    // Operations no longer have sections property
-    s.operations.defs[name] = def;
+    // Store by ID, ensure id matches the key
+    s.operations.defs[id] = def;
+    s.operations.order.push(id);
     s.operations._version = (s.operations._version ?? 0) + 1;
     s._rev = (s._rev ?? 0) + 1;
 
     return s;
   });
+
+  return id;
 }
 
 /**
- * Update an existing operation's parameters
+ * @deprecated Use createOperation() instead. This function exists for backward compatibility.
+ * Add a new operation definition by name (legacy API - generates ID internally)
  */
-export function updateOperation(
-  name: string,
-  patch: Partial<OperationDef>,
+export function addOperation(name: string, defWithoutId: NewOperationDef): OperationId {
+  return createOperation(name, defWithoutId);
+}
+
+/**
+ * Update an existing operation's parameters by ID
+ */
+export function updateOperationById(
+  id: OperationId,
+  patch: Partial<Omit<OperationDef, 'id'>>,
   expectedKind?: OperationDef['kind']
 ): void {
   const isLogging = get(loggingState).operationsLog;
 
   if (isLogging) {
-    console.log(`📝 Operations: Updating operation "${name}"`, { patch, expectedKind });
+    console.log(`📝 Operations: Updating operation id="${id}"`, { patch, expectedKind });
   }
 
   appState.update(s => {
-    const def = s.operations?.defs?.[name];
+    const def = s.operations?.defs?.[id];
     if (!def) {
       if (isLogging) {
-        console.warn(`⚠️ Operations: Cannot update "${name}" - not found`);
+        console.warn(`⚠️ Operations: Cannot update id="${id}" - not found`);
       }
       return s;
     }
@@ -332,18 +405,19 @@ export function updateOperation(
     if (expectedKind && def.kind !== expectedKind) {
       if (isLogging) {
         console.warn(
-          `⚠️ Operations: Cannot update "${name}" - expected kind "${expectedKind}" but got "${def.kind}"`
+          `⚠️ Operations: Cannot update id="${id}" - expected kind "${expectedKind}" but got "${def.kind}"`
         );
       }
       return s;
     }
 
-    s.operations!.defs[name] = { ...def, ...patch } as OperationDef;
+    // Preserve the original id, never allow it to be changed
+    s.operations!.defs[id] = { ...def, ...patch, id } as OperationDef;
     s.operations!._version = (s.operations!._version ?? 0) + 1;
     s._rev = (s._rev ?? 0) + 1;
 
     if (isLogging) {
-      console.log(`✅ Operations: Updated "${name}" successfully`);
+      console.log(`✅ Operations: Updated id="${id}" successfully`);
     }
 
     return s;
@@ -351,40 +425,151 @@ export function updateOperation(
 }
 
 /**
- * Delete an operation
+ * Rename an operation (change its display name, not its ID)
  */
-export function deleteOperation(name: string): void {
+export function renameOperation(id: OperationId, newName: string): void {
+  updateOperationById(id, { name: newName });
+}
+
+/**
+ * @deprecated Use updateOperationById() instead
+ */
+export function updateOperation(
+  idOrName: string,
+  patch: Partial<OperationDef>,
+  expectedKind?: OperationDef['kind']
+): void {
+  // Try to find by ID first, then fall back to finding by name for backward compatibility
+  const state = get(appState);
+  const defs = state.operations?.defs;
+
+  if (defs?.[idOrName]) {
+    // Found by ID
+    updateOperationById(idOrName, patch, expectedKind);
+  } else {
+    // Try to find by name (legacy support)
+    const entry = Object.entries(defs || {}).find(([, def]) => def.name === idOrName);
+    if (entry) {
+      updateOperationById(entry[0], patch, expectedKind);
+    } else {
+      console.warn(`⚠️ Operations: Cannot find operation "${idOrName}" by ID or name`);
+    }
+  }
+}
+
+/**
+ * Delete multiple operations by their IDs
+ */
+export function deleteOperationsById(ids: OperationId[]): void {
   const isLogging = get(loggingState).operationsLog;
+  const idsToDelete = new Set(ids);
 
   if (isLogging) {
-    console.log(`🗑️ Operations: Deleting operation "${name}"`);
+    console.log(`🗑️ Operations: Deleting operations by ID`, ids);
   }
 
   appState.update(s => {
-    if (!s.operations?.defs?.[name]) {
+    if (!s.operations) {
       if (isLogging) {
-        console.warn(`⚠️ Operations: Cannot delete "${name}" - not found`);
+        console.warn(`⚠️ Operations: Cannot delete operations - operations state not initialized`);
       }
       return s;
     }
 
-    delete s.operations.defs[name];
+    let deletedAny = false;
 
-    // Also remove from any pipelines
-    if (s.operations.pipelines) {
-      for (const pipelineName of Object.keys(s.operations.pipelines)) {
-        const pipeline = s.operations.pipelines[pipelineName];
-        if (pipeline) {
-          s.operations.pipelines[pipelineName] = pipeline.filter(op => op !== name);
+    // 1. Remove operation definitions
+    for (const id of ids) {
+      if (!s.operations.defs[id]) {
+        if (isLogging) {
+          console.warn(`⚠️ Operations: Cannot delete id="${id}" - not found`);
+        }
+        continue;
+      }
+
+      delete s.operations.defs[id];
+      deletedAny = true;
+
+      if (isLogging) {
+        console.log(`✅ Operations: Deleted id="${id}"`);
+      }
+    }
+
+    // 2. Remove from order array
+    if (deletedAny && s.operations.order) {
+      s.operations.order = s.operations.order.filter(id => !idsToDelete.has(id));
+    }
+
+    // 3. Remove references from remaining operations' sources
+    if (deletedAny) {
+      for (const op of Object.values(s.operations.defs)) {
+        if (op.sources) {
+          op.sources = op.sources.filter(source => {
+            if (source.type === 'operation' || source.type === 'previousOperation') {
+              return !idsToDelete.has(source.operationId);
+            }
+            return true;
+          });
+        }
+        // Also clean up pipeline operation references
+        if (op.kind === 'pipeline') {
+          op.operations = op.operations.filter(opId => !idsToDelete.has(opId));
         }
       }
     }
 
-    s.operations._version = (s.operations._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
+    // 4. Remove from any pipelines
+    if (deletedAny && s.operations.pipelines) {
+      for (const pipelineName of Object.keys(s.operations.pipelines)) {
+        const pipeline = s.operations.pipelines[pipelineName];
+        if (pipeline) {
+          s.operations.pipelines[pipelineName] = pipeline.filter(id => !idsToDelete.has(id));
+        }
+      }
+    }
+
+    if (deletedAny) {
+      s.operations._version = (s.operations._version ?? 0) + 1;
+      s._rev = (s._rev ?? 0) + 1;
+    }
 
     return s;
   });
+}
+
+/**
+ * @deprecated Use deleteOperationsById() instead
+ * Delete multiple operations - accepts either IDs or names for backward compatibility
+ */
+export function deleteOperations(idsOrNames: string[]): void {
+  const state = get(appState);
+  const defs = state.operations?.defs;
+
+  // Resolve to IDs
+  const ids: OperationId[] = idsOrNames.map(idOrName => {
+    if (defs?.[idOrName]) {
+      return idOrName; // Already an ID
+    }
+    // Try to find by name
+    const entry = Object.entries(defs || {}).find(([, def]) => def.name === idOrName);
+    return entry ? entry[0] : idOrName; // Return the found ID or the original string
+  });
+
+  deleteOperationsById(ids);
+}
+
+/**
+ * Delete a single operation by ID
+ */
+export function deleteOperationById(id: OperationId): void {
+  deleteOperationsById([id]);
+}
+
+/**
+ * @deprecated Use deleteOperationById() instead
+ */
+export function deleteOperation(idOrName: string): void {
+  deleteOperations([idOrName]);
 }
 
 /**
@@ -399,10 +584,11 @@ export function deleteAllOperations(): void {
 
   appState.update(s => {
     if (!s.operations) {
-      s.operations = { defs: {}, _version: 1 };
+      s.operations = { defs: {}, order: [], _version: 1 };
     }
 
     s.operations.defs = {};
+    s.operations.order = [];
     s.operations.pipelines = {};
     s.operations._version = (s.operations._version ?? 0) + 1;
     s._rev = (s._rev ?? 0) + 1;
@@ -412,12 +598,12 @@ export function deleteAllOperations(): void {
 }
 
 /**
- * Add operation to a pipeline
+ * Add operation ID to a pipeline
  */
-export function addToPipeline(pipelineName: string, operationName: string): void {
+export function addToPipeline(pipelineName: string, operationId: OperationId): void {
   appState.update(s => {
     if (!s.operations) {
-      s.operations = { defs: {}, pipelines: {}, _version: 1 };
+      s.operations = { defs: {}, pipelines: {}, order: [], _version: 1 };
     }
     if (!s.operations.pipelines) {
       s.operations.pipelines = {};
@@ -426,8 +612,8 @@ export function addToPipeline(pipelineName: string, operationName: string): void
       s.operations.pipelines[pipelineName] = [];
     }
 
-    if (!s.operations.pipelines[pipelineName].includes(operationName)) {
-      s.operations.pipelines[pipelineName].push(operationName);
+    if (!s.operations.pipelines[pipelineName].includes(operationId)) {
+      s.operations.pipelines[pipelineName].push(operationId);
       s.operations._version = (s.operations._version ?? 0) + 1;
       s._rev = (s._rev ?? 0) + 1;
     }
@@ -436,78 +622,144 @@ export function addToPipeline(pipelineName: string, operationName: string): void
   });
 }
 
+// ============================================================================
+// LOOKUP HELPERS
+// ============================================================================
+
 /**
- * Remove operation from a pipeline
+ * Get an operation by its ID
  */
-export function removeFromPipeline(pipelineName: string, operationName: string): void {
-  appState.update(s => {
-    if (!s.operations?.pipelines?.[pipelineName]) return s;
-
-    s.operations.pipelines[pipelineName] = s.operations.pipelines[pipelineName].filter(
-      op => op !== operationName
-    );
-    s.operations._version = (s.operations._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
-
-    return s;
-  });
+export function getOperationById(id: OperationId): OperationDef | undefined {
+  return get(appState).operations?.defs?.[id];
 }
 
-// ============================================================================
-// TEST/EXAMPLE OPERATIONS
-// ============================================================================
+/**
+ * Get an operation by its display name (for backward compatibility)
+ * Note: Names are not guaranteed to be unique!
+ */
+export function getOperationByName(name: string): OperationDef | undefined {
+  const defs = get(appState).operations?.defs;
+  if (!defs) return undefined;
 
+  const entry = Object.entries(defs).find(([, def]) => def.name === name);
+  return entry?.[1];
+}
+
+/**
+ * Get all operations as an array, optionally in order
+ */
+export function getAllOperations(): OperationDef[] {
+  const state = get(appState);
+  const defs = state.operations?.defs;
+  const order = state.operations?.order;
+
+  if (!defs) return [];
+
+  if (order) {
+    return order.map(id => defs[id]).filter((def): def is OperationDef => def !== undefined);
+  }
+
+  return Object.values(defs);
+}
+
+/**
+ * Get the operation IDs from timeline selection
+ * Use this to safely delete operations from timeline selection
+ */
+export function getOperationIdsFromTimelineItems(
+  timelineItems: { operationId: OperationId }[],
+  selectedItemIds: Set<string>
+): Set<OperationId> {
+  const opIds = new Set<OperationId>();
+
+  for (const item of timelineItems) {
+    if (selectedItemIds.has(item.operationId)) {
+      opIds.add(item.operationId);
+    }
+  }
+
+  return opIds;
+}
+
+/** @deprecated Use OperationDef directly - operations now have id and name properties */
 export interface NamedOperationDef {
   name: string;
   def: OperationDef;
 }
 
-export const testOperations: NamedOperationDef[] = [
-  {
-    name: 'combine_active',
-    def: {
-      outputPath:
-        'C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\static\\tests\\test.wav',
-      gapSeconds: 0,
-      format: 'wav',
-      sources: [{ type: 'active' }],
-      kind: 'merge',
-    },
-  },
-  {
-    name: 'master_pipeline',
-    def: {
-      kind: 'pipeline',
-      sources: [{ type: 'active' }],
-      operations: ['combine_active'],
-    },
-  },
-];
-
 /**
- * Add test operations to state (for development/debugging)
+ * Remove operations from the currently selected operation's sources.
+ * This removes the specified operations as sources from the current MergeOp,
+ * but doesn't delete the operations themselves.
+ *
+ * @param operationIdsToRemove - Array of operation IDs to remove as sources
  */
-export function addTestOperations(): void {
-  appState.update(state => {
-    if (!state.operations) {
-      state.operations = { defs: {}, pipelines: {}, _version: 1 };
+export function removeOperationsFromCurrentOp(operationIdsToRemove: OperationId[]): void {
+  const isLogging = get(loggingState).operationsLog;
+
+  if (isLogging) {
+    console.log(`🗑️ Operations: Removing operations from current op:`, operationIdsToRemove);
+  }
+
+  appState.update(s => {
+    const selectedOpId = s.uiSettings?.selectedOperationId;
+
+    if (!selectedOpId) {
+      if (isLogging) {
+        console.warn(`⚠️ Operations: No operation selected, cannot remove sources`);
+      }
+      return s;
     }
 
-    testOperations.forEach(op => {
-      state.operations!.defs[op.name] = op.def;
+    const currentOp = s.operations?.defs?.[selectedOpId];
+    if (!currentOp) {
+      if (isLogging) {
+        console.warn(`⚠️ Operations: Current operation "${selectedOpId}" not found`);
+      }
+      return s;
+    }
+
+    if (currentOp.kind !== 'merge') {
+      if (isLogging) {
+        console.warn(
+          `⚠️ Operations: Current operation "${selectedOpId}" is not a MergeOp, cannot remove sources`
+        );
+      }
+      return s;
+    }
+
+    // Filter out the sources that match the operation IDs to remove
+    const originalSourceCount = currentOp.sources.length;
+    const newSources = currentOp.sources.filter(source => {
+      if (source.type === 'operation') {
+        return !operationIdsToRemove.includes(source.operationId);
+      }
+      // Keep non-operation sources (like file sources)
+      return true;
     });
 
-    state.operations.pipelines = {
-      ...state.operations.pipelines,
-      'Audio Processing': ['normalize_all', 'fade_section_0', 'trim_silence'],
-      'Final Output': ['combine_active', 'master_pipeline'],
-    };
+    const removedCount = originalSourceCount - newSources.length;
 
-    state.operations._version = (state.operations._version ?? 0) + 1;
-    state._rev = (state._rev ?? 0) + 1;
+    if (removedCount === 0) {
+      if (isLogging) {
+        console.log(`📝 Operations: No matching sources found to remove from "${selectedOpId}"`);
+      }
+      return s;
+    }
 
-    return state;
+    // Update the current operation with the filtered sources
+    s.operations!.defs[selectedOpId] = {
+      ...currentOp,
+      sources: newSources,
+    } as MergeOp;
+
+    s.operations!._version = (s.operations!._version ?? 0) + 1;
+    s._rev = (s._rev ?? 0) + 1;
+
+    if (isLogging) {
+      console.log(`✅ Operations: Removed ${removedCount} source(s) from "${selectedOpId}"`);
+    }
+
+    return s;
   });
-
-  console.log('🧪 Test operations added');
 }

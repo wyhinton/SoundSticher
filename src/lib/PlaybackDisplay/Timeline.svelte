@@ -45,6 +45,7 @@
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
+  import { removeOperationsFromCurrentOp, type OperationId } from '$lib/state/operation';
 
   const dispatch = createEventDispatcher();
 
@@ -320,21 +321,22 @@
         return;
       event.preventDefault();
 
-      const selectedFileIds: string[] = [];
+      // Collect unique operation IDs from selected timeline items
+      const operationIdsToRemove = new Set<OperationId>();
       if (timelineItems.length > 0) {
         Array.from(selectedSegments).forEach(index => {
           if (index < timelineItems.length) {
             const item = timelineItems[index];
-            if (item && isAudioFileItem(item)) selectedFileIds.push(item.id);
+            if (item && item.operationId) {
+              operationIdsToRemove.add(item.operationId);
+            }
           }
         });
       }
-
-      if (selectedFileIds.length > 0) {
-        audioFileStateManager
-          .setFilesActive(selectedFileIds, false)
-          .then(() => handleClearSelection())
-          .catch(error => console.error('Failed to deactivate segments:', error));
+      console.log('Removing operations from current op:', Array.from(operationIdsToRemove));
+      if (operationIdsToRemove.size > 0) {
+        removeOperationsFromCurrentOp(Array.from(operationIdsToRemove));
+        handleClearSelection();
       }
     }
   }

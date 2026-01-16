@@ -14,28 +14,31 @@
     setSvgPathDisplayMode,
     callSiteTrackingEnabled,
     toggleCallSiteTrackingEnabled,
+    addToFavorites,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
   import { toSource } from '$lib/utils/format';
   import { examples } from '$lib/utils/examples';
   import { onDestroy, onMount } from 'svelte';
-  import { Channel, invoke } from '@tauri-apps/api/core';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
-  import type { CombineAudioEvent, ExportAudioEvent } from '$lib/state/events';
   import { exportState } from '$lib/state/export';
   import TabContainer from '$lib/components/TabContainer.svelte';
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
   import LoggingControls from '$lib/components/LoggingControls.svelte';
+  import {
+    selectedCount,
+    previewCount,
+    selectionSource,
+    selectionDisplayData as selectionDisplayDataStore,
+  } from '$lib/state/selection.svelte';
   import {
     initializeBackendLogListener,
     updateBackendLoggingConfig,
     loggingState,
     listenerLogs,
   } from '$lib/state/logging';
-  import TestDrag from '$lib/components/TestDrag.svelte';
-
+  
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
     if (obj === null || obj === undefined) {
@@ -109,7 +112,7 @@
     if (exampleState) {
       appState.set(exampleState);
     }
-  };
+  }; 
 
   function test_async() {
     invokeWithPerf('test_async');
@@ -161,6 +164,9 @@
     return allInvokes.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100); // Show last 100 invokes
   });
 
+  // Derived store for selection state display
+  // Using the store from selection.svelte.ts which includes all reactive properties
+
   interface AppStateDebug {
     audio_files: { [key: string]: any };
     combined_audio: string;
@@ -172,44 +178,24 @@
 
   let appStateDebug: undefined | AppStateDebug = undefined;
 
+  const addTestFavorites = () => {
+    const testFavoritePaths = [
+      'C:\\Users\\Primary User\\Desktop\\AUDIO\\A_NUMBERED_SMALL',
+      'C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\808-bass-drums',
+    ];
+
+    testFavoritePaths.forEach(path => {
+      addToFavorites(path);
+    });
+
+    console.log('Added test favorites:', testFavoritePaths);
+  };
+
   const addTwoSections = () => {
     addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley');
     setTimeout(() => {
       addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX');
     }, 100);
-  };
-
-  const combineTest = () => {
-    const onCombineAudioEvent = new Channel<CombineAudioEvent>();
-
-    onCombineAudioEvent.onmessage = message => {
-      if (message.event === 'started') {
-        appState.update(state => {
-          state.isCombiningFile = true;
-          state.combinedFileLength = message.data.duration;
-          return state;
-        });
-      }
-      if (message.event === 'progress') {
-        appState.update(s => {
-          s.combinedFile = { svgPath: message.data.svgPath };
-          return s;
-        });
-      }
-      if (message.event === 'finished') {
-        console.log(message);
-        appState.update(s => {
-          s.isCombiningFile = false;
-          s.combinedFile = { svgPath: message.data.svgPath };
-          return s;
-        });
-        console.log(message.event);
-      }
-    };
-
-    invokeWithPerf('combine_all_cached_samples', {
-      onEvent: onCombineAudioEvent,
-    });
   };
 
   let intervalId: number;
@@ -262,6 +248,7 @@
   const tabs = [
     { id: 'frontend', label: 'Frontend State', icon: 'fa-code' },
     { id: 'backend', label: 'Backend State', icon: 'fa-server' },
+    { id: 'selection', label: 'Selection', icon: 'fa-check-square' },
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
     { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
@@ -392,7 +379,6 @@
 
     <div class="button-group">
       <span class="group-label">Testing</span>
-      {@render actionButton(() => test_async(), 'fa-play', 'Test Async', false, 'success')}
       {@render actionButton(() => testExport(), 'fa-download', 'Test Export', false, 'success')}
       {@render actionButton(
         () => openAudioFolder(),
@@ -418,7 +404,13 @@
         'warning'
       )}
       {@render actionButton(() => addTwoSections(), 'fa-plus', 'Add Sections', false, 'secondary')}
-      {@render actionButton(() => combineTest(), 'fa-mix', 'Combine Test', false, 'primary')}
+      {@render actionButton(
+        () => addTestFavorites(),
+        'fa-heart',
+        'Add Test Favorites',
+        false,
+        'primary'
+      )}
     </div>
   </div>
 
@@ -457,6 +449,28 @@
     <div slot="backend">
       <h3>Backend State</h3>
       <PrismWrapper data={appStateDebug || {}} />
+    </div>
+
+    <!-- Selection Tab -->
+    <div slot="selection">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Selection State</h3>
+        <div class="selection-stats">
+          <span class="stat-item">
+            <strong>Selected:</strong>
+            {$selectedCount}
+          </span>
+          <span class="stat-item">
+            <strong>Preview:</strong>
+            {$previewCount}
+          </span>
+          <span class="stat-item">
+            <strong>Source:</strong>
+            {$selectionSource || 'none'}
+          </span>
+        </div>
+      </div>
+      <PrismWrapper data={$selectionDisplayDataStore} panelKey="selection" />
     </div>
 
     <!-- Performance Tab -->
@@ -1093,6 +1107,30 @@
 
   .svg-path-select {
     min-width: 100px;
+  }
+
+  /* Selection Section */
+  .selection-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 4px 8px;
+    background-color: rgba(48, 145, 241, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(48, 145, 241, 0.3);
+  }
+
+  .stat-item strong {
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 600;
   }
 
   /* Listeners Tab Styles */

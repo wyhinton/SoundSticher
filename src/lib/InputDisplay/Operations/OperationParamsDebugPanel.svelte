@@ -1,10 +1,10 @@
 <script lang="ts">
   import { invokeWithPerf } from '$lib/state/performance';
-  import type { OperationDef } from '$lib/state/operation';
+  import type { OperationDef, OperationId } from '$lib/state/operation';
 
   // Props
   export let selectedOperation: OperationDef | null = null;
-  export let selectedOperationName: string | null = null;
+  export let selectedOperationId: OperationId | null = null;
   export let operationParams: Record<string, any> = {};
   export let validateParameters: () => boolean;
 
@@ -32,7 +32,7 @@
   }
 
   async function handleTestOperation() {
-    if (!selectedOperationName || !selectedOperation) return;
+    if (!selectedOperationId || !selectedOperation) return;
 
     isTestingOperation = true;
     testResult = null;

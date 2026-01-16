@@ -354,6 +354,40 @@ export const visualIds = derived(
   }
 );
 
+// Combined display data for debug UI
+export const selectionDisplayData = derived(
+  [
+    selectedIds,
+    selectedCount,
+    selectionSource,
+    previewIds,
+    previewCount,
+    previewActive,
+    previewSource,
+  ],
+  ([
+    $selectedIds,
+    $selectedCount,
+    $selectionSource,
+    $previewIds,
+    $previewCount,
+    $previewActive,
+    $previewSource,
+  ]) => ({
+    selection: {
+      count: $selectedCount,
+      ids: Array.from($selectedIds),
+      source: $selectionSource,
+    },
+    preview: {
+      count: $previewCount,
+      ids: Array.from($previewIds),
+      active: $previewActive,
+      source: $previewSource,
+    },
+  })
+);
+
 // Helper functions
 export const isSelected = (id: number) => {
   return get(selectedIds).has(id);

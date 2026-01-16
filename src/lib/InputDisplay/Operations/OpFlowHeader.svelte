@@ -1,12 +1,13 @@
 <script lang="ts">
   import { draggable } from '$lib/attachments/draggable';
   import { dragStore } from '$lib/state/dragStore';
-  import type { OperationInfo } from '$lib/state/operation';
-  import { setSelectedOperationName, addOpAsSource } from '$lib/state/state.svelte';
+  import type { OperationInfo, OperationId } from '$lib/state/operation';
+  import { setSelectedOperationId, addOpAsSourceById, appState } from '$lib/state/state.svelte';
   import ContextMenu from '$lib/components/ContextMenu/ContextMenu.svelte';
   import type { ContextMenuItem, ContextMenuPosition } from '$lib/components/ContextMenu/types';
   import { get } from 'svelte/store';
 
+  export let operationId: OperationId;
   export let operationName: string;
   export let isSelected: boolean = false;
   export let opInfo: OperationInfo | undefined;
@@ -19,8 +20,8 @@
   let contextMenuItems: ContextMenuItem[] = [];
 
   function handleClick() {
-    // Call setSelectedOperationName directly instead of dispatching event
-    setSelectedOperationName(operationName);
+    // Use operationId for selection
+    setSelectedOperationId(operationId);
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -46,12 +47,17 @@
       y: event.clientY,
     };
 
+    // Check if this operation is the same as the currently selected operation
+    const currentSelectedOpId = get(appState).uiSettings?.selectedOperationId;
+    const isCurrentOperation = operationId === currentSelectedOpId;
+
     contextMenuItems = [
       {
         type: 'item',
         label: 'Add as source to current operation',
         icon: 'fas fa-plus-circle',
         action: () => addAsSource(),
+        disabled: isCurrentOperation,
       },
       {
         type: 'separator',
@@ -84,14 +90,14 @@
   }
 
   function addAsSource() {
-    addOpAsSource(operationName);
+    addOpAsSourceById(operationId);
   }
 
   function copyOperationName() {
     navigator.clipboard
       .writeText(operationName)
       .then(() => {
-        console.log(`Copied "${operationName}" to clipboard`);
+        console.log(`Copied "${operationName}" (id: ${operationId}) to clipboard`);
       })
       .catch(err => {
         console.error('Failed to copy operation name:', err);
@@ -99,11 +105,12 @@
   }
 
   function viewOperationDetails() {
-    console.log('Operation details:', { operationName, opInfo, debugInfo });
+    console.log('Operation details:', { operationId, operationName, opInfo, debugInfo });
 
     // Dispatch event to show operation details
     const viewDetailsEvent = new CustomEvent('viewDetails', {
       detail: {
+        operationId,
         operationName,
         opInfo,
         debugInfo,
@@ -151,7 +158,7 @@
   on:contextmenu={handleContextMenu}
   use:draggable={{
     type: 'sample',
-    data: operationName,
+    data: operationId,
     sourceId: 'library',
   }}
   role="button"

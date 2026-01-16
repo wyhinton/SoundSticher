@@ -12,6 +12,20 @@ import { invokeWithPerf } from './performance';
 // ============================================================================
 // TYPES
 // ============================================================================
+ 
+/**
+ * Child input for a merge operation
+ */
+export interface MergeInputRequest {
+  /** File path to load samples from */
+  filePath?: string;
+  /** Pre-loaded samples (f32, interleaved) */
+  samples?: number[];
+  /** Offset time in seconds within the merge operation */
+  offset: number;
+  /** Gain for this input (0.0 to 1.0+) */
+  gain?: number;
+}
 
 /**
  * Request to add an operation to the playback graph
@@ -19,6 +33,8 @@ import { invokeWithPerf } from './performance';
 export interface AddOpRequest {
   /** Unique name for this operation */
   name: string;
+  /** Type of operation (sample or merge) */
+  opType?: 'sample' | 'merge';
   /** File path to load samples from (for sample-based ops) */
   filePath?: string;
   /** Pre-loaded samples (f32, interleaved) - usually not used from frontend */
@@ -29,6 +45,8 @@ export interface AddOpRequest {
   endTime?: number;
   /** Gain for this operation (0.0 to 1.0+) */
   gain?: number;
+  /** Child inputs for merge operations */
+  inputs?: MergeInputRequest[];
 }
 
 /**

@@ -5,7 +5,14 @@ import { type AbletonColor, getDefaultColor } from '$lib/utils/colors';
 import { invokeWithPerf, updateInputs } from './performance';
 import { listen } from '@tauri-apps/api/event';
 import { GroupsState } from './groups';
-import type { OperationsState, OperationSource, SampleOp } from './operation';
+import type {
+  OperationsState,
+  OperationSource,
+  SampleOp,
+  OperationId,
+  OperationDef,
+} from './operation';
+import { generateOperationId } from './operation';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -30,29 +37,43 @@ interface VisualSample {
 interface Operation {}
 
 export interface AppState {
-  playingSong?: string;
-  playingSection?: number;
-  playProgress?: number;
+  _rev?: number; // content revision (groups + geometry + operations)
+
+  _version?: number; // Internal version tracking for migrations
+  combineAudioFileProgress?: number;
   combinedFile?: VisualSample;
   combinedFileLength?: number;
-  isCombiningFile: boolean;
-  combineAudioFileProgress?: number;
-  playingCombined: boolean;
-  timelineItems: TimelineItem[];
-  sortKey?: keyof AudioFileItem;
-  sortDirection?: 'asc' | 'desc';
-  isLoopingTimelineAudio: boolean;
-  hasNoActiveSamples: boolean;
   favorites: Favorite[];
+  groups?: GroupsState;
+  hasNoActiveSamples: boolean;
+  isCombiningFile: boolean;
+  isLoopingTimelineAudio: boolean;
+  operations?: OperationsState;
+  playingCombined: boolean;
+  playingSection?: number;
+  playingSong?: string;
+  playProgress?: number;
+  sortDirection?: 'asc' | 'desc';
+  sortKey?: keyof AudioFileItem;
+  timelineItems: TimelineItem[];
   uiSettings?: {
     activeTab?: string;
     debugActiveTab?: string;
     tabContentHeight?: number;
+    /** @deprecated Use selectedOperationId instead */
     selectedOperationName?: string | null;
+    /** Currently selected operation ID (immutable identifier) */
+    selectedOperationId?: OperationId | null;
+    /** Set of selected timeline item IDs for multi-selection */
+    selectedTimelineItemIds?: Set<string>;
     timelineDebugMode?: boolean;
     showFullSvgPath?: boolean;
     svgPathDisplayMode?: 'full' | 'trim' | 'hide';
     callSiteTrackingEnabled?: boolean;
+    debugPanelPrismDisplay?: {
+      frontend: any;
+      backend: any;
+    };
     theme?: {
       tabPanelBackgroundColor?: string;
       panelHeaderBackgroundColor?: string;
@@ -65,15 +86,9 @@ export interface AppState {
         dropdown?: number;
         menu?: number;
       };
-    };
-    // Add other UI settings here in the future
+    }; // Add other UI settings here in the future
   };
-  _version?: number; // Internal version tracking for migrations
-  groups?: GroupsState;
-  operations?: OperationsState;
-  _rev?: number; // content revision (groups + geometry + operations)
 }
-
 export interface AudioFileItem {
   index: number;
   path: string;
@@ -120,7 +135,9 @@ export interface BaseTimelineItem {
   depth?: number;
   /** Semantic hint that this item is a group container */
   isGroup?: boolean;
-  /** The operation name this item came from */
+  /** The operation ID this item came from (immutable reference) */
+  operationId?: OperationId;
+  /** The operation display name this item came from (may be changed by user) */
   operationName?: string;
 }
 
@@ -169,6 +186,10 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
       callSiteTrackingEnabled: false,
+      debugPanelPrismDisplay: {
+        frontend: {},
+        backend: {},
+      },
       theme: {
         panelHeaderBackgroundColor: 'rgb(15 21 27)',
         tabPanelBackgroundColor: 'rgb(15 21 27)',
@@ -756,14 +777,43 @@ export function bumpRevision() {
   });
 }
 
-export function setSelectedOperationName(operationName: string | null) {
+/**
+ * Set the currently selected operation by ID
+ */
+export function setSelectedOperationId(operationId: OperationId | null) {
   appState.update(state => {
     if (!state.uiSettings) {
       state.uiSettings = {};
     }
-    state.uiSettings.selectedOperationName = operationName;
+    state.uiSettings.selectedOperationId = operationId;
+    // Keep deprecated field in sync for backward compatibility
+    if (operationId) {
+      const op = state.operations?.defs?.[operationId];
+      state.uiSettings.selectedOperationName = op?.name ?? operationId;
+    } else {
+      state.uiSettings.selectedOperationName = null;
+    }
     return state;
   });
+}
+
+/**
+ * Get the currently selected operation ID
+ */
+export function getSelectedOperationId(): OperationId | null {
+  const state = get(appState);
+  // Prefer new ID field, fall back to name field for backward compatibility
+  return state.uiSettings?.selectedOperationId ?? state.uiSettings?.selectedOperationName ?? null;
+}
+
+/**
+ * Get the currently selected operation definition
+ */
+export function getSelectedOperation(): OperationDef | null {
+  const state = get(appState);
+  const id = state.uiSettings?.selectedOperationId ?? state.uiSettings?.selectedOperationName;
+  if (!id) return null;
+  return state.operations?.defs?.[id] ?? null;
 }
 
 export function toggleShowFullSvgPath() {
@@ -812,10 +862,11 @@ export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
  * For MergeOps, all sources are operation references to SampleOps
  */
 export const currentOperationSources = derived(appState, $appState => {
-  const selectedOperationName = $appState.uiSettings?.selectedOperationName;
-  if (!selectedOperationName) return [];
+  const selectedOperationId =
+    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationName;
+  if (!selectedOperationId) return [];
 
-  const operation = $appState.operations?.defs?.[selectedOperationName];
+  const operation = $appState.operations?.defs?.[selectedOperationId];
   if (!operation || operation.kind !== 'merge') return [];
 
   return operation.sources;
@@ -826,10 +877,11 @@ export const currentOperationSources = derived(appState, $appState => {
  * Returns an array of file ID strings extracted from the SampleOps
  */
 export const currentOperationFileList = derived(appState, $appState => {
-  const selectedOperationName = $appState.uiSettings?.selectedOperationName;
-  if (!selectedOperationName) return [];
+  const selectedOperationId =
+    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationName;
+  if (!selectedOperationId) return [];
 
-  const operation = $appState.operations?.defs?.[selectedOperationName];
+  const operation = $appState.operations?.defs?.[selectedOperationId];
   if (!operation || operation.kind !== 'merge') return [];
 
   const fileIds: string[] = [];
@@ -837,8 +889,8 @@ export const currentOperationFileList = derived(appState, $appState => {
   // For each source in the MergeOp (which should be operation references)
   for (const source of operation.sources) {
     if (source.type === 'operation') {
-      // Get the referenced SampleOp
-      const sampleOp = $appState.operations?.defs?.[source.operationRef];
+      // Get the referenced SampleOp by its operationId
+      const sampleOp = $appState.operations?.defs?.[source.operationId];
       if (sampleOp && sampleOp.kind === 'sample') {
         // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
         for (const sampleSource of sampleOp.sources) {
@@ -869,10 +921,11 @@ export function getOperationSections(operationName: string): Section[] {
  */
 export function getCurrentOperationSources(): OperationSource[] {
   const currentState = get(appState);
-  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
-  if (!selectedOperationName) return [];
+  const selectedOperationId =
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationId) return [];
 
-  const operation = currentState.operations?.defs?.[selectedOperationName];
+  const operation = currentState.operations?.defs?.[selectedOperationId];
   if (!operation || operation.kind !== 'merge') return [];
 
   return operation.sources;
@@ -888,26 +941,26 @@ export function getCurrentOperationSections(): Section[] {
 }
 
 /**
- * Add a source to the current MergeOp
- * For now, all sources are operation references to SampleOps
+ * Add a source operation (by ID) to the current MergeOp
  */
-export function addOperationSourceToCurrent(operationRef: string) {
+export function addOperationSourceToCurrent(operationId: OperationId) {
   const currentState = get(appState);
-  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
-  if (!selectedOperationName) {
+  const selectedOperationId =
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationId) {
     console.warn('No operation currently selected');
     return;
   }
 
   appState.update(state => {
-    const operation = state.operations?.defs?.[selectedOperationName];
+    const operation = state.operations?.defs?.[selectedOperationId];
     if (!operation || operation.kind !== 'merge') {
       console.warn('Current operation is not a MergeOp');
       return state;
     }
 
-    // Add the new operation source
-    const newSource: OperationSource = { type: 'operation', operationRef };
+    // Add the new operation source using operationId
+    const newSource: OperationSource = { type: 'operation', operationId };
     operation.sources.push(newSource);
 
     // Update the operations version
@@ -925,14 +978,15 @@ export function addOperationSourceToCurrent(operationRef: string) {
  */
 export function removeSourceFromCurrentOperation(index: number) {
   const currentState = get(appState);
-  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
-  if (!selectedOperationName) {
+  const selectedOperationId =
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+  if (!selectedOperationId) {
     console.warn('No operation currently selected');
     return;
   }
 
   appState.update(state => {
-    const operation = state.operations?.defs?.[selectedOperationName];
+    const operation = state.operations?.defs?.[selectedOperationId];
     if (!operation || operation.kind !== 'merge') {
       console.warn('Current operation is not a MergeOp');
       return state;
@@ -953,72 +1007,51 @@ export function removeSourceFromCurrentOperation(index: number) {
 }
 
 /**
- * DEPRECATED: Operations no longer have sections
- * This is kept temporarily for compatibility until UI is updated
- */
-export async function addSourceToCurrentOperation(paths?: string | string[]) {
-  console.warn(
-    'addSourceToCurrentOperation is deprecated - use addOperationSourceToCurrent() instead'
-  );
-  // No-op for now
-}
-
-/**
- * DEPRECATED: Operations no longer have sections
- * This is kept temporarily for compatibility until UI is updated
- */
-export function deleteSectionFromCurrentOperation(index: number) {
-  console.warn(
-    'deleteSectionFromCurrentOperation is deprecated - operations no longer have sections'
-  );
-  // No-op for now
-}
-
-/**
- * Add a given operation as a source to the currently selected operation
+ * Add a given operation as a source to the currently selected operation by its ID
  * This will add the operation reference to the current MergeOp's sources array
  */
-export function addOpAsSource(operationName: string) {
+export function addOpAsSourceById(operationId: OperationId) {
   const currentState = get(appState);
-  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  const selectedOperationId =
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
 
-  if (!selectedOperationName) {
+  if (!selectedOperationId) {
     console.warn('No operation currently selected');
     return;
   }
 
-  if (selectedOperationName === operationName) {
+  if (selectedOperationId === operationId) {
     console.warn('Cannot add an operation as a source to itself');
     return;
   }
 
   appState.update(state => {
-    const currentOperation = state.operations?.defs?.[selectedOperationName];
+    const currentOperation = state.operations?.defs?.[selectedOperationId];
     if (!currentOperation || currentOperation.kind !== 'merge') {
       console.warn('Current operation is not a MergeOp');
       return state;
     }
 
-    const sourceOperation = state.operations?.defs?.[operationName];
+    const sourceOperation = state.operations?.defs?.[operationId];
     if (!sourceOperation) {
-      console.warn(`Operation "${operationName}" not found`);
+      console.warn(`Operation "${operationId}" not found`);
       return state;
     }
 
-    // Check if this operation is already a source
+    // Check if this operation is already a source (by ID)
     const alreadyExists = currentOperation.sources.some(
-      source => source.type === 'operation' && source.operationRef === operationName
+      source => source.type === 'operation' && source.operationId === operationId
     );
 
     if (alreadyExists) {
       console.warn(
-        `Operation "${operationName}" is already a source of "${selectedOperationName}"`
+        `Operation "${operationId}" (${sourceOperation.name}) is already a source of current operation`
       );
       return state;
     }
 
-    // Add the new operation source
-    const newSource: OperationSource = { type: 'operation', operationRef: operationName };
+    // Add the new operation source using operationId
+    const newSource: OperationSource = { type: 'operation', operationId };
     currentOperation.sources.push(newSource);
 
     // Update the operations version
@@ -1027,9 +1060,32 @@ export function addOpAsSource(operationName: string) {
     }
     state._rev = (state._rev ?? 0) + 1;
 
-    console.log(`Added operation "${operationName}" as source to "${selectedOperationName}"`);
+    console.log(
+      `Added operation "${operationId}" (${sourceOperation.name}) as source to current operation`
+    );
     return state;
   });
+}
+
+/**
+ * @deprecated Use addOpAsSourceById() instead
+ * Add a given operation as a source to the currently selected operation
+ */
+export function addOpAsSource(operationIdOrName: string) {
+  const currentState = get(appState);
+
+  // Resolve operationIdOrName to an actual ID
+  const defs = currentState.operations?.defs;
+  let sourceOpId = operationIdOrName;
+  if (defs && !defs[operationIdOrName]) {
+    // Try to find by name
+    const entry = Object.entries(defs).find(([, def]) => def.name === operationIdOrName);
+    if (entry) {
+      sourceOpId = entry[0];
+    }
+  }
+
+  addOpAsSourceById(sourceOpId);
 }
 
 /**
@@ -1039,50 +1095,57 @@ export function addOpAsSource(operationName: string) {
  */
 export async function addSampleOpsFromDirectory(directoryPath: string) {
   const currentState = get(appState);
-  const selectedOperationName = currentState.uiSettings?.selectedOperationName;
+  const selectedOperationId =
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
 
-  if (!selectedOperationName) {
+  if (!selectedOperationId) {
     console.warn('No operation currently selected');
     return;
   }
-
   try {
     // TODO: This would need to be implemented to get files from directory
     // For now, we'll use a placeholder that simulates getting files
     const files = await getFilesFromDirectory(directoryPath);
 
     appState.update(state => {
-      const operation = state.operations?.defs?.[selectedOperationName];
+      const operation = state.operations?.defs?.[selectedOperationId];
       if (!operation || operation.kind !== 'merge') {
         console.warn('Current operation is not a MergeOp');
         return state;
       }
 
       if (!state.operations) {
-        state.operations = { defs: {}, _version: 1 };
+        state.operations = { defs: {}, order: [], _version: 1 };
+      }
+      if (!state.operations.order) {
+        state.operations.order = Object.keys(state.operations.defs);
       }
 
       // Create a SampleOp for each file and add it to the current MergeOp
       files.forEach((filePath, index) => {
-        // Generate a unique operation name
+        // Generate a unique operation ID and display name
         const fileName =
           filePath
             .split(/[/\\]/)
             .pop()
             ?.replace(/\.[^/.]+$/, '') || `file_${index}`;
-        const sampleOpName = `sample_${fileName}_${Date.now()}_${index}`;
+        const sampleOpId = generateOperationId();
+        const sampleOpName = `sample_${fileName}`;
 
-        // Create the SampleOp
+        // Create the SampleOp with id and name
         const sampleOp: SampleOp = {
+          id: sampleOpId,
+          name: sampleOpName,
           kind: 'sample',
           sources: [{ type: 'file', fileId: filePath }],
         };
 
-        // Add the SampleOp to operations
-        state.operations.defs[sampleOpName] = sampleOp;
+        // Add the SampleOp to operations using its ID as key
+        state.operations!.defs[sampleOpId] = sampleOp;
+        state.operations!.order!.push(sampleOpId);
 
-        // Add the SampleOp reference to the current MergeOp's sources
-        const operationSource: OperationSource = { type: 'operation', operationRef: sampleOpName };
+        // Add the SampleOp reference to the current MergeOp's sources using operationId
+        const operationSource: OperationSource = { type: 'operation', operationId: sampleOpId };
         operation.sources.push(operationSource);
       });
 

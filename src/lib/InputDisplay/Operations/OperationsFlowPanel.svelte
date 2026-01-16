@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { appState, setSelectedOperationName } from '$lib/state/state.svelte';
+  import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
   import {
     type MergeOp,
+    type OperationId,
     addOperation,
     deleteAllOperations,
-    addTestOperations,
   } from '$lib/state/operation';
 
   import MergeOpFlow from './MergeOpFlow.svelte';
@@ -13,8 +13,8 @@
   // Panel visibility
   export let isExpanded = true;
 
-  // Use selected operation from global state
-  $: selectedOperationName = $appState.uiSettings?.selectedOperationName || null;
+  // Use selected operation ID from global state
+  $: selectedOperationId = $appState.uiSettings?.selectedOperationId || null;
 
   // Panel height management
   let panelHeight = 200; // default height in pixels
@@ -25,14 +25,15 @@
   // Get MergeOp operations with revision tracking
   $: mergeOperations = $appState.operations?.defs
     ? Object.entries($appState.operations.defs)
-        .filter(([name, def]) => def.kind === 'merge')
-        .map(([name, def]) => {
+        .filter(([id, def]) => def.kind === 'merge')
+        .map(([id, def]) => {
           // Create a revision key that includes sources data to ensure re-rendering
           const sourcesHash = JSON.stringify(def.sources || []);
           return {
-            name,
+            id,
+            name: def.name,
             operation: def as MergeOp,
-            revisionKey: `${name}-${sourcesHash}-${$appState._rev || 0}`,
+            revisionKey: `${id}-${sourcesHash}-${$appState._rev || 0}`,
           };
         })
     : [];
@@ -118,14 +119,6 @@
     </div>
     <div class="header-actions">
       <button
-        class="btn btn-xs btn-outline-primary"
-        onclick={addTestOperations}
-        title="Add test operations"
-        aria-label="Add test operations"
-      >
-        <i class="fa fa-flask"></i>
-      </button>
-      <button
         class="btn btn-xs btn-outline-danger"
         onclick={() => {
           if (confirm('Delete all operations?')) deleteAllOperations();
@@ -155,8 +148,9 @@
             {#each mergeOperations as mergeOp (mergeOp.revisionKey)}
               <MergeOpFlow
                 operation={mergeOp.operation}
+                operationId={mergeOp.id}
                 operationName={mergeOp.name}
-                isSelected={selectedOperationName === mergeOp.name}
+                isSelected={selectedOperationId === mergeOp.id}
               />
             {/each}
           </div>

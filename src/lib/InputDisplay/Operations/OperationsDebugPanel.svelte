@@ -1,10 +1,10 @@
 <script lang="ts">
   import {
-    addTestOperations,
     deleteAllOperations,
-    deleteOperation,
+    deleteOperationsById,
     OperationInfoDictionary,
     type OperationsState,
+    type OperationId,
   } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
 
@@ -139,14 +139,6 @@
         <i class="fa fa-trash"></i>
         Delete All
       </button>
-      <button
-        class="btn btn-xs btn-outline-primary"
-        onclick={addTestOperations}
-        title="Add test operations"
-      >
-        <i class="fa fa-flask"></i>
-        Add Tests
-      </button>
     </div>
 
     <div class="button-group">
@@ -176,20 +168,21 @@
       <div class="empty-message">No operations defined</div>
     {:else}
       <div class="list-container">
-        {#each operationsList as [name, def]}
+        {#each operationsList as [id, def]}
           {@const info = OperationInfoDictionary[def.kind]}
           <div class="operation-item">
             <span class="op-icon">{info.icon}</span>
             <div class="op-info">
-              <span class="op-name">{name}</span>
+              <span class="op-name">{def.name}</span>
               <span class="op-kind">{info.label}</span>
+              <span class="op-id" title={id}>{id.substring(0, 12)}...</span>
             </div>
             <span class="op-category category-{info.category}">{info.category}</span>
             <button
               class="btn-delete"
-              onclick={() => deleteOperation(name)}
+              onclick={() => deleteOperationsById([id])}
               title="Delete operation"
-              aria-label="Delete operation {name}"
+              aria-label="Delete operation {def.name}"
             >
               <i class="fa fa-times"></i>
             </button>
