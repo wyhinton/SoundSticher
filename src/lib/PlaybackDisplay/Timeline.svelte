@@ -671,7 +671,7 @@
   /* No Active Samples Message */
   .no-active-samples-message {
     position: absolute;
-    top: 50%;
+    top: 39%;
     left: 50%;
     transform: translate(-50%, -50%);
     text-align: center;
@@ -683,7 +683,6 @@
   .message-content {
     font-size: 16px;
     font-weight: 500;
-    margin-bottom: 8px;
     color: var(--bs-secondary);
   }
 

@@ -21,8 +21,6 @@
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { opPlaybackService } from './state/opPlaybackService';
-  import TestDrag from './components/TestDrag.svelte';
-  import DragTest2 from './components/DragTest2.svelte';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -105,7 +103,7 @@
           <OperationsFlowPanel></OperationsFlowPanel>
         </div>
         <div class="d-flex w-100 h-fill-available">
-          <Sources></Sources>
+          <!-- <Sources></Sources> -->
           <FileTable></FileTable>
         </div>
       </div>

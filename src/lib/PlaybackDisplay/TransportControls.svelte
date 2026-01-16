@@ -8,6 +8,9 @@
   } from '$lib/state/opPlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
 
+  // Component props
+  export let disabled: boolean = false;
+
   let bufferingProgress = 0;
   let playHeadPosition = 0;
 
@@ -119,13 +122,13 @@
 {/snippet}
 
 <!-- Audacity-style Transport Controls -->
-<div class="transport-controls d-flex align-items-center gap-2 py-2 px-2">
-  {@render transportButton('fa-backward-step', 'Skip to Start', handleSkipToStart)}
-  {@render transportButton('fa-play', 'Play', handlePlayPause, 'btn-play', isCurrentlyPlaying)}
-  {@render transportButton('fa-pause', 'Pause', handlePause, 'btn-pause', isCurrentlyPaused)}
-  {@render transportButton('fa-stop', 'Stop', handleStop, 'btn-stop')}
-  {@render transportButton('fa-forward-step', 'Skip to End', handleSkipToEnd)}
-  {@render transportButton('fa-repeat', 'Loop', toggleLoop, 'btn-loop', isLoopEnabled)}
+<div class="transport-controls d-flex align-items-center gap-2 py-2 px-2" class:disabled>
+  {@render transportButton('fa-backward-step', 'Skip to Start', handleSkipToStart, '', false, disabled)}
+  {@render transportButton('fa-play', 'Play', handlePlayPause, 'btn-play', isCurrentlyPlaying, disabled)}
+  {@render transportButton('fa-pause', 'Pause', handlePause, 'btn-pause', isCurrentlyPaused, disabled)}
+  {@render transportButton('fa-stop', 'Stop', handleStop, 'btn-stop', false, disabled)}
+  {@render transportButton('fa-forward-step', 'Skip to End', handleSkipToEnd, '', false, disabled)}
+  {@render transportButton('fa-repeat', 'Loop', toggleLoop, 'btn-loop', isLoopEnabled, disabled)}
 </div>
 
 <style>
@@ -134,6 +137,13 @@
     border: 1px solid #1a252f;
     border-radius: 4px;
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
+    transition: opacity 0.2s ease;
+  }
+
+  .transport-controls.disabled {
+    opacity: 0.6;
+    background: linear-gradient(to bottom, #1a252f, #1a202c);
+    border-color: #0d1117;
   }
 
   .btn-transport {
@@ -182,6 +192,23 @@
     background: linear-gradient(to bottom, #d69e2e, #b7791f);
     border-color: #975a16;
     color: white;
+  }
+
+  .btn-transport:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: linear-gradient(to bottom, #2d3748, #1a202c);
+    color: #4a5568;
+    border-color: #2d3748;
+    box-shadow: none;
+  }
+
+  .btn-transport:disabled:hover {
+    background: linear-gradient(to bottom, #2d3748, #1a202c);
+    border-color: #2d3748;
+    transform: none;
+    box-shadow: none;
+    color: #4a5568;
   }
 
   .btn-record {
