@@ -1,25 +1,14 @@
 <script lang="ts">
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
-  import { stat } from '@tauri-apps/plugin-fs';
   import {
     appState,
     currentOperationSources,
-    addOperationSourceToCurrent,
     removeSourceFromCurrentOperation,
-    addToFavorites,
   } from '../state/state.svelte';
-  import { onMount, tick } from 'svelte';
-  import { getCurrentWebview } from '@tauri-apps/api/webview';
-  import { isPointInRect } from '../utils/dragdrop';
+  import { tick } from 'svelte';
   import lottie from 'lottie-web';
 
-  import SourceRow from './SourceRow.svelte';
-  import MainLeftPanel from './MainLeftPanel.svelte';
-  import { generateProgressChannel, type SortAudioEvent } from '../state/events';
-  import { Channel, invoke } from '@tauri-apps/api/core';
-  import { invokeWithPerf, updateInputs, type Result } from '../state/performance';
-  import type { OperationSource } from '../state/operation';
   import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
   import { dropzone } from '$lib/attachments/droppable';
 

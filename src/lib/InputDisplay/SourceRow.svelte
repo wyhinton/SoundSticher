@@ -1,9 +1,9 @@
 <script lang="ts">
   import { toCssRgb } from '../utils/colors';
-  import { addToFavorites, isFavorite } from '../state/state.svelte';
   import type { Section } from '../state/state.svelte';
   import EditableInput from './EditableInput.svelte';
   import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
+  import { addToFavorites, isFavorite } from '$lib/state/favorites';
 
   export let item: Section;
   export let sectionIndex: number;
@@ -99,10 +99,10 @@
       class="d-flex justify-content-start align-items-center"
     >
       <i class="fas fa-folder my-0 mx-2"></i>
-      <EditableInput
+      <!-- <EditableInput
         bind:fullPath={item.folderPath}
         on:change={e => updatePath(sectionIndex, e.detail)}
-      />
+      /> -->
     </div>
     <div class="d-flex"></div>
   </td>

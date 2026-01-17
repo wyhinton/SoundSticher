@@ -13,6 +13,7 @@ import type {
   OperationDef,
 } from './operation';
 import { generateOperationId } from './operation';
+import { Favorite } from './favorites';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -90,34 +91,34 @@ export interface AppState {
   };
 }
 export interface AudioFileItem {
-  index: number;
-  path: string;
-  color: AbletonColor;
-  size?: number;
+  active: boolean;
+  bitDepth?: number;
   bitRate?: number;
   channels?: number;
-  bitDepth?: number;
+  color: AbletonColor;
   duration?: number;
   id: string;
-  active: boolean;
+  index: number;
+  path: string;
+  size?: number;
 }
 
 export interface Section {
-  folderPath: string;
-  files: AudioFileItem[];
-  errors: ErrorKind[];
-  metaData?: FileMetadata[];
   color: AbletonColor;
+  errors: ErrorKind[];
+  files: AudioFileItem[];
+  folderPath: string;
+  metaData?: FileMetadata[];
 }
 
 interface FileMetadata {
-  path: string;
-  size?: number;
+  bitDepth?: number;
   bitRate?: number;
   channels?: number;
-  bitDepth?: number;
   duration: number;
   id: string;
+  path: string;
+  size?: number;
 }
 
 /** Kind of timeline item - represents both the item type and operation type */
@@ -157,10 +158,6 @@ export interface SpacerTimelineItem extends BaseTimelineItem {
 }
 
 export type TimelineItem = AudioFileTimelineItem | SpacerTimelineItem;
-
-interface Favorite {
-  path: string;
-}
 
 const CURRENT_STATE_VERSION = 1; // Increment this when you need to run migrations
 
@@ -618,50 +615,6 @@ export const durationSeconds = derived(appState, $appState => {
 });
 
 // Removed syncIndexes() and applySyncIndexes() functions - use operation-specific functions instead
-
-export function addToFavorites(folderPath: string) {
-  appState.update(state => {
-    // Ensure favorites array exists
-    if (!Array.isArray(state.favorites)) {
-      state.favorites = [];
-    }
-
-    // Check if the path is already in favorites
-    const alreadyExists = state.favorites.some(fav => fav && fav.path === folderPath);
-
-    if (!alreadyExists) {
-      state.favorites.push({ path: folderPath });
-      console.log(`Added ${folderPath} to favorites`);
-    } else {
-      console.log(`${folderPath} is already in favorites`);
-    }
-
-    return state;
-  });
-}
-
-export function removeFromFavorites(folderPath: string) {
-  appState.update(state => {
-    // Ensure favorites array exists
-    if (!Array.isArray(state.favorites)) {
-      state.favorites = [];
-      return state;
-    }
-
-    state.favorites = state.favorites.filter(fav => fav && fav.path !== folderPath);
-    console.log(`Removed ${folderPath} from favorites`);
-    return state;
-  });
-}
-
-export function isFavorite(folderPath: string): boolean {
-  const currentState = get(appState);
-  // Ensure favorites array exists and is valid
-  if (!currentState || !Array.isArray(currentState.favorites)) {
-    return false;
-  }
-  return currentState.favorites.some(fav => fav && fav.path === folderPath);
-}
 
 export function setActiveTab(tab: string) {
   appState.update(state => {

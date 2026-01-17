@@ -345,7 +345,7 @@ pub fn set_timeline_play_position(
                     }
                 };
                 println!("TOTAL DURATION: {}", total_duration);
-                let normalized_progress = (position / total_duration).min(1.0).max(0.0);
+                let normalized_progress = (position / total_duration).clamp(0.0, 1.0);
 
                 // Update the progress in app state
                 {

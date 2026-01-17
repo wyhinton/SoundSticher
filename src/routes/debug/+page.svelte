@@ -14,12 +14,10 @@
     setSvgPathDisplayMode,
     callSiteTrackingEnabled,
     toggleCallSiteTrackingEnabled,
-    addToFavorites,
   } from '$lib/state/state.svelte';
   import clipboard from 'tauri-plugin-clipboard-api';
   import { derived, get } from 'svelte/store';
   import { toSource } from '$lib/utils/format';
-  import { examples } from '$lib/utils/examples';
   import { onDestroy, onMount } from 'svelte';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { exportState } from '$lib/state/export';
@@ -38,7 +36,8 @@
     loggingState,
     listenerLogs,
   } from '$lib/state/logging';
-  
+  import { addToFavorites } from '$lib/state/favorites';
+
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
     if (obj === null || obj === undefined) {
@@ -112,7 +111,7 @@
     if (exampleState) {
       appState.set(exampleState);
     }
-  }; 
+  };
 
   function test_async() {
     invokeWithPerf('test_async');
@@ -191,13 +190,6 @@
     console.log('Added test favorites:', testFavoritePaths);
   };
 
-  const addTwoSections = () => {
-    addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\37427__dbs_sounds__foley');
-    setTimeout(() => {
-      addSource('C:\\Users\\Primary User\\Desktop\\AUDIO\\FREESOUNDS\\WOMB_VOX');
-    }, 100);
-  };
-
   let intervalId: number;
   let refreshBackendState = false; // Toggle for auto-refresh
   let isFetching = false;
@@ -241,8 +233,6 @@
   onDestroy(() => {
     clearInterval(intervalId);
   });
-
-  let selectedKey = Object.keys(examples)[0]; // default selection
 
   // Tab configuration
   const tabs = [
@@ -389,7 +379,7 @@
       )}
     </div>
 
-    <div class="button-group">
+    <!-- <div class="button-group">
       <span class="group-label">Examples</span>
       <select bind:value={selectedKey} class="example-select">
         {#each Object.keys(examples) as key}
@@ -403,7 +393,6 @@
         false,
         'warning'
       )}
-      {@render actionButton(() => addTwoSections(), 'fa-plus', 'Add Sections', false, 'secondary')}
       {@render actionButton(
         () => addTestFavorites(),
         'fa-heart',
@@ -411,7 +400,7 @@
         false,
         'primary'
       )}
-    </div>
+    </div> -->
   </div>
 
   <!-- Tab Container -->

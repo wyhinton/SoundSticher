@@ -291,7 +291,7 @@ macro_rules! timeline_debug {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.debug(
-            crate::logging::LogSystem::Timeline,
+            $crate::logging::LogSystem::Timeline,
             $message,
             Some($category),
         );
@@ -305,7 +305,7 @@ macro_rules! timeline_info {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.info(
-            crate::logging::LogSystem::Timeline,
+            $crate::logging::LogSystem::Timeline,
             $message,
             Some($category),
         );
@@ -319,7 +319,7 @@ macro_rules! timeline_warning {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.warning(
-            crate::logging::LogSystem::Timeline,
+            $crate::logging::LogSystem::Timeline,
             $message,
             Some($category),
         );
@@ -333,7 +333,7 @@ macro_rules! timeline_error {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.error(
-            crate::logging::LogSystem::Timeline,
+            $crate::logging::LogSystem::Timeline,
             $message,
             Some($category),
         );
@@ -348,7 +348,7 @@ macro_rules! operation_debug {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.debug(
-            crate::logging::LogSystem::Operation,
+            $crate::logging::LogSystem::Operation,
             $message,
             Some($category),
         );
@@ -362,7 +362,7 @@ macro_rules! operation_info {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.info(
-            crate::logging::LogSystem::Operation,
+            $crate::logging::LogSystem::Operation,
             $message,
             Some($category),
         );
@@ -376,7 +376,7 @@ macro_rules! operation_warning {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.warning(
-            crate::logging::LogSystem::Operation,
+            $crate::logging::LogSystem::Operation,
             $message,
             Some($category),
         );
@@ -390,7 +390,7 @@ macro_rules! operation_error {
     };
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.error(
-            crate::logging::LogSystem::Operation,
+            $crate::logging::LogSystem::Operation,
             $message,
             Some($category),
         );
