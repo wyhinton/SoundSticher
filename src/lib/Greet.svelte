@@ -42,7 +42,7 @@
   // }
 
   const handleSpaceBar = (ev: KeyboardEvent) => {
-    if (ev.code === 'Space') {
+    if (ev.code === 'Space' && !ev.shiftKey && !ev.ctrlKey) {
       ev.preventDefault(); // optional, if you want to prevent default scrolling
       // Use the operation playback service
       opPlaybackService.togglePlayPause().catch(err => {

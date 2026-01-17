@@ -568,8 +568,7 @@ pub async fn test_operation_with_params(
             let target_db = match params.parameters.get("target_db") {
                 Some(v) => v.as_f64()
                     .unwrap_or(-12.0)
-                    .max(-60.0) // Minimum reasonable target
-                    .min(0.0),  // Maximum reasonable target (0dB)
+                    .clamp(-60.0, 0.0),
                 None => -12.0
             };
             
@@ -579,13 +578,11 @@ pub async fn test_operation_with_params(
                 
             let target_lufs = params.parameters.get("target_lufs").map(|v| v.as_f64()
                     .unwrap_or(-23.0)
-                    .max(-40.0) // Minimum reasonable LUFS
-                    .min(-6.0));
+                    .clamp(-40.0, -6.0));
             
             let true_peak_limit = params.parameters.get("true_peak_limit").map(|v| v.as_f64()
                     .unwrap_or(-1.0)
-                    .max(-6.0) // Minimum reasonable limit
-                    .min(0.0));
+                    .clamp(-6.0, 0.0));
 
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -638,14 +635,12 @@ pub async fn test_operation_with_params(
             let bit_rate = params.parameters.get("bit_rate").map(|v| v.as_u64()
                     .map(|v| v as u32)
                     .unwrap_or(320)
-                    .max(64)    // Minimum reasonable bitrate
-                    .min(2048));
+                    .clamp(64, 2048));
             
             let sample_rate = params.parameters.get("sample_rate").map(|v| v.as_u64()
                     .map(|v| v as u32)
                     .unwrap_or(44100)
-                    .max(8000)   // Minimum reasonable sample rate
-                    .min(192000));
+                    .clamp(8000, 19200));
             
             let normalize_before_export = params.parameters.get("normalize_before_export")
                 .and_then(|v| v.as_bool())

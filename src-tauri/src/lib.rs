@@ -23,6 +23,7 @@ mod duration_cache;
 mod duration_service;
 mod encoder;
 mod error;
+mod favorites;
 mod graph;
 mod graph_tests;
 mod logging;
@@ -32,13 +33,13 @@ mod metadata;
 mod op_playback_commands;
 mod ops;
 mod playback;
+mod playback_ops;
 mod sample_playback;
 mod sorting;
 mod state;
 mod timeline_playback;
 mod util;
 mod waveform;
-mod playback_ops;
 
 pub struct Song {
     pub title: String,
@@ -181,7 +182,7 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
             std::path::PathBuf::from("C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd"),
             std::path::PathBuf::from("C:\\Program Files (x86)\\Microsoft VS Code\\bin\\code.cmd"),
             std::path::PathBuf::from(std::env::var("LOCALAPPDATA").unwrap_or_default())
-                    .join("Programs\\Microsoft VS Code\\bin\\code.cmd"),
+                .join("Programs\\Microsoft VS Code\\bin\\code.cmd"),
         ];
 
         // Try each path
@@ -193,14 +194,13 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
                     .map(|mut child| {
                         // Don't wait for the process to finish, just let it run
                         let _ = child.kill();
-                        ()
                     })
                     .map_err(|e| format!("Failed to launch VS Code: {}", e));
             }
         }
 
         // Try using 'code' from PATH as fallback
-        if let Ok(_) = Command::new("code").args(&args).spawn() {
+        if Command::new("code").args(&args).spawn().is_ok() {
             return Ok(());
         }
 
@@ -336,60 +336,59 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_file_paths_in_folder,
-            sample_playback::play_sample_preview,
-            sample_playback::pause_sample_preview,
-            timeline_playback::set_timeline_play_position,
-            timeline_playback::get_current_play_progress,
-            timeline_playback::play_timeline_audio,
-            timeline_playback::pause_timeline_audio,
-            timeline_playback::stop_timeline_audio,
-            timeline_playback::set_volume,
-            get_metadata,
+            clear_audio_files,
+            combine::cancel_combine,
+            combine::combine_all_cached_samples_with_custom_order,
+            combine::combine_all_cached_samples,
+            combine::get_audio_file_active_status,
+            combine::get_custom_order,
+            combine::set_audio_file_active,
+            combine::set_audio_files_active_batch,
+            combine::test_async,
+            combine::toggle_audio_file_active,
             duration_cache::get_duration_cache_stats,
+            duration_service::clear_duration_cache,
             duration_service::get_duration,
             duration_service::get_durations_batch,
             duration_service::invalidate_duration,
-            duration_service::clear_duration_cache,
-            combine::test_async,
-            combine::combine_all_cached_samples,
-            combine::combine_all_cached_samples_with_custom_order,
-            combine::get_custom_order,
-            combine::cancel_combine,
-            combine::toggle_audio_file_active,
-            combine::set_audio_file_active,
-            combine::set_audio_files_active_batch,
-            combine::get_audio_file_active_status,
-            state::get_app_state,
-            clear_audio_files,
             encoder::export_audio,
-            open_in_explorer,
-            sorting::update_sorting,
-            update_logging_config,
+            favorites::count_audio_files_in_folders,
+            get_artifacts_directory,
+            get_file_paths_in_folder,
             get_logging_config,
+            get_metadata,
+            graph_tests::test_operation_with_params,
             graph_tests::test_operation,
             graph_tests::test_scheduler,
-            graph_tests::test_operation_with_params,
-            get_artifacts_directory,
+            op_playback_commands::op_playback_build_graph,
+            op_playback_commands::op_playback_clear_graph,
+            op_playback_commands::op_playback_get_progress,
+            op_playback_commands::op_playback_pause,
+            op_playback_commands::op_playback_play,
+            op_playback_commands::op_playback_resume,
+            op_playback_commands::op_playback_seek,
+            op_playback_commands::op_playback_set_loop,
+            op_playback_commands::op_playback_set_volume,
+            op_playback_commands::op_playback_stop,
             open_file_in_editor,
-            // Waveform cache commands
-            waveform::get_waveform,
-            waveform::get_waveforms_batch,
-            waveform::invalidate_waveform,
+            open_in_explorer,
+            sample_playback::pause_sample_preview,
+            sample_playback::play_sample_preview,
+            sorting::update_sorting,
+            state::get_app_state,
+            timeline_playback::get_current_play_progress,
+            timeline_playback::pause_timeline_audio,
+            timeline_playback::play_timeline_audio,
+            timeline_playback::set_timeline_play_position,
+            timeline_playback::set_volume,
+            timeline_playback::stop_timeline_audio,
+            update_logging_config,
             waveform::clear_waveform_cache,
             waveform::get_waveform_cache_stats,
+            waveform::get_waveform,
+            waveform::get_waveforms_batch,
             waveform::get_waveforms_for_operation,
-            // Operation-based playback commands
-            op_playback_commands::op_playback_build_graph,
-            op_playback_commands::op_playback_play,
-            op_playback_commands::op_playback_pause,
-            op_playback_commands::op_playback_resume,
-            op_playback_commands::op_playback_stop,
-            op_playback_commands::op_playback_seek,
-            op_playback_commands::op_playback_get_progress,
-            op_playback_commands::op_playback_set_volume,
-            op_playback_commands::op_playback_set_loop,
-            op_playback_commands::op_playback_clear_graph,
+            waveform::invalidate_waveform,
         ])
         .plugin(
             tauri_plugin_log::Builder::new()
