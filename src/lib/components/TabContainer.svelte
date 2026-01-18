@@ -94,6 +94,8 @@
         <slot name="invoke-history" />
       {:else if activeTab === 'selection'}
         <slot name="selection" />
+      {:else if activeTab === 'undo-redo'}
+        <slot name="undo-redo" />
       {:else}
         <slot {activeTab} />
       {/if}
@@ -126,10 +128,9 @@
   .tab-navigation {
     display: flex;
     flex-direction: row;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     gap: 2px;
-    height: 40px;
     padding: 0 2px;
     align-items: flex-end;
   }

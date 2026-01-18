@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { appState, AppState, AudioFileItem, Section } from './state.svelte';
 import { loggingState, logger } from './logging';
 import { groupRegistry, GroupResult } from './groups';
+import { dispatch, type DeleteOperationCommand, type DeleteMultipleOperationsCommand } from './undo';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -458,14 +459,26 @@ export function updateOperation(
 }
 
 /**
- * Delete multiple operations by their IDs
+ * Delete multiple operations by their IDs using the command pattern for undo/redo support
  */
 export function deleteOperationsById(ids: OperationId[]): void {
+  const command: DeleteMultipleOperationsCommand = {
+    type: 'delete-multiple-operations',
+    operationIds: ids,
+  };
+  dispatch(command);
+}
+
+/**
+ * LEGACY: Delete multiple operations by their IDs without command pattern (no undo/redo)
+ * @deprecated Use deleteOperationsById() instead for proper undo/redo support
+ */
+export function deleteOperationsByIdLegacy(ids: OperationId[]): void {
   const isLogging = get(loggingState).operationsLog;
   const idsToDelete = new Set(ids);
 
   if (isLogging) {
-    console.log(`🗑️ Operations: Deleting operations by ID`, ids);
+    console.log(`🗑️ Operations (LEGACY): Deleting operations by ID`, ids);
   }
 
   appState.update(s => {
@@ -538,6 +551,24 @@ export function deleteOperationsById(ids: OperationId[]): void {
 }
 
 /**
+ * Delete a single operation by ID using the command pattern for undo/redo support
+ */
+export function deleteOperationById(id: OperationId): void {
+  const command: DeleteOperationCommand = {
+    type: 'delete-operation',
+    operationId: id,
+  };
+  dispatch(command);
+}
+
+/**
+ * @deprecated Use deleteOperationById() instead
+ */
+export function deleteOperation(idOrName: string): void {
+  deleteOperations([idOrName]);
+}
+
+/**
  * @deprecated Use deleteOperationsById() instead
  * Delete multiple operations - accepts either IDs or names for backward compatibility
  */
@@ -556,20 +587,6 @@ export function deleteOperations(idsOrNames: string[]): void {
   });
 
   deleteOperationsById(ids);
-}
-
-/**
- * Delete a single operation by ID
- */
-export function deleteOperationById(id: OperationId): void {
-  deleteOperationsById([id]);
-}
-
-/**
- * @deprecated Use deleteOperationById() instead
- */
-export function deleteOperation(idOrName: string): void {
-  deleteOperations([idOrName]);
 }
 
 /**
@@ -687,13 +704,6 @@ export interface NamedOperationDef {
   def: OperationDef;
 }
 
-/**
- * Remove operations from the currently selected operation's sources.
- * This removes the specified operations as sources from the current MergeOp,
- * but doesn't delete the operations themselves.
- *
- * @param operationIdsToRemove - Array of operation IDs to remove as sources
- */
 export function removeOperationsFromCurrentOp(operationIdsToRemove: OperationId[]): void {
   const isLogging = get(loggingState).operationsLog;
 

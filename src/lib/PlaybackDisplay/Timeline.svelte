@@ -45,7 +45,7 @@
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
-  import { removeOperationsFromCurrentOp, type OperationId } from '$lib/state/operation';
+  import { removeOperationSourcesFromCurrentOpCommand, type OperationId } from '$lib/state/undo';
 
   const dispatch = createEventDispatcher();
 
@@ -335,7 +335,7 @@
       }
       console.log('Removing operations from current op:', Array.from(operationIdsToRemove));
       if (operationIdsToRemove.size > 0) {
-        removeOperationsFromCurrentOp(Array.from(operationIdsToRemove));
+        removeOperationSourcesFromCurrentOpCommand(Array.from(operationIdsToRemove));
         handleClearSelection();
       }
     }

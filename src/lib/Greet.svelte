@@ -21,6 +21,7 @@
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { opPlaybackService } from './state/opPlaybackService';
+  import { undo, redo, canUndo, canRedo } from './state/undo';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -41,13 +42,43 @@
   //   unlisten();
   // }
 
-  const handleSpaceBar = (ev: KeyboardEvent) => {
-    if (ev.code === 'Space' && !ev.shiftKey && !ev.ctrlKey) {
-      ev.preventDefault(); // optional, if you want to prevent default scrolling
+  const handleKeyPress = (ev: KeyboardEvent) => {
+    // Handle spacebar for play/pause
+    if (ev.code === 'Space' && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey) {
+      // Only handle spacebar if not focused on an input element
+      if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      ev.preventDefault(); // Prevent default scrolling
       // Use the operation playback service
       opPlaybackService.togglePlayPause().catch(err => {
         console.error('Error toggling playback:', err);
       });
+      return;
+    }
+
+    // Handle undo/redo shortcuts
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey) {
+      if (ev.key === 'z' && !ev.shiftKey) {
+        // Ctrl+Z or Cmd+Z for undo
+        ev.preventDefault();
+        if (canUndo()) {
+          undo();
+          console.log('🔄 Undo triggered via keyboard shortcut');
+        }
+        return;
+      }
+
+      if (ev.key === 'y' || (ev.key === 'z' && ev.shiftKey)) {
+        // Ctrl+Y or Ctrl+Shift+Z or Cmd+Y or Cmd+Shift+Z for redo
+        ev.preventDefault();
+        if (canRedo()) {
+          redo();
+          console.log('🔄 Redo triggered via keyboard shortcut');
+        }
+        return;
+      }
     }
   };
 
@@ -65,7 +96,7 @@
     // Initialize waveform service (handles loading waveforms when operation changes)
     cleanupWaveformService = initWaveformService();
 
-    window.addEventListener('keyup', handleSpaceBar);
+    window.addEventListener('keydown', handleKeyPress);
     // exportState.update(s => {
     //   s.message = undefined;
     //   s.progress = undefined;
@@ -81,7 +112,7 @@
   }
 
   onDestroy(() => {
-    window.removeEventListener('keyup', handleSpaceBar);
+    window.removeEventListener('keydown', handleKeyPress);
     cleanupWaveformService?.();
   });
 </script>
