@@ -13,6 +13,7 @@
   import { debugState, customContextMenu } from '../state/debug.svelte';
   import { timelineDebugMode } from '../state/state.svelte';
   import { type DurationResponse } from '$lib/state/durationCache';
+  import UndoRedoControls from './UndoRedoControls.svelte';
 
   // Visibility state
   let isVisible = false;
@@ -550,6 +551,12 @@ Project: Sound Stitch (Tauri + SvelteKit)
     </div>
 
     <div class="debug-buttons">
+      <!-- Undo/Redo Controls -->
+      <div class="button-group">
+        <span class="group-title">Undo/Redo</span>
+        <UndoRedoControls />
+      </div>
+
       <!-- ...existing code... -->
       <div class="button-group">
         <span class="group-title">State</span>

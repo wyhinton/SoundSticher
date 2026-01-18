@@ -37,6 +37,17 @@
     listenerLogs,
   } from '$lib/state/logging';
   import { addToFavorites } from '$lib/state/favorites';
+  import {
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    getUndoRedoLabels,
+    getUndoRedoStackSizes,
+    getUndoStack,
+    getRedoStack,
+    clearUndoRedoHistory,
+  } from '$lib/state/undo';
 
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
@@ -234,6 +245,14 @@
     clearInterval(intervalId);
   });
 
+  // Reactive undo/redo state for debugging
+  $: undoRedoStackSizes = getUndoRedoStackSizes();
+  $: undoStack = getUndoStack();
+  $: redoStack = getRedoStack();
+  $: undoRedoLabels = getUndoRedoLabels();
+  $: undoAvailable = canUndo();
+  $: redoAvailable = canRedo();
+
   // Tab configuration
   const tabs = [
     { id: 'frontend', label: 'Frontend State', icon: 'fa-code' },
@@ -241,6 +260,7 @@
     { id: 'selection', label: 'Selection', icon: 'fa-check-square' },
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
     { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
+    { id: 'undo-redo', label: 'Undo/Redo', icon: 'fa-undo' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
     { id: 'listeners', label: 'Listeners', icon: 'fa-ear-listen' },
@@ -571,6 +591,121 @@
           </table>
         </div>
       {/if}
+    </div>
+
+    <!-- Undo/Redo Tab -->
+    <div slot="undo-redo">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Undo/Redo System</h3>
+        <div class="undo-redo-controls">
+          {@render actionButton(() => undo(), 'fa-undo', 'Undo', !undoAvailable, 'primary')}
+          {@render actionButton(() => redo(), 'fa-redo', 'Redo', !redoAvailable, 'secondary')}
+          {@render actionButton(
+            () => clearUndoRedoHistory(),
+            'fa-trash',
+            'Clear History',
+            false,
+            'danger'
+          )}
+        </div>
+      </div>
+
+      <div class="undo-redo-stats">
+        <div class="stat-card">
+          <div class="stat-label">Undo Stack</div>
+          <div class="stat-value">{undoRedoStackSizes.undoCount}</div>
+          <div class="stat-description">Commands available to undo</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Redo Stack</div>
+          <div class="stat-value">{undoRedoStackSizes.redoCount}</div>
+          <div class="stat-description">Commands available to redo</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Next Undo</div>
+          <div class="stat-value">{undoRedoLabels.undo || 'None'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Next Redo</div>
+          <div class="stat-value">{undoRedoLabels.redo || 'None'}</div>
+        </div>
+      </div>
+
+      <div class="undo-redo-stacks">
+        <div class="stack-section">
+          <h4><i class="fa fa-undo"></i> Undo Stack</h4>
+          {#if undoStack.length === 0}
+            <div class="empty-stack">
+              <i class="fa fa-inbox"></i>
+              <p>No commands in undo stack</p>
+            </div>
+          {:else}
+            <div class="stack-table-container">
+              <table class="stack-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Command</th>
+                    <th>ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each undoStack.toReversed() as command, index}
+                    <tr class:next-command={index === 0}>
+                      <td class="stack-index">{undoStack.length - index}</td>
+                      <td class="command-label">{command.label}</td>
+                      <td class="command-id">
+                        {#if command.id}
+                          <code>{command.id.slice(0, 8)}...</code>
+                        {:else}
+                          <span class="no-id">-</span>
+                        {/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+
+        <div class="stack-section">
+          <h4><i class="fa fa-redo"></i> Redo Stack</h4>
+          {#if redoStack.length === 0}
+            <div class="empty-stack">
+              <i class="fa fa-inbox"></i>
+              <p>No commands in redo stack</p>
+            </div>
+          {:else}
+            <div class="stack-table-container">
+              <table class="stack-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Command</th>
+                    <th>ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each redoStack.toReversed() as command, index}
+                    <tr class:next-command={index === 0}>
+                      <td class="stack-index">{redoStack.length - index}</td>
+                      <td class="command-label">{command.label}</td>
+                      <td class="command-id">
+                        {#if command.id}
+                          <code>{command.id.slice(0, 8)}...</code>
+                        {:else}
+                          <span class="no-id">-</span>
+                        {/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </div>
     </div>
 
     <!-- Export State Tab -->
@@ -1281,6 +1416,187 @@
     .button-group {
       flex-direction: column;
       gap: 4px;
+    }
+  }
+
+  /* Undo/Redo Tab Styles */
+  .undo-redo-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .undo-redo-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-weight: 700;
+    color: #f59e0b;
+    margin-bottom: 4px;
+    font-family: 'Courier New', monospace;
+  }
+
+  .stat-description {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+  }
+
+  .undo-redo-stacks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  .stack-section h4 {
+    margin: 0 0 16px 0;
+    color: #60a5fa;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .empty-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: rgba(156, 163, 175, 0.5);
+    text-align: center;
+    background-color: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .empty-stack i {
+    font-size: 32px;
+    margin-bottom: 12px;
+    opacity: 0.3;
+  }
+
+  .empty-stack p {
+    margin: 0;
+    font-style: italic;
+    font-size: 12px;
+  }
+
+  .stack-table-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+
+  .stack-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .stack-table th {
+    background-color: rgba(96, 165, 250, 0.2);
+    color: #60a5fa;
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .stack-table td {
+    padding: 6px 12px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    vertical-align: middle;
+  }
+
+  .stack-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .stack-table tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .stack-table tr.next-command {
+    background-color: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .stack-table tr.next-command td {
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 500;
+  }
+
+  .stack-index {
+    text-align: center;
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #60a5fa;
+    min-width: 40px;
+  }
+
+  .command-label {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .command-id {
+    font-family: 'Courier New', monospace;
+    text-align: center;
+    min-width: 80px;
+  }
+
+  .command-id code {
+    background-color: rgba(156, 163, 175, 0.1);
+    color: #9ca3af;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 9px;
+    border: 1px solid rgba(156, 163, 175, 0.2);
+  }
+
+  .no-id {
+    color: rgba(156, 163, 175, 0.4);
+    font-style: italic;
+  }
+
+  @media (max-width: 768px) {
+    .undo-redo-stacks {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    .undo-redo-stats {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 </style>
