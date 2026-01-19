@@ -1,50 +1,17 @@
 <script lang="ts">
-  import { listen } from '@tauri-apps/api/event';
+  import { activeStatus } from './state/status';
   import { appState } from './state/state.svelte';
-  import { exportState } from './state/export';
   import { formatBytes } from './utils/format';
   import { invokeWithPerf } from './state/performance';
 
-  let statusMessage = 'Ready';
   let lastActivity = '';
 
-  listen<number>('buffering-progress', e => {
-    if (e.payload < 100) {
-      statusMessage = `Buffering... ${e.payload.toFixed(1)}%`;
-    } else {
-      statusMessage = 'Ready';
-    }
-  });
-
-  // Watch for app state changes
-  $: {
-    if ($exportState && $exportState.progress > 0 && $exportState.progress < 1) {
-      // Export is in progress
-      statusMessage = $exportState.message || 'Exporting audio...';
-    } else if ($exportState && $exportState.progress === 1) {
-      // Export is completed
-      statusMessage = '🎉 Export completed successfully!';
-    } else if ($appState.playingCombined) {
-      statusMessage = 'Playing';
-    } else if ($appState.isCombiningFile) {
-      statusMessage = 'Processing audio...';
-    } else {
-      // Note: Section count removed - operations no longer have sections
-      statusMessage = 'Ready';
-    }
-    if (!$appState.playingCombined && statusMessage === 'Playing') {
-      statusMessage = 'Paused';
-    }
-  }
+  // Subscribe to the active status - activeStatus always returns a value, never undefined
+  $: status = $activeStatus;
 
   // Note: File and size calculations removed - operations no longer have sections
   $: totalFiles = 0;
   $: totalSize = 0;
-
-  // Export progress calculations
-  $: isExporting = $exportState && $exportState.progress > 0 && $exportState.progress < 1;
-  $: exportProgress = $exportState?.progress || 0;
-  $: isExportCompleted = $exportState && $exportState.progress === 1;
 
   const openInExplorer = async (filePath: string) => {
     try {
@@ -62,32 +29,18 @@
   <div class="d-flex gap-4 align-items-center" style="margin-bottom: -3px">
     <!-- Status Message -->
     <div class="status-item">
-      <span
-        class="status-icon"
-        class:active={$appState.playingCombined}
-        class:exporting={isExporting}
-        class:completed={isExportCompleted}>●</span
-      >
-      <span class="status-text">{statusMessage}</span>
-      {#if isExporting}
+      <span class="status-icon {status.level}">●</span>
+      <span class="status-text">{status.message}</span>
+
+      {#if status.progress !== undefined}
         <div class="export-progress-bar">
-          <div class="export-progress-fill" style="width: {exportProgress * 100}%"></div>
+          <div class="export-progress-fill" style="width: {status.progress * 100}%"></div>
         </div>
-        <span class="status-text">({(exportProgress * 100).toFixed(1)}%)</span>
-      {:else if isExportCompleted}
+        <span class="status-text">({(status.progress * 100).toFixed(1)}%)</span>
+      {/if}
+
+      {#if status.level === 'success' && status.source === 'export'}
         <span class="status-text completed-check">✓</span>
-        {#if $exportState && $exportState.outputPath}
-          <span
-            class="footer-file-path"
-            on:click={() => openInExplorer($exportState.outputPath)}
-            on:keydown={e => e.key === 'Enter' && openInExplorer($exportState.outputPath)}
-            role="button"
-            tabindex="0"
-            title="Click to open file in folder"
-          >
-            📁 {$exportState.outputPath}
-          </span>
-        {/if}
       {/if}
     </div>
 
@@ -146,6 +99,34 @@
     color: #68d391;
     font-size: 8px;
     transition: color 0.2s ease;
+  }
+
+  /* Status level colors */
+  .status-icon.idle {
+    color: #68d391;
+  }
+
+  .status-icon.info {
+    color: #63b3ed;
+  }
+
+  .status-icon.working {
+    color: #f6ad55;
+    animation: pulse 1.5s infinite;
+  }
+
+  .status-icon.success {
+    color: #68d391;
+    animation: successPulse 1s ease-in-out 3;
+  }
+
+  .status-icon.warning {
+    color: #f6ad55;
+  }
+
+  .status-icon.error {
+    color: #fc8181;
+    animation: errorPulse 0.5s ease-in-out 5;
   }
 
   .status-icon.active {
@@ -258,6 +239,30 @@
     50% {
       opacity: 0.8;
       transform: scale(1.1);
+    }
+  }
+
+  @keyframes successPulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes errorPulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(1.15);
     }
   }
 </style>

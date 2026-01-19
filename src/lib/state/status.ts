@@ -9,7 +9,7 @@ export type StatusEvent = {
   message: string;
   level?: StatusLevel;
   progress?: number; // 0–1
-  sticky?: boolean;  // stays until cleared
+  sticky?: boolean; // stays until cleared
   timestamp?: number;
   source?: string;
 };
@@ -22,10 +22,7 @@ const statuses = writable<StatusEvent[]>([]);
  * @param status - The status event to publish
  */
 export const publishStatus = (status: StatusEvent) => {
-  statuses.update(list => [
-    ...list,
-    { timestamp: Date.now(), level: 'info', ...status }
-  ]);
+  statuses.update(list => [...list, { timestamp: Date.now(), level: 'info', ...status }]);
 };
 
 /**
@@ -33,9 +30,7 @@ export const publishStatus = (status: StatusEvent) => {
  * @param predicate - Optional filter function; if not provided, clears all
  */
 export const clearStatus = (predicate?: (s: StatusEvent) => boolean) => {
-  statuses.update(list =>
-    predicate ? list.filter(s => !predicate(s)) : []
-  );
+  statuses.update(list => (predicate ? list.filter(s => !predicate(s)) : []));
 };
 
 /**
@@ -53,30 +48,24 @@ export const clearSource = (source: string) => {
 };
 
 // Priority order for status resolution (highest to lowest)
-const priority: StatusLevel[] = [
-  'error',
-  'warning',
-  'working',
-  'success',
-  'info',
-  'idle'
-];
+const priority: StatusLevel[] = ['error', 'warning', 'working', 'success', 'info', 'idle'];
 
 /**
  * Derived store that resolves the currently active status
- * based on priority and timestamp
+ * based on priority and timestamp.
+ * Always returns a status (never undefined).
  */
-export const activeStatus = derived(statuses, $statuses => {
+export const activeStatus = derived(statuses, ($statuses): StatusEvent => {
   if ($statuses.length === 0) {
-    return { message: 'Ready', level: 'idle' as StatusLevel };
+    return { message: 'Ready', level: 'idle' as StatusLevel, timestamp: Date.now() };
   }
 
   // Sort by priority first, then by most recent timestamp
-  return [...$statuses].sort(
-    (a, b) =>
-      priority.indexOf(a.level!) - priority.indexOf(b.level!) ||
-      (b.timestamp! - a.timestamp!)
-  )[0];
+  const sorted = [...$statuses].sort(
+    (a, b) => priority.indexOf(a.level!) - priority.indexOf(b.level!) || b.timestamp! - a.timestamp!
+  );
+
+  return sorted[0]!;
 });
 
 /**

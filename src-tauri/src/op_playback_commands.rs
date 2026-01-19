@@ -232,12 +232,12 @@ pub async fn op_playback_build_graph(
                 )
             );
         }
-
+        let total_graph_ops = count_graph_ops(&request)?;
         // Emit started event
         send_channel_event!(
             on_event,
             OpPlaybackBuildGraphEvent::Started {
-                operation_count: request.operations.len(),
+                operation_count: total_graph_ops
             }
         );
 
@@ -311,8 +311,6 @@ pub async fn op_playback_build_graph(
                             ));
                         };
 
-                        // TODO: Per-input gain could be supported by wrapping in a GainOp
-                        // For now, gain is applied at the merge operation level
                         let child_op = SamplePlayableOp::new(samples, spec);
 
                         let offset = SampleTime::from_seconds(input.offset, sample_rate);
@@ -355,7 +353,7 @@ pub async fn op_playback_build_graph(
                 OpPlaybackBuildGraphEvent::Progress {
                     operation_name: op_request.name.clone(),
                     operation_index: index,
-                    total_operations: request.operations.len(),
+                    total_operations: total_graph_ops,
                     duration_seconds: op_duration_seconds,
                 }
             );
@@ -402,7 +400,7 @@ pub async fn op_playback_build_graph(
                 "op_build_graph",
                 &format!(
                     "Graph built successfully: {} operations, {:.2}s total duration",
-                    request.operations.len(),
+                    total_graph_ops,
                     total_duration_seconds
                 )
             );
@@ -1318,4 +1316,37 @@ fn resample_audio(
     }
 
     Ok(output)
+}
+
+fn count_graph_ops(request: &BuildGraphRequest) -> Result<usize, String> {
+    let mut count = 0;
+
+    for op in &request.operations {
+        match op.op_type {
+            OpType::Sample => {
+                count += 1;
+            }
+            OpType::Merge => {
+                let inputs = op
+                    .inputs
+                    .as_ref()
+                    .ok_or_else(|| format!("Merge operation '{}' must have inputs", op.name))?;
+
+                if inputs.is_empty() {
+                    return Err(format!(
+                        "Merge operation '{}' must have at least one input",
+                        op.name
+                    ));
+                }
+
+                // The merge op itself
+                count += 1;
+
+                // Each input becomes its own SamplePlayableOp
+                count += inputs.len();
+            }
+        }
+    }
+
+    Ok(count)
 }
