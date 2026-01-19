@@ -16,6 +16,7 @@
   import { initWaveformService } from './state/waveformCache';
   import { initializeGroupsSubscription } from './state/groups';
   import { initializeOperationsSubscription } from './state/operation';
+  import { initializeStatusPublishers } from './state/status-publishers';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
@@ -89,6 +90,9 @@
     // Initialize subscriptions to avoid circular dependency issues
     initializeGroupsSubscription();
     initializeOperationsSubscription();
+
+    // Initialize automatic status publishers (buffering, etc.)
+    initializeStatusPublishers();
 
     // document.addEventListener('dragover', event => {
     //   event.preventDefault();

@@ -1,4 +1,6 @@
 import { Channel } from '@tauri-apps/api/core';
+import { publishStatus, clearSource } from '$lib/state/status';
+import type { StatusLevel } from '$lib/state/status';
 
 // Type utility to extract data types for each event stage
 type ExtractEventData<T, E extends string> = T extends { event: E; data: infer D } ? D : never;
@@ -161,6 +163,144 @@ export function createEventChannelWithLogging<TData = any>(
     },
     onFinished: data => {
       logEvent('Finished', data);
+      handlers.onFinished?.(data);
+    },
+  });
+}
+
+/**
+ * Configuration for automatic status message generation
+ */
+export interface StatusMessageConfig {
+  /** Source identifier for status system (e.g., 'build-graph', 'export') */
+  source: string;
+  /** Message to show when started (can use template ${data.propertyName}) */
+  startedMessage?: string | ((data: any) => string);
+  /** Message to show during progress (can use template ${data.propertyName}) */
+  progressMessage?: string | ((data: any) => string);
+  /** Message to show when finished (can use template ${data.propertyName}) */
+  finishedMessage?: string | ((data: any) => string);
+  /** Whether to auto-clear success status after completion (default: 2000ms) */
+  autoClearSuccess?: boolean | number;
+  /** Function to extract progress from progress event data (0-1 scale) */
+  getProgress?: (data: any) => number | undefined;
+}
+
+/**
+ * Creates a type-safe channel with logging AND automatic status publishing
+ * Reduces boilerplate by automatically publishing status for started/progress/finished events
+ *
+ * @param channelName Name to display in logs (e.g., 'Export', 'BuildGraph')
+ * @param statusConfig Configuration for automatic status messages
+ * @param handlers Event handlers with proper type inference
+ * @returns Configured Channel instance
+ *
+ * @example
+ * ```typescript
+ * const channel = createTypedEventChannelWithLoggingAndStatusMessages<BuildGraphEvent>(
+ *   'BuildGraph',
+ *   {
+ *     source: 'build-graph',
+ *     startedMessage: data => `Building ${data.operationCount} operations...`,
+ *     progressMessage: data => `Building: ${data.operationName} (${data.operationIndex + 1}/${data.totalOperations})`,
+ *     finishedMessage: data => `Graph built: ${data.operationCount} ops, ${data.totalDurationSeconds.toFixed(1)}s`,
+ *     getProgress: data => (data.operationIndex + 1) / data.totalOperations,
+ *     autoClearSuccess: 2000
+ *   },
+ *   {
+ *     onStarted: data => console.log('Started!'),
+ *     onProgress: data => console.log('Progress:', data),
+ *     onFinished: data => console.log('Done!')
+ *   }
+ * );
+ * ```
+ */
+export function createTypedEventChannelWithLoggingAndStatusMessages<
+  TEvent extends { event: string; data: any },
+>(
+  channelName: string,
+  statusConfig: StatusMessageConfig,
+  handlers: TypedChannelEventHandlers<TEvent>
+): Channel<TEvent> {
+  const isDev =
+    typeof import.meta !== 'undefined' &&
+    typeof (import.meta as any).env !== 'undefined' &&
+    (import.meta as any).env.DEV === true;
+
+  const logEvent = (event: string, data?: any) => {
+    if (isDev) {
+      console.log(
+        `%c📡 ${channelName} %c${event}`,
+        'background: #2196F3; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+        'color: #2196F3; font-weight: normal;',
+        data
+      );
+    }
+  };
+
+  const getMessage = (
+    template: string | ((data: any) => string) | undefined,
+    data: any
+  ): string => {
+    if (!template) return '';
+    return typeof template === 'function' ? template(data) : template;
+  };
+
+  return createTypedEventChannel<TEvent>({
+    onStarted: data => {
+      logEvent('Started', data);
+
+      // Clear previous statuses and publish started status
+      clearSource(statusConfig.source);
+      if (statusConfig.startedMessage) {
+        publishStatus({
+          source: statusConfig.source,
+          level: 'working',
+          message: getMessage(statusConfig.startedMessage, data),
+          progress: 0,
+        });
+      }
+
+      handlers.onStarted?.(data);
+    },
+    onProgress: data => {
+      logEvent('Progress', data);
+
+      // Update progress status
+      if (statusConfig.progressMessage) {
+        clearSource(statusConfig.source);
+        publishStatus({
+          source: statusConfig.source,
+          level: 'working',
+          message: getMessage(statusConfig.progressMessage, data),
+          progress: statusConfig.getProgress?.(data),
+        });
+      }
+
+      handlers.onProgress?.(data);
+    },
+    onFinished: data => {
+      logEvent('Finished', data);
+
+      // Publish success status
+      if (statusConfig.finishedMessage) {
+        clearSource(statusConfig.source);
+        publishStatus({
+          source: statusConfig.source,
+          level: 'success',
+          message: getMessage(statusConfig.finishedMessage, data),
+        });
+
+        // Auto-clear if configured
+        if (statusConfig.autoClearSuccess !== false) {
+          const delay =
+            typeof statusConfig.autoClearSuccess === 'number'
+              ? statusConfig.autoClearSuccess
+              : 2000;
+          setTimeout(() => clearSource(statusConfig.source), delay);
+        }
+      }
+
       handlers.onFinished?.(data);
     },
   });
