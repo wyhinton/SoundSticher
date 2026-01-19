@@ -61,8 +61,6 @@ export interface AppState {
     activeTab?: string;
     debugActiveTab?: string;
     tabContentHeight?: number;
-    /** @deprecated Use selectedOperationId instead */
-    selectedOperationName?: string | null;
     /** Currently selected operation ID (immutable identifier) */
     selectedOperationId?: OperationId | null;
     /** Set of selected timeline item IDs for multi-selection */
@@ -178,7 +176,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       activeTab: 'Operations',
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
-      selectedOperationName: null,
+      selectedOperationId: null,
       timelineDebugMode: false,
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
@@ -241,7 +239,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       activeTab: loadedState.activeTab || loadedState.uiSettings?.activeTab || 'Operations',
       debugActiveTab: loadedState.uiSettings?.debugActiveTab || 'frontend',
       tabContentHeight: loadedState.uiSettings?.tabContentHeight || 120,
-      selectedOperationName: loadedState.uiSettings?.selectedOperationName || null,
+      selectedOperationId: loadedState.uiSettings?.selectedOperationName || null,
       timelineDebugMode: loadedState.uiSettings?.timelineDebugMode || false,
       showFullSvgPath: loadedState.uiSettings?.showFullSvgPath || false,
       svgPathDisplayMode: loadedState.uiSettings?.svgPathDisplayMode || 'trim',
@@ -300,7 +298,7 @@ export const appState = persisted<AppState>(
       activeTab: 'Operations',
       debugActiveTab: 'frontend',
       tabContentHeight: 120,
-      selectedOperationName: null,
+      selectedOperationId: null,
       timelineDebugMode: false,
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
@@ -739,12 +737,11 @@ export function setSelectedOperationId(operationId: OperationId | null) {
       state.uiSettings = {};
     }
     state.uiSettings.selectedOperationId = operationId;
-    // Keep deprecated field in sync for backward compatibility
     if (operationId) {
       const op = state.operations?.defs?.[operationId];
-      state.uiSettings.selectedOperationName = op?.name ?? operationId;
+      state.uiSettings.selectedOperationId = operationId;
     } else {
-      state.uiSettings.selectedOperationName = null;
+      state.uiSettings.selectedOperationId = null;
     }
     return state;
   });
@@ -756,7 +753,7 @@ export function setSelectedOperationId(operationId: OperationId | null) {
 export function getSelectedOperationId(): OperationId | null {
   const state = get(appState);
   // Prefer new ID field, fall back to name field for backward compatibility
-  return state.uiSettings?.selectedOperationId ?? state.uiSettings?.selectedOperationName ?? null;
+  return state.uiSettings?.selectedOperationId ?? state.uiSettings?.selectedOperationId ?? null;
 }
 
 /**
@@ -764,7 +761,7 @@ export function getSelectedOperationId(): OperationId | null {
  */
 export function getSelectedOperation(): OperationDef | null {
   const state = get(appState);
-  const id = state.uiSettings?.selectedOperationId ?? state.uiSettings?.selectedOperationName;
+  const id = state.uiSettings?.selectedOperationId ?? state.uiSettings?.selectedOperationId;
   if (!id) return null;
   return state.operations?.defs?.[id] ?? null;
 }
@@ -816,7 +813,7 @@ export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
  */
 export const currentOperationSources = derived(appState, $appState => {
   const selectedOperationId =
-    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationName;
+    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationId;
   if (!selectedOperationId) return [];
 
   const operation = $appState.operations?.defs?.[selectedOperationId];
@@ -831,7 +828,7 @@ export const currentOperationSources = derived(appState, $appState => {
  */
 export const currentOperationFileList = derived(appState, $appState => {
   const selectedOperationId =
-    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationName;
+    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationId;
   if (!selectedOperationId) return [];
 
   const operation = $appState.operations?.defs?.[selectedOperationId];
@@ -875,7 +872,7 @@ export function getOperationSections(operationName: string): Section[] {
 export function getCurrentOperationSources(): OperationSource[] {
   const currentState = get(appState);
   const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
   if (!selectedOperationId) return [];
 
   const operation = currentState.operations?.defs?.[selectedOperationId];
@@ -899,7 +896,7 @@ export function getCurrentOperationSections(): Section[] {
 export function addOperationSourceToCurrent(operationId: OperationId) {
   const currentState = get(appState);
   const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
   if (!selectedOperationId) {
     console.warn('No operation currently selected');
     return;
@@ -932,7 +929,7 @@ export function addOperationSourceToCurrent(operationId: OperationId) {
 export function removeSourceFromCurrentOperation(index: number) {
   const currentState = get(appState);
   const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
   if (!selectedOperationId) {
     console.warn('No operation currently selected');
     return;
@@ -966,7 +963,7 @@ export function removeSourceFromCurrentOperation(index: number) {
 export function addOpAsSourceById(operationId: OperationId) {
   const currentState = get(appState);
   const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
 
   if (!selectedOperationId) {
     console.warn('No operation currently selected');
@@ -1049,7 +1046,7 @@ export function addOpAsSource(operationIdOrName: string) {
 export async function addSampleOpsFromDirectory(directoryPath: string) {
   const currentState = get(appState);
   const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationName;
+    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
 
   if (!selectedOperationId) {
     console.warn('No operation currently selected');

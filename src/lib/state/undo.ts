@@ -463,6 +463,9 @@ function applyAddOperation(state: AppState, cmd: AddOperationCommand): AddOperat
     state.operations = { defs: {}, order: [], _version: 1 };
   }
 
+  // Track if this is the first operation being added
+  const isFirstOperation = Object.keys(state.operations.defs).length === 0;
+
   // Generate ID if not provided
   const operationId = cmd.operationId ?? generateOperationId();
 
@@ -484,6 +487,11 @@ function applyAddOperation(state: AppState, cmd: AddOperationCommand): AddOperat
     state.operations.order.splice(cmd.index, 0, operationId);
   } else {
     state.operations.order.push(operationId);
+  }
+
+  // If this is the first operation, automatically select it
+  if (isFirstOperation && state.uiSettings?.selectedOperationId) {
+    state.uiSettings.selectedOperationId = operationId;
   }
 
   // Update versions

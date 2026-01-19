@@ -20,11 +20,11 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if ((event.ctrlKey || event.metaKey)) {
+    if (event.ctrlKey || event.metaKey) {
       if (event.key === 'z' && !event.shiftKey) {
         event.preventDefault();
         handleUndo();
-      } else if ((event.key === 'y') || (event.key === 'z' && event.shiftKey)) {
+      } else if (event.key === 'y' || (event.key === 'z' && event.shiftKey)) {
         event.preventDefault();
         handleRedo();
       }
@@ -35,24 +35,24 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <div class="undo-redo-controls">
-  <button 
-    class="undo-btn" 
+  <button
+    class="undo-btn"
     disabled={!undoAvailable}
     onclick={handleUndo}
     title={labels.undo ? `Undo: ${labels.undo}` : 'Nothing to undo'}
   >
     ↶ Undo
   </button>
-  
-  <button 
-    class="redo-btn" 
+
+  <button
+    class="redo-btn"
     disabled={!redoAvailable}
     onclick={handleRedo}
     title={labels.redo ? `Redo: ${labels.redo}` : 'Nothing to redo'}
   >
     ↷ Redo
   </button>
-  
+
   {#if labels.undo || labels.redo}
     <div class="status-text">
       {#if labels.undo}
@@ -105,7 +105,8 @@
     margin-left: 8px;
   }
 
-  .undo-status, .redo-status {
+  .undo-status,
+  .redo-status {
     line-height: 1.2;
   }
 

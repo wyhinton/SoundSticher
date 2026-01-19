@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invokeWithPerf } from '$lib/state/performance';
   import type { OperationDef, OperationId } from '$lib/state/operation';
+  import { appState } from '$lib/state/state.svelte';
 
   // Props
   export let selectedOperation: OperationDef | null = null;
@@ -54,7 +55,7 @@
   }
 
   async function handleTestWithParams() {
-    if (!selectedOperationName || !selectedOperation) return;
+    if (!selectedOperationId || !selectedOperation) return;
 
     // Validate parameters using schema-based validation from parent
     if (!validateParameters()) {
@@ -116,6 +117,22 @@
       console.error('Error opening artifacts folder:', error);
     }
   }
+
+  function handleDeleteAllOperations() {
+    appState.update(state => ({
+      ...state,
+      operations: {
+        defs: {},
+        order: [],
+      },
+      uiSettings: {
+        ...state.uiSettings,
+        selectedOperationId: null,
+        selectedOperationId: null,
+      },
+    }));
+    console.log('All operations deleted');
+  }
 </script>
 
 <div class="debug-panel">
@@ -174,6 +191,16 @@
     >
       <i class="fa fa-folder-open"></i>
       Artifacts
+    </button>
+
+    <button
+      class="delete-all-btn"
+      onclick={handleDeleteAllOperations}
+      title="Delete all operations"
+      aria-label="Delete all operations"
+    >
+      <i class="fa fa-trash"></i>
+      Delete All
     </button>
   </div>
 
@@ -236,7 +263,8 @@
   .test-btn,
   .test-params-btn,
   .test-scheduler-btn,
-  .open-artifacts-btn {
+  .open-artifacts-btn,
+  .delete-all-btn {
     flex: 1;
     padding: 4px 8px;
     border: none;
@@ -300,6 +328,15 @@
 
   .open-artifacts-btn:hover {
     background: #5e35b1;
+  }
+
+  .delete-all-btn {
+    background: #f44336;
+    color: white;
+  }
+
+  .delete-all-btn:hover {
+    background: #d32f2f;
   }
 
   .parameter-editor {

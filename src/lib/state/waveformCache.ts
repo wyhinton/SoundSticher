@@ -527,8 +527,7 @@ function createOperationWaveformStore() {
 async function buildPlaybackGraphFromMergeOp(): Promise<void> {
   const appStateValue = get(appState);
   const selectedOpId =
-    appStateValue.uiSettings?.selectedOperationId ??
-    appStateValue.uiSettings?.selectedOperationName;
+    appStateValue.uiSettings?.selectedOperationId ?? appStateValue.uiSettings?.selectedOperationId;
 
   if (!selectedOpId) {
     logger.waveform.operation('No operation selected, cannot build playbook graph');
@@ -1108,8 +1107,7 @@ function getHierarchicalTimelineItems(
 export const operationTimelineItems: Readable<TimelineItem[]> = derived(
   [appState, operationWaveforms],
   ([$appState, $operationWaveforms]) => {
-    const selectedOpId =
-      $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationName;
+    const selectedOpId = $appState.uiSettings?.selectedOperationId;
     if (!selectedOpId || !$appState.operations?.defs) {
       return $appState.timelineItems || [];
     }
