@@ -14,6 +14,7 @@ import type {
 } from './operation';
 import { generateOperationId } from './operation';
 import { Favorite } from './favorites';
+import { TIMELINE_RESIZE } from '$lib/config/timelineConfig';
 
 export type ErrorKind = {
   kind: 'io' | 'utf8';
@@ -69,6 +70,8 @@ export interface AppState {
     showFullSvgPath?: boolean;
     svgPathDisplayMode?: 'full' | 'trim' | 'hide';
     callSiteTrackingEnabled?: boolean;
+    /** Timeline height as percentage of viewport (10-60) */
+    timelineHeight?: number;
     debugPanelPrismDisplay?: {
       frontend: any;
       backend: any;
@@ -181,6 +184,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
       callSiteTrackingEnabled: false,
+      timelineHeight: TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT, // Default timeline height (30% of viewport)
       debugPanelPrismDisplay: {
         frontend: {},
         backend: {},
@@ -244,6 +248,7 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: loadedState.uiSettings?.showFullSvgPath || false,
       svgPathDisplayMode: loadedState.uiSettings?.svgPathDisplayMode || 'trim',
       callSiteTrackingEnabled: loadedState.uiSettings?.callSiteTrackingEnabled || false,
+      timelineHeight: loadedState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT,
       theme: {
         panelHeaderBackgroundColor:
           loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
@@ -303,6 +308,7 @@ export const appState = persisted<AppState>(
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
       callSiteTrackingEnabled: false,
+      timelineHeight: TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT, // Default timeline height (30% of viewport)
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',

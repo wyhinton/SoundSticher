@@ -16,7 +16,7 @@
 </script>
 
 <div class="d-flex flex-column text-success">
-  <Progress value={operationProgress}></Progress>
+  <!-- <Progress value={operationProgress}></Progress> -->
   <div class="d-flex gap-1">
     <TransportControls disabled={transportDisabled} />
     <TimeDisplay />

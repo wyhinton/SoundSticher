@@ -123,9 +123,30 @@
 
 <!-- Audacity-style Transport Controls -->
 <div class="transport-controls d-flex align-items-center gap-2 py-2 px-2" class:disabled>
-  {@render transportButton('fa-backward-step', 'Skip to Start', handleSkipToStart, '', false, disabled)}
-  {@render transportButton('fa-play', 'Play', handlePlayPause, 'btn-play', isCurrentlyPlaying, disabled)}
-  {@render transportButton('fa-pause', 'Pause', handlePause, 'btn-pause', isCurrentlyPaused, disabled)}
+  {@render transportButton(
+    'fa-backward-step',
+    'Skip to Start',
+    handleSkipToStart,
+    '',
+    false,
+    disabled
+  )}
+  {@render transportButton(
+    'fa-play',
+    'Play',
+    handlePlayPause,
+    'btn-play',
+    isCurrentlyPlaying,
+    disabled
+  )}
+  {@render transportButton(
+    'fa-pause',
+    'Pause',
+    handlePause,
+    'btn-pause',
+    isCurrentlyPaused,
+    disabled
+  )}
   {@render transportButton('fa-stop', 'Stop', handleStop, 'btn-stop', false, disabled)}
   {@render transportButton('fa-forward-step', 'Skip to End', handleSkipToEnd, '', false, disabled)}
   {@render transportButton('fa-repeat', 'Loop', toggleLoop, 'btn-loop', isLoopEnabled, disabled)}
@@ -225,7 +246,6 @@
   }
 
   .btn-loop.active {
-    background: linear-gradient(to bottom, #319795, #2c7a7b);
     border-color: #234e52;
     color: white;
   }

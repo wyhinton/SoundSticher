@@ -14,12 +14,16 @@
   import { timelineDebugMode } from '../state/state.svelte';
   import { type DurationResponse } from '$lib/state/durationCache';
   import UndoRedoControls from './UndoRedoControls.svelte';
+  import TimelineOverlay from './TimelineOverlay.svelte';
 
   // Visibility state
   let isVisible = false;
 
   // CSS Debug outline state
   let cssOutlineEnabled = false;
+
+  // Timeline overlay state
+  let timelineOverlayEnabled = false;
 
   // Duration test state
   let durationTestFilePath = '';
@@ -631,6 +635,16 @@ Project: Sound Stitch (Tauri + SvelteKit)
           <i class="fa fa-bug"></i>
           Timeline Debug
         </button>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-primary={!timelineOverlayEnabled}
+          class:btn-primary={timelineOverlayEnabled}
+          on:click={() => (timelineOverlayEnabled = !timelineOverlayEnabled)}
+          title="Show timeline height measurements overlay"
+        >
+          <i class="fa fa-ruler-vertical"></i>
+          Height Overlay
+        </button>
       </div>
 
       <div class="button-group">
@@ -826,9 +840,11 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <i class="fa fa-info-circle"></i>
         DEV | hasNoActive: {$appState?.hasNoActiveSamples ? 'T' : 'F'} | Timeline Debug: {$timelineDebugMode
           ? 'ON'
-          : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu ? 'ON' : 'OFF'} | Call Sites: {$callSiteTrackingEnabled
+          : 'OFF'} | Height Overlay: {timelineOverlayEnabled ? 'ON' : 'OFF'} | Custom Menu: {$debugState.useCustomContextMenu
           ? 'ON'
-          : 'OFF'} | CSS Outlines: {cssOutlineEnabled ? 'ON' : 'OFF'} |
+          : 'OFF'} | Call Sites: {$callSiteTrackingEnabled ? 'ON' : 'OFF'} | CSS Outlines: {cssOutlineEnabled
+          ? 'ON'
+          : 'OFF'} |
         {#each loggingCategories as category}
           {category.label}: {$loggingState[category.key] ? 'ON' : 'OFF'} |
         {/each}
@@ -849,6 +865,9 @@ Project: Sound Stitch (Tauri + SvelteKit)
     </button>
   </div>
 {/if}
+
+<!-- Timeline Overlay Component -->
+<TimelineOverlay visible={timelineOverlayEnabled} />
 
 <style>
   .debug-toolbar {

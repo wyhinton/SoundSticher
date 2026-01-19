@@ -18,6 +18,7 @@ import { logger } from './logging';
 import { opPlaybackService, type AddOpRequest, type MergeInputRequest } from './opPlaybackService';
 import { invokeWithPerf } from './performance';
 import { durationCache } from './durationCache';
+import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
 import {
   type FlattenedTimelineItem,
@@ -93,7 +94,7 @@ export class WaveformCache {
   private inFlight = new Map<string, Promise<Waveform>>();
   private maxEntries: number;
 
-  constructor(maxEntries: number = 500) {
+  constructor(maxEntries: number = WAVEFORM_CONFIG.MAX_CACHE_ENTRIES) {
     this.maxEntries = maxEntries;
   }
 
@@ -102,7 +103,11 @@ export class WaveformCache {
    */
   async getOrFetch(
     filePath: string,
-    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+    spec: WaveformSpec = {
+      width: WAVEFORM_CONFIG.DEFAULT_WIDTH,
+      height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
+      normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
+    }
   ): Promise<Waveform> {
     const key = createCacheKey(filePath, spec.width, spec.height);
     console.log(`%cHERE LINE :93 %c`, 'color: yellow; font-weight: bold', '');
@@ -169,7 +174,11 @@ export class WaveformCache {
    */
   async getBatch(
     filePaths: string[],
-    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+    spec: WaveformSpec = {
+      width: WAVEFORM_CONFIG.DEFAULT_WIDTH,
+      height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
+      normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
+    }
   ): Promise<Map<string, Waveform>> {
     logger.waveform.batch(
       `Batch request for ${filePaths.length} waveforms (${spec.width}x${spec.height})`
@@ -242,7 +251,11 @@ export class WaveformCache {
    */
   isCached(
     filePath: string,
-    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+    spec: WaveformSpec = {
+      width: WAVEFORM_CONFIG.DEFAULT_WIDTH,
+      height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
+      normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
+    }
   ): boolean {
     const key = createCacheKey(filePath, spec.width, spec.height);
     return this.cache.has(key);
@@ -291,7 +304,11 @@ export class WaveformCache {
    */
   getCached(
     filePath: string,
-    spec: WaveformSpec = { width: 1000, height: 70, normalize: false }
+    spec: WaveformSpec = {
+      width: WAVEFORM_CONFIG.DEFAULT_WIDTH,
+      height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
+      normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
+    }
   ): Waveform | undefined {
     const key = createCacheKey(filePath, spec.width, spec.height);
     return this.cache.get(key);
@@ -322,7 +339,7 @@ export class WaveformCache {
 // SINGLETON INSTANCE
 // ============================================================================
 
-export const waveformCache = new WaveformCache(500);
+export const waveformCache = new WaveformCache(WAVEFORM_CONFIG.MAX_CACHE_ENTRIES);
 
 // ============================================================================
 // OPERATION WAVEFORM STORE
@@ -449,8 +466,8 @@ function createOperationWaveformStore() {
           try {
             const waveform = await waveformCache.getOrFetch(filePath, {
               width: widthPx,
-              height: 70,
-              normalize: false,
+              height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
+              normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
             });
 
             // Update waveforms progressively
