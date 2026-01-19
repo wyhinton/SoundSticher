@@ -18,6 +18,7 @@ Before this system, timeline constants were duplicated across files:
 - Cache size limit (`500`) was hardcoded in `waveformCache.ts`
 
 This led to:
+
 - **Visual misalignment**: Waveforms at 70px height didn't match the 80px content region
 - **Maintenance issues**: Changing one value required finding all related values
 - **Inconsistency**: No clear relationship between related constants
@@ -61,12 +62,12 @@ export const TIMELINE_DERIVED = {
 
 SVG layout constants for the timeline component:
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `TOP_PADDING` | 20 | Header region height (px) |
-| `AXIS_HEIGHT` | 20 | X-axis footer height (px) |
-| `BASE_CONTENT_HEIGHT` | 80 | Design height for waveform content (px) |
-| `DEFAULT_HEIGHT` | 120 | Default total timeline height (px) |
+| Constant              | Value | Description                             |
+| --------------------- | ----- | --------------------------------------- |
+| `TOP_PADDING`         | 20    | Header region height (px)               |
+| `AXIS_HEIGHT`         | 20    | X-axis footer height (px)               |
+| `BASE_CONTENT_HEIGHT` | 80    | Design height for waveform content (px) |
+| `DEFAULT_HEIGHT`      | 120   | Default total timeline height (px)      |
 
 **Usage**: `Timeline.svelte` uses these for SVG layout and scaling calculations.
 
@@ -74,12 +75,12 @@ SVG layout constants for the timeline component:
 
 Waveform request and caching configuration:
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `DEFAULT_WIDTH` | 1000 | Default waveform width (px) |
-| `DEFAULT_HEIGHT` | 80 | **Links to TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT** |
-| `DEFAULT_NORMALIZE` | false | Whether to normalize amplitude |
-| `MAX_CACHE_ENTRIES` | 500 | Maximum cached waveforms |
+| Constant            | Value | Description                                      |
+| ------------------- | ----- | ------------------------------------------------ |
+| `DEFAULT_WIDTH`     | 1000  | Default waveform width (px)                      |
+| `DEFAULT_HEIGHT`    | 80    | **Links to TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT** |
+| `DEFAULT_NORMALIZE` | false | Whether to normalize amplitude                   |
+| `MAX_CACHE_ENTRIES` | 500   | Maximum cached waveforms                         |
 
 **Critical**: `DEFAULT_HEIGHT` is linked to `BASE_CONTENT_HEIGHT` to ensure visual alignment.
 
@@ -89,11 +90,11 @@ Waveform request and caching configuration:
 
 User resize constraints and defaults:
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `MIN_HEIGHT_PERCENT` | 10 | Minimum timeline height (10% of viewport) |
-| `MAX_HEIGHT_PERCENT` | 60 | Maximum timeline height (60% of viewport) |
-| `DEFAULT_HEIGHT_PERCENT` | 30 | Default timeline height (30% of viewport) |
+| Constant                 | Value | Description                               |
+| ------------------------ | ----- | ----------------------------------------- |
+| `MIN_HEIGHT_PERCENT`     | 10    | Minimum timeline height (10% of viewport) |
+| `MAX_HEIGHT_PERCENT`     | 60    | Maximum timeline height (60% of viewport) |
+| `DEFAULT_HEIGHT_PERCENT` | 30    | Default timeline height (30% of viewport) |
 
 **Usage**: `Greet.svelte` uses these for the draggable divider constraints, `state.svelte.ts` uses for default state.
 
@@ -101,11 +102,11 @@ User resize constraints and defaults:
 
 Computed values derived from other constants:
 
-| Property | Formula | Description |
-|----------|---------|-------------|
-| `CENTER_Y` | `BASE_CONTENT_HEIGHT / 2` | Center line Y position (40px) |
-| `FIXED_HEIGHT` | `TOP_PADDING + AXIS_HEIGHT` | Total fixed height (40px) |
-| `MIN_CONTENT_HEIGHT` | 40 | Minimum usable content height (px) |
+| Property             | Formula                     | Description                        |
+| -------------------- | --------------------------- | ---------------------------------- |
+| `CENTER_Y`           | `BASE_CONTENT_HEIGHT / 2`   | Center line Y position (40px)      |
+| `FIXED_HEIGHT`       | `TOP_PADDING + AXIS_HEIGHT` | Total fixed height (40px)          |
+| `MIN_CONTENT_HEIGHT` | 40                          | Minimum usable content height (px) |
 
 **Usage**: Provides computed values to avoid recalculating in components.
 
@@ -114,6 +115,7 @@ Computed values derived from other constants:
 ### 1. Single Source of Truth
 
 All timeline constants in one file:
+
 - Easy to find and understand relationships
 - Change in one place affects all consumers
 - No duplication or drift
@@ -121,6 +123,7 @@ All timeline constants in one file:
 ### 2. Type Safety
 
 All configs use `as const` for:
+
 - Readonly types (prevents accidental modification)
 - Type inference for config consumers
 - Exported types for external validation
@@ -128,8 +131,9 @@ All configs use `as const` for:
 ### 3. Linked Values
 
 Related constants reference each other:
+
 ```typescript
-DEFAULT_HEIGHT: TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT
+DEFAULT_HEIGHT: TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT;
 ```
 
 This ensures waveform height always matches content region height.
@@ -137,6 +141,7 @@ This ensures waveform height always matches content region height.
 ### 4. Documentation
 
 Config file serves as living documentation:
+
 - Clear purpose for each constant
 - Comments explain relationships
 - Easy to onboard new developers
@@ -177,8 +182,7 @@ async getOrFetch(
 ```typescript
 import { TIMELINE_RESIZE } from './config/timelineConfig';
 
-$: timelineHeight = $appState.uiSettings?.timelineHeight || 
-                    TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
+$: timelineHeight = $appState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
 
 const constrainedHeight = Math.max(
   TIMELINE_RESIZE.MIN_HEIGHT_PERCENT,
@@ -253,8 +257,9 @@ Potential improvements to consider:
 **Cause**: `WAVEFORM_CONFIG.DEFAULT_HEIGHT` doesn't match `TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT`
 
 **Solution**: Ensure `DEFAULT_HEIGHT` references `BASE_CONTENT_HEIGHT`:
+
 ```typescript
-DEFAULT_HEIGHT: TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT
+DEFAULT_HEIGHT: TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT;
 ```
 
 ### Timeline won't resize beyond certain limit

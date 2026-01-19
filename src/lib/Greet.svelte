@@ -41,7 +41,8 @@
   let isDraggingDivider = false;
 
   // Reactive timeline height from appState
-  $: timelineHeight = $appState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
+  $: timelineHeight =
+    $appState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
 
   // Update appState when timeline height changes
   function setTimelineHeight(height: number) {

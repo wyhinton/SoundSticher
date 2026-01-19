@@ -2,7 +2,11 @@ import { get } from 'svelte/store';
 import { appState, AppState, AudioFileItem, Section } from './state.svelte';
 import { loggingState, logger } from './logging';
 import { groupRegistry, GroupResult } from './groups';
-import { dispatch, type DeleteOperationCommand, type DeleteMultipleOperationsCommand } from './undo';
+import {
+  dispatch,
+  type DeleteOperationCommand,
+  type DeleteMultipleOperationsCommand,
+} from './undo';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -10,6 +14,14 @@ import { dispatch, type DeleteOperationCommand, type DeleteMultipleOperationsCom
 
 /** Unique, immutable identifier for operations (UUID/nanoid/ulid format) */
 export type OperationId = string;
+
+/**
+ * Controls how an operation reacts to upstream changes
+ * - 'auto': Re-render when any input changes (default)
+ * - 'manual': Never re-render unless explicitly triggered
+ * - 'frozen': Treat last output as immutable, cut invalidation chain
+ */
+export type RenderPolicy = 'auto' | 'manual' | 'frozen';
 
 export interface OperationsState {
   defs: Record<OperationId, OperationDef>; // serialized operation definitions keyed by ID
@@ -32,6 +44,18 @@ export type OperationDef = MergeOp | PipelineOp | SampleOp;
 export interface BaseOperation {
   id: OperationId; // stable, immutable identity (UUID/nanoid)
   name: string; // user-visible, editable display label
+
+  /**
+   * Controls how this operation reacts to upstream changes.
+   * - 'auto': Re-render when any input changes (default)
+   * - 'manual': Never re-render unless explicitly triggered
+   * - 'frozen': Treat last output as immutable, don't propagate invalidations
+   *
+   * Note: Frozen ops still resolve sources and cache outputs, they just don't
+   * automatically re-render when upstream inputs change. This cuts the invalidation
+   * chain in the dependency graph.
+   */
+  renderPolicy?: RenderPolicy;
 }
 
 // ============================================================================
@@ -336,20 +360,29 @@ export type NewOperationDef = NewMergeOp | NewPipelineOp | NewSampleOp;
  *
  * @param name - Display name for the operation (user-visible, editable)
  * @param defWithoutId - Operation definition without id/name (these will be set automatically)
+ * @param renderPolicy - Optional render policy override (defaults to 'auto')
  * @returns The generated operation ID
  */
-export function createOperation(name: string, defWithoutId: NewOperationDef): OperationId {
+export function createOperation(
+  name: string,
+  defWithoutId: NewOperationDef,
+  renderPolicy: RenderPolicy = 'auto'
+): OperationId {
   const isLogging = get(loggingState).operationsLog;
   const id = generateOperationId();
 
   const def = {
+    renderPolicy,
     ...defWithoutId,
     id,
     name,
   } as OperationDef;
 
   if (isLogging) {
-    console.log(`➕ Operations: Creating operation id="${id}" name="${name}"`, def);
+    console.log(
+      `➕ Operations: Creating operation id="${id}" name="${name}" renderPolicy="${renderPolicy}"`,
+      def
+    );
   }
 
   appState.update(s => {
@@ -637,6 +670,162 @@ export function addToPipeline(pipelineName: string, operationId: OperationId): v
 
     return s;
   });
+}
+
+// ============================================================================
+// RENDER POLICY MANAGEMENT
+// ============================================================================
+
+/**
+ * Update the render policy for an operation
+ */
+export function setRenderPolicy(id: OperationId, policy: RenderPolicy): void {
+  updateOperationById(id, { renderPolicy: policy });
+}
+
+/**
+ * Toggle an operation between 'auto' and 'frozen' render policies
+ */
+export function toggleFreezeOperation(id: OperationId): void {
+  const op = getOperationById(id);
+  if (!op) return;
+
+  const currentPolicy = op.renderPolicy || 'auto';
+  const newPolicy: RenderPolicy = currentPolicy === 'frozen' ? 'auto' : 'frozen';
+
+  setRenderPolicy(id, newPolicy);
+
+  const isLogging = get(loggingState).operationsLog;
+  if (isLogging) {
+    console.log(
+      `🧊 Operations: Toggled freeze for id="${id}" from "${currentPolicy}" to "${newPolicy}"`
+    );
+  }
+}
+
+/**
+ * Check if an operation should re-render based on its render policy
+ *
+ * @param op - The operation to check
+ * @param upstreamChanged - Whether any upstream dependencies have changed
+ * @returns true if the operation should re-render
+ */
+export function shouldRerender(op: OperationDef, upstreamChanged: boolean): boolean {
+  const policy = op.renderPolicy || 'auto';
+
+  switch (policy) {
+    case 'manual':
+      return false; // Never auto-rerender
+    case 'frozen':
+      return false; // Treat output as immutable
+    case 'auto':
+    default:
+      return upstreamChanged; // Re-render when inputs change
+  }
+}
+
+/**
+ * Get all upstream operation IDs that this operation depends on
+ * Used for dependency graph traversal and invalidation
+ */
+export function getUpstreamOps(opId: OperationId): OperationId[] {
+  const op = getOperationById(opId);
+  if (!op) return [];
+
+  const upstreamIds: OperationId[] = [];
+
+  // Collect from sources
+  if ('sources' in op && Array.isArray(op.sources)) {
+    for (const source of op.sources) {
+      if (source.type === 'operation' || source.type === 'previousOperation') {
+        upstreamIds.push(source.operationId);
+      }
+    }
+  }
+
+  // Collect from pipeline operations
+  if (op.kind === 'pipeline') {
+    upstreamIds.push(...op.operations);
+  }
+
+  return upstreamIds;
+}
+
+/**
+ * Get all downstream operation IDs that depend on this operation
+ * Used for invalidation propagation
+ */
+export function getDownstreamOps(opId: OperationId): OperationId[] {
+  const allOps = getAllOperations();
+  const downstreamIds: OperationId[] = [];
+
+  for (const op of allOps) {
+    const upstreamOfThis = getUpstreamOps(op.id);
+    if (upstreamOfThis.includes(opId)) {
+      downstreamIds.push(op.id);
+    }
+  }
+
+  return downstreamIds;
+}
+
+/**
+ * Compute which operations need to be re-rendered after a change to a specific operation
+ * Respects frozen operations as invalidation chain barriers
+ *
+ * @param changedOpId - The ID of the operation that changed
+ * @returns Set of operation IDs that need re-rendering
+ */
+export function computeInvalidatedOps(changedOpId: OperationId): Set<OperationId> {
+  const invalidated = new Set<OperationId>();
+  const visited = new Set<OperationId>();
+  const queue: OperationId[] = [changedOpId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    const currentOp = getOperationById(currentId);
+    if (!currentOp) continue;
+
+    // Mark as invalidated (unless it's the root change and it's frozen)
+    if (currentId !== changedOpId) {
+      invalidated.add(currentId);
+    }
+
+    // Check if we should propagate further downstream
+    const policy = currentOp.renderPolicy || 'auto';
+
+    // Frozen operations cut the invalidation chain
+    // Don't propagate invalidation past frozen nodes
+    if (policy === 'frozen' && currentId !== changedOpId) {
+      const isLogging = get(loggingState).operationsLog;
+      if (isLogging) {
+        console.log(`🧊 Operations: Invalidation chain stopped at frozen op id="${currentId}"`);
+      }
+      continue; // Don't propagate past this node
+    }
+
+    // Get downstream operations and add them to the queue
+    const downstream = getDownstreamOps(currentId);
+    for (const downstreamId of downstream) {
+      if (!visited.has(downstreamId)) {
+        queue.push(downstreamId);
+      }
+    }
+  }
+
+  const isLogging = get(loggingState).operationsLog;
+  if (isLogging && invalidated.size > 0) {
+    console.log(
+      `🔄 Operations: Change to id="${changedOpId}" invalidated ${invalidated.size} operations:`,
+      Array.from(invalidated)
+    );
+  }
+
+  return invalidated;
 }
 
 // ============================================================================
