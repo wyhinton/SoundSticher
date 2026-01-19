@@ -9,6 +9,7 @@
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
+  import OpSettingsTools from './OpSettingsTools.svelte';
   import { dropzone } from '$lib/attachments/droppable';
 
   export let operation: MergeOp;
@@ -243,6 +244,9 @@
         }
       }}
     />
+
+    <!-- Operation settings tools overlay -->
+    <OpSettingsTools {operationId} {operationName} />
   </div>
 </div>
 
