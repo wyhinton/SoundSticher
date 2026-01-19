@@ -54,8 +54,19 @@
   let axisGroup: SVGGElement;
   let pathGroup: SVGGElement;
 
-  const height = 120;
+  // SVG Layout constants
+  const topPadding = 20;
+  const axisHeight = 20;
+  const baseContentHeight = 80; // Design height for waveform content
+
+  // Reactive dimensions - now tracks both width and height
   let width = 0;
+  let height = 120; // Default height, will be updated by ResizeObserver
+
+  // Computed scalable region dimensions
+  $: contentHeight = height - topPadding - axisHeight;
+  $: contentScaleY = contentHeight / baseContentHeight;
+  $: tempYCenter = baseContentHeight / 2; // Center line in design space (40px of 80px)
 
   // D3 Manager instance
   let d3Manager: D3TimelineManager | null = null;
@@ -261,8 +272,8 @@
     const relativeX = event.clientX - rect.left;
     const relativeY = event.clientY - rect.top;
 
-    // Check if click is in the x-axis area (bottom 20px of the timeline)
-    const isXAxisClick = relativeY >= height - 20;
+    // Check if click is in the x-axis area (footer region)
+    const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
       // Click is in the x-axis area - set playhead position and clear selection
@@ -381,6 +392,7 @@
 
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
+      height = container.clientHeight || 120; // Fallback to default if height is 0
     });
 
     resizeObserver.observe(container);
@@ -474,11 +486,9 @@
     dragDropManager.handleDragEnd(event.detail);
     handleClearSelection();
   }
-
-  const tempYCenter = 35;
 </script>
 
-<div class="svg-container position-relative">
+<div class="svg-container position-relative h-fill-available">
   <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     {currentTransform.k.toFixed(2)}x
   </div>
@@ -519,15 +529,24 @@
     role="application"
     aria-label="Timeline"
     tabindex="0"
+    class="w-100 h-fill-available"
     style="
-    width: 100%;
     cursor: {isDragging ? 'grabbing' : 'default'};
     "
   >
     <svg class="waveform-svg-parent" bind:this={svgEl} {height} viewBox={`0 0 ${width} ${height}`}>
-      <g transform={`translate(0, ${20})`}>
+      <!-- Fixed header region (top padding) -->
+      <g class="fixed-header" transform={`translate(0, 0)`}>
+        <!-- Reserved space for future header content -->
+      </g>
+
+      <!-- Scalable content region (waveforms, segments, playhead) -->
+      <g
+        class="scalable-content"
+        transform={`translate(0, ${topPadding}) scale(1, ${contentScaleY})`}
+      >
         <g bind:this={pathGroup} transform={``}>
-          <!-- Zero level baseline -->
+          <!-- Zero level baseline (in design space coordinates) -->
           <line
             x1="0"
             y1={tempYCenter}
@@ -584,29 +603,13 @@
                   on:dragMove={handleDragMove}
                   on:dragEnd={handleDragEnd}
                 />
-                <!-- <text
-                  x={(timelineItem.startOffset * originalPathWidth) + 4}
-                  y={40}
-                  dominant-baseline="middle"
-                  fill="white"
-                  font-size="10"
-                  font-family="monospace"
-                  pointer-events="none"
-                >{formatFileName(timelineItem.fileName)}</text>
-                <rect
-                  x={timelineItem.startOffset * originalPathWidth}
-                  y={0}
-                  width={timelineItem.size*originalPathWidth}
-                  height="80"
-                  fill="rgba(0, 200, 255, 0.15)"
-                  stroke="rgba(0, 200, 255, 0.5)"
-                  stroke-width="0.5"
-                /> -->
               {/each}
             {/if}
           </g>
         </g>
       </g>
+
+      <!-- Fixed label layer (positioned outside scalable content) -->
       {#if timelineItems.length > 0}
         <LabelLayer
           {scaleX}
@@ -615,9 +618,10 @@
           {currentTransform}
           {isDragging}
           {segmentsToMove}
-        ></LabelLayer>
+        />
       {/if}
 
+      <!-- Drop indicator (positioned outside scalable content) -->
       <DropIndicator
         {isDragging}
         {dropIndicatorIndex}
@@ -627,10 +631,11 @@
         {debugShowDropLine}
       />
 
-      <g> </g>
-      <!-- TIMELINE BACKGROUND -->
-      <rect x="0" y={100} {width} height="20" fill={timelineXAxisBg} />
-      <g bind:this={axisGroup} transform={`translate(0, ${height - 20})`} />
+      <!-- Fixed footer region (x-axis) -->
+      <g class="fixed-footer">
+        <rect x="0" y={height - axisHeight} {width} height={axisHeight} fill={timelineXAxisBg} />
+        <g bind:this={axisGroup} transform={`translate(0, ${height - axisHeight})`} />
+      </g>
     </svg>
   </div>
 

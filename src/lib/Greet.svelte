@@ -36,6 +36,10 @@
   let timelineComponent: any;
   let cleanupWaveformService: (() => void) | null = null;
 
+  // Resizable timeline state
+  let timelineHeight = 30; // percentage (vh)
+  let isDraggingDivider = false;
+
   // async function onDrop(event) {
   //   filedropEvent = event;
   //   if (!filedropEvent) return;
@@ -101,6 +105,8 @@
     cleanupWaveformService = initWaveformService();
 
     window.addEventListener('keydown', handleKeyPress);
+    window.addEventListener('mousemove', handleDividerMouseMove);
+    window.addEventListener('mouseup', handleDividerMouseUp);
     // exportState.update(s => {
     //   s.message = undefined;
     //   s.progress = undefined;
@@ -115,8 +121,38 @@
     contextMenuWrapper?.updateTimelineSelection(event.detail);
   }
 
+  // Handle divider dragging for resizable timeline
+  function handleDividerMouseDown(event: MouseEvent) {
+    event.preventDefault();
+    isDraggingDivider = true;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function handleDividerMouseMove(event: MouseEvent) {
+    if (!isDraggingDivider) return;
+
+    const viewportHeight = window.innerHeight;
+    const mouseY = event.clientY;
+
+    // Calculate new timeline height as percentage
+    const newHeightPercent = ((viewportHeight - mouseY) / viewportHeight) * 100;
+
+    // Constrain between 10% and 60%
+    timelineHeight = Math.max(10, Math.min(60, newHeightPercent));
+  }
+
+  function handleDividerMouseUp() {
+    if (!isDraggingDivider) return;
+    isDraggingDivider = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeyPress);
+    window.removeEventListener('mousemove', handleDividerMouseMove);
+    window.removeEventListener('mouseup', handleDividerMouseUp);
     cleanupWaveformService?.();
   });
 </script>
@@ -128,7 +164,7 @@
     <MainDebugToolbar />
   {/if}
   <div
-    style:height="70vh"
+    style:height="{100 - timelineHeight}vh"
     class="content-area flex-grow-1 d-flex justify-content-between flex-column"
   >
     <div class="px-0 d-flex h-fill-available">
@@ -143,11 +179,33 @@
         </div>
       </div>
     </div>
-    <div style:height="30vh">
+
+    <!-- Resizable divider -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      class="timeline-divider"
+      class:dragging={isDraggingDivider}
+      on:mousedown={handleDividerMouseDown}
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize timeline"
+      tabindex="0"
+    >
+      <div class="divider-line"></div>
+      <div class="divider-handle">
+        <svg width="40" height="8" viewBox="0 0 40 8">
+          <rect x="8" y="2" width="24" height="1" fill="currentColor" opacity="0.5" />
+          <rect x="8" y="5" width="24" height="1" fill="currentColor" opacity="0.5" />
+        </svg>
+      </div>
+    </div>
+
+    <div style:height="{timelineHeight}vh" class="timeline-container">
       <PlottedInfo></PlottedInfo>
       <Plotted bind:this={timelineComponent} on:selectionChange={handleTimelineSelectionChange}
       ></Plotted>
-      <Export></Export>
+      <!-- <Export></Export> -->
     </div>
   </div>
 
@@ -168,5 +226,67 @@
   .content-area {
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  .timeline-container {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Resizable divider */
+  .timeline-divider {
+    position: relative;
+    height: 6px;
+    background: var(--bs-border-color);
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: background-color 0.15s ease;
+    z-index: 100;
+  }
+
+  .timeline-divider:hover,
+  .timeline-divider:focus {
+    background: var(--bs-primary);
+    outline: none;
+  }
+
+  .timeline-divider.dragging {
+    background: var(--bs-primary);
+  }
+
+  .divider-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--bs-border-color-translucent);
+  }
+
+  .divider-handle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bs-secondary-color);
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+  }
+
+  .timeline-divider:hover .divider-handle,
+  .timeline-divider:focus .divider-handle,
+  .timeline-divider.dragging .divider-handle {
+    opacity: 1;
+    color: var(--bs-primary-text-emphasis);
+  }
+
+  /* Prevent text selection during drag */
+  .timeline-divider.dragging ~ * {
+    user-select: none;
   }
 </style>
