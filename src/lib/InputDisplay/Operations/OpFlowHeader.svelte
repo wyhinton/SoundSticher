@@ -20,7 +20,6 @@
   let contextMenuItems: ContextMenuItem[] = [];
 
   function handleClick() {
-    // Use operationId for selection
     setSelectedOperationId(operationId);
   }
 

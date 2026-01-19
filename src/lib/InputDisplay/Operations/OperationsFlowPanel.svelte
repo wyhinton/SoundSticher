@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
+  import { appState } from '$lib/state/state.svelte';
+  import { type MergeOp, type OperationDef } from '$lib/state/operation';
   import {
-    type MergeOp,
-    type OperationId,
-    addOperation,
-    deleteAllOperations,
-  } from '$lib/state/operation';
+    dispatch,
+    type AddOperationCommand,
+    type DeleteMultipleOperationsCommand,
+  } from '$lib/state/undo';
 
   import MergeOpFlow from './MergeOpFlow.svelte';
   import { dropzone } from '$lib/attachments/droppable';
@@ -29,6 +29,7 @@
         .map(([id, def]) => {
           // Create a revision key that includes sources data to ensure re-rendering
           const sourcesHash = JSON.stringify(def.sources || []);
+          console.log(id);
           return {
             id,
             name: def.name,
@@ -49,13 +50,41 @@
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const operationName = `merge_${timestamp}`;
 
-    addOperation(operationName, {
-      kind: 'merge',
-      sources: [],
-      outputPath: `output/combined_${timestamp}.wav`,
-      gapSeconds: 0,
-      format: 'wav',
-    });
+    // Use the undo system to add the operation
+    const command: AddOperationCommand = {
+      type: 'add-operation',
+      operation: {
+        name: operationName,
+        kind: 'merge',
+        sources: [],
+        outputPath: `output/combined_${timestamp}.wav`,
+        gapSeconds: 0,
+        format: 'wav',
+      } as Omit<OperationDef, 'id'>,
+    };
+
+    dispatch(command, `Add Merge Operation: ${operationName}`);
+  }
+
+  // Delete all operations using undo system
+  function handleDeleteAllOperations() {
+    if (!confirm('Delete all operations?')) return;
+
+    // Get all current operation IDs
+    const allOperationIds = $appState.operations?.order || [];
+
+    if (allOperationIds.length === 0) {
+      console.log('No operations to delete');
+      return;
+    }
+
+    // Use the undo system to delete all operations
+    const command: DeleteMultipleOperationsCommand = {
+      type: 'delete-multiple-operations',
+      operationIds: allOperationIds,
+    };
+
+    dispatch(command, `Delete All Operations (${allOperationIds.length} operations)`);
   }
 
   // Resize functionality
@@ -120,9 +149,7 @@
     <div class="header-actions">
       <button
         class="btn btn-xs btn-outline-danger"
-        onclick={() => {
-          if (confirm('Delete all operations?')) deleteAllOperations();
-        }}
+        onclick={handleDeleteAllOperations}
         title="Delete all operations"
         aria-label="Delete all operations"
       >

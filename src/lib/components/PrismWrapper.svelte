@@ -16,6 +16,8 @@
   let codeContainer: HTMLElement;
   let highlighted = '';
   let topLevelKeys: string[] = [];
+  let searchTerm: string = '';
+  let searchInput: HTMLInputElement;
 
   // Get toggle states from appState
   $: toggleStates =
@@ -46,9 +48,88 @@
     return filtered;
   })();
 
-  // Convert filtered data to formatted string
+  // Search filtering function
+  function searchFilter(obj: any, term: string): any {
+    if (!term.trim()) return obj;
+
+    const lowerTerm = term.toLowerCase();
+
+    // Helper function to check if a value matches the search term
+    function matchesSearch(value: any, key?: string): boolean {
+      // Check if key name matches
+      if (key && key.toLowerCase().includes(lowerTerm)) {
+        return true;
+      }
+
+      // Check if value matches (convert to string for comparison)
+      if (value !== null && value !== undefined) {
+        const valueStr = String(value).toLowerCase();
+        if (valueStr.includes(lowerTerm)) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // Recursive function to filter nested objects/arrays
+    function filterRecursive(item: any, parentKey?: string): any {
+      if (item === null || item === undefined) {
+        return matchesSearch(item, parentKey) ? item : undefined;
+      }
+
+      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+        return matchesSearch(item, parentKey) ? item : undefined;
+      }
+
+      if (Array.isArray(item)) {
+        const filteredArray = item
+          .map((subItem, index) => filterRecursive(subItem, `[${index}]`))
+          .filter(subItem => subItem !== undefined);
+
+        // Include array if it has matches or if parent key matches
+        return filteredArray.length > 0 || matchesSearch(item, parentKey)
+          ? filteredArray
+          : undefined;
+      }
+
+      if (typeof item === 'object') {
+        const filteredObj: any = {};
+        let hasMatches = false;
+
+        for (const [key, value] of Object.entries(item)) {
+          // Check if this key-value pair should be included
+          if (matchesSearch(value, key)) {
+            filteredObj[key] = value;
+            hasMatches = true;
+          } else {
+            // Recursively filter nested objects
+            const filteredValue = filterRecursive(value, key);
+            if (filteredValue !== undefined) {
+              filteredObj[key] = filteredValue;
+              hasMatches = true;
+            }
+          }
+        }
+
+        // Include object if it has matches or if parent key matches
+        return hasMatches || matchesSearch(item, parentKey) ? filteredObj : undefined;
+      }
+
+      return matchesSearch(item, parentKey) ? item : undefined;
+    }
+
+    return filterRecursive(obj);
+  }
+
+  // Apply search filter to filtered data
+  $: searchFilteredData = searchFilter(filteredData, searchTerm);
+
+  // Convert search filtered data to formatted string
   $: dataString =
-    typeof filteredData === 'string' ? filteredData : JSON.stringify(filteredData, null, 2);
+    typeof searchFilteredData === 'string'
+      ? searchFilteredData
+      : JSON.stringify(searchFilteredData, null, 2);
 
   // Highlight code when data changes
   $: {
@@ -116,6 +197,17 @@
     });
   }
 
+  function clearSearch() {
+    searchTerm = '';
+    searchInput?.focus();
+  }
+
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      clearSearch();
+    }
+  }
+
   function updateContainer() {
     if (codeContainer && highlighted) {
       codeContainer.innerHTML = highlighted;
@@ -133,6 +225,30 @@
 </script>
 
 <div class="prism-wrapper {className}">
+  <!-- Search bar -->
+  <div class="search-container">
+    <div class="search-input-wrapper">
+      <input
+        type="text"
+        bind:value={searchTerm}
+        bind:this={searchInput}
+        placeholder="Search by key name or value..."
+        class="search-input"
+        on:keydown={handleSearchKeydown}
+      />
+      {#if searchTerm}
+        <button class="clear-search-btn" on:click={clearSearch} title="Clear search (Esc)">
+          ✕
+        </button>
+      {/if}
+    </div>
+    {#if searchTerm}
+      <div class="search-info">
+        Searching for: "<span class="search-term">{searchTerm}</span>"
+      </div>
+    {/if}
+  </div>
+
   <!-- Property toggles -->
   {#if topLevelKeys.length > 0}
     <div class="property-toggles">
@@ -169,6 +285,84 @@
 <style>
   .prism-wrapper {
     width: 100%;
+  }
+
+  /* Search bar styles */
+  .search-container {
+    margin-bottom: 8px;
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 6px 10px;
+    padding-right: 30px;
+    font-size: 0.7rem;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .search-input:focus {
+    border-color: rgba(48, 145, 241, 0.6);
+    background-color: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 2px rgba(48, 145, 241, 0.2);
+  }
+
+  .search-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+  }
+
+  .clear-search-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 2px;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+  }
+
+  .clear-search-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .clear-search-btn:active {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .search-info {
+    margin-top: 4px;
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-style: italic;
+  }
+
+  .search-term {
+    color: rgba(48, 145, 241, 0.8);
+    font-weight: 600;
+    font-family: 'Fira Code', monospace;
   }
 
   /* Property toggles */
@@ -312,6 +506,23 @@
 
   /* Responsive adjustments */
   @media (max-width: 768px) {
+    .search-input {
+      font-size: 0.65rem;
+      padding: 5px 8px;
+      padding-right: 26px;
+    }
+
+    .clear-search-btn {
+      width: 16px;
+      height: 16px;
+      font-size: 0.6rem;
+      right: 5px;
+    }
+
+    .search-info {
+      font-size: 0.55rem;
+    }
+
     .toggle-header {
       flex-direction: column;
       align-items: flex-start;

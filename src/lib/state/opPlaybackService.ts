@@ -1,18 +1,19 @@
-// Operation Playback Service
-//
-// Frontend service for the pull-based operation playback system.
-// This provides a clean API for building playback graphs and controlling playback.
-
-// Import removed - using invokeWithPerf instead
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { writable, derived, get, type Readable, type Writable } from 'svelte/store';
 import { logger } from './logging';
 import { invokeWithPerf } from './performance';
+import { buildGraph as buildGraphInternal, buildGraphFromFiles as buildGraphFromFilesInternal } from './playbackGraphUtils';
 
-// ============================================================================
-// TYPES
-// ============================================================================
- 
+/**
+ * Response after building a graph
+ */
+export interface BuildGraphResponse {
+  operationCount: number;
+  totalDurationSeconds: number;
+  sampleRate: number;
+  channels: number;
+}
+
 /**
  * Child input for a merge operation
  */
@@ -50,15 +51,6 @@ export interface AddOpRequest {
 }
 
 /**
- * Response after adding an operation
- */
-export interface AddOpResponse {
-  name: string;
-  opId: number;
-  durationSeconds: number;
-}
-
-/**
  * Request to build a playback graph
  */
 export interface BuildGraphRequest {
@@ -73,13 +65,40 @@ export interface BuildGraphRequest {
 }
 
 /**
- * Response after building a graph
+ * Build graph event types from Rust backend
  */
-export interface BuildGraphResponse {
-  operationCount: number;
-  totalDurationSeconds: number;
-  sampleRate: number;
-  channels: number;
+export interface OpPlaybackBuildGraphEvent {
+  event: 'started' | 'progress' | 'finished';
+  data:
+    | { operationCount: number } // started
+    | {
+        operationName: string;
+        operationIndex: number;
+        totalOperations: number;
+        durationSeconds: number;
+      } // progress
+    | {
+        operationCount: number;
+        totalDurationSeconds: number;
+        sampleRate: number;
+        channels: number;
+      }; // finished
+}
+
+/**
+ * Build graph state for tracking progress
+ */
+export interface BuildGraphState {
+  /** Whether a build is in progress */
+  isBuilding: boolean;
+  /** Current operation being processed */
+  currentOperation?: string;
+  /** Current operation index */
+  currentIndex: number;
+  /** Total number of operations */
+  totalOperations: number;
+  /** Build progress (0.0 to 1.0) */
+  buildProgress: number;
 }
 
 /**
@@ -98,6 +117,8 @@ export interface OpPlaybackState {
   durationSeconds: number;
   /** Whether the graph is loaded */
   hasGraph: boolean;
+  /** Build graph state */
+  buildState: BuildGraphState;
   /** Whether playback should loop */
   loopEnabled: boolean;
   /** Current volume (0.0 to 1.0) */
@@ -120,6 +141,12 @@ const internalState = writable<OpPlaybackState>({
   hasGraph: false,
   loopEnabled: true,
   volume: 1.0,
+  buildState: {
+    isBuilding: false,
+    currentIndex: 0,
+    totalOperations: 0,
+    buildProgress: 0,
+  },
 });
 
 /**
@@ -146,7 +173,7 @@ export const opIsPlaying: Readable<boolean> = derived(internalState, $state => $
 export const opIsPaused: Readable<boolean> = derived(internalState, $state => $state.isPaused);
 
 // ============================================================================
-// EVENT LISTENER
+// EVENT LISTENERS
 // ============================================================================
 
 let progressUnlisten: UnlistenFn | null = null;
@@ -190,6 +217,20 @@ function cleanupProgressListener(): void {
   }
 }
 
+/**
+ * Initialize all event listeners
+ */
+async function initEventListeners(): Promise<void> {
+  await initProgressListener();
+}
+
+/**
+ * Cleanup all event listeners
+ */
+function cleanupEventListeners(): void {
+  cleanupProgressListener();
+}
+
 // ============================================================================
 // API FUNCTIONS
 // ============================================================================
@@ -198,39 +239,13 @@ function cleanupProgressListener(): void {
  * Build a playback graph from operations
  */
 export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
-  logger.opPlayback.info(`Building playback graph with ${request.operations.length} operations`);
-
-  try {
-    const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', { request });
-
-    if (!result.ok) {
-      throw new Error(`Failed to build graph: ${result.error.message}`);
-    }
-
-    const response = result.value;
-
-    internalState.update(s => ({
-      ...s,
-      hasGraph: true,
-      durationSeconds: response.totalDurationSeconds,
-      progress: 0,
-      positionSeconds: 0,
-      isPlaying: false,
-      isPaused: false,
-    }));
-
-    // Ensure progress listener is initialized
-    await initProgressListener();
-
-    logger.opPlayback.success(
-      `Graph built: ${response.operationCount} ops, ${response.totalDurationSeconds.toFixed(2)}s duration`
-    );
-
-    return response;
-  } catch (error) {
-    logger.opPlayback.error('Failed to build graph:', error);
-    throw error;
-  }
+  // Ensure progress listener is initialized
+  await initProgressListener();
+  
+  // Use the utility function with state updater
+  const result = await buildGraphInternal(request, internalState.update);
+  
+  return result;
 }
 
 /**
@@ -246,31 +261,11 @@ export async function buildGraphFromFiles(
     gap?: number; // Gap between files in seconds
   } = {}
 ): Promise<BuildGraphResponse> {
-  const { gap = 0 } = options;
-
-  // For now, we estimate duration from file - in practice the backend will determine actual duration
-  // We'll schedule operations sequentially with estimated 5 second durations as placeholder
-  // The backend will use actual durations
-
-  let currentTime = 0;
-  const operations: AddOpRequest[] = filePaths.map((filePath, index) => {
-    const op: AddOpRequest = {
-      name: `file_${index}`,
-      filePath,
-      startTime: currentTime,
-      gain: 1.0,
-    };
-    // Estimate 5 seconds per file for now - backend will override with actual
-    currentTime += 5 + gap;
-    return op;
-  });
-
-  return buildGraph({
-    operations,
-    sampleRate: options.sampleRate,
-    channels: options.channels,
-    loopPlayback: options.loopPlayback,
-  });
+  // Ensure progress listener is initialized
+  await initProgressListener();
+  
+  // Use the utility function with state updater
+  return buildGraphFromFilesInternal(filePaths, internalState.update, options);
 }
 
 /**
@@ -601,6 +596,8 @@ export const opPlaybackService = {
   // Lifecycle
   initProgressListener,
   cleanupProgressListener,
+  initEventListeners,
+  cleanupEventListeners,
 };
 
 export default opPlaybackService;

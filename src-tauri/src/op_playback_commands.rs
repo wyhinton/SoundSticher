@@ -9,14 +9,42 @@ use crate::playback::op_playback::{
 };
 use crate::playback_ops::merge_playback::MergePlaybackOp;
 use crate::playback_ops::sample_playback::SamplePlayableOp;
-use crate::{emit_logged, log_debug, log_info};
+use crate::{emit_logged, log_debug, log_info, send_channel_event};
 use rodio::{OutputStream, Sink};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
+
+/// Events emitted during playback graph building
+#[derive(Clone, Serialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "event",
+    content = "data"
+)]
+pub enum OpPlaybackBuildGraphEvent {
+    Started {
+        operation_count: usize,
+    },
+    Progress {
+        operation_name: String,
+        operation_index: usize,
+        total_operations: usize,
+        duration_seconds: f64,
+    },
+    Finished {
+        operation_count: usize,
+        total_duration_seconds: f64,
+        sample_rate: u32,
+        channels: u16,
+    },
+}
 
 /// State for operation-based playback
 pub struct OpPlaybackState {
@@ -183,174 +211,212 @@ pub struct BuildGraphResponse {
 
 /// Build a playback graph from the request
 #[tauri::command]
-pub fn op_playback_build_graph(
+pub async fn op_playback_build_graph(
     request: BuildGraphRequest,
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+    on_event: Channel<OpPlaybackBuildGraphEvent>,
 ) -> Result<BuildGraphResponse, String> {
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Playback,
-            "op_build_graph",
-            &format!(
-                "Building playback graph with {} operations",
-                request.operations.len()
-            )
-        );
-    }
+    let state = state.inner().clone();
+    let logging_service = logging_service.inner().clone();
 
-    // Stop any current playback
-    stop_current_playback(&state);
-
-    let sample_rate = request.sample_rate.unwrap_or(44100);
-    let channels = request.channels.unwrap_or(2);
-    let spec = AudioSpec::new(sample_rate, channels);
-
-    // Update state
-    *state.spec.write().unwrap() = spec;
-    state
-        .sample_rate
-        .store(sample_rate as u64, Ordering::Relaxed);
-    state
-        .loop_playback
-        .store(request.loop_playback.unwrap_or(true), Ordering::Relaxed);
-
-    // Create new graph
-    let graph = Arc::new(PlaybackGraph::new(spec));
-    let mut op_id_map = HashMap::new();
-
-    for op_request in &request.operations {
-        // Create the playable operation based on type
-        let op: Box<dyn PlayableOp> = match op_request.op_type {
-            OpType::Sample => {
-                // Get samples (either from file or directly provided)
-                let samples = if let Some(ref samples) = op_request.samples {
-                    samples.clone()
-                } else if let Some(ref file_path) = op_request.file_path {
-                    // Load samples from file
-                    load_audio_samples(file_path, sample_rate, channels)?
-                } else {
-                    return Err(format!(
-                        "Sample operation '{}' must have either 'samples' or 'filePath'",
-                        op_request.name
-                    ));
-                };
-
-                Box::new(SamplePlayableOp::new(samples, spec))
-            }
-            OpType::Merge => {
-                // Build a merge operation from child inputs
-                let inputs = op_request.inputs.as_ref().ok_or_else(|| {
-                    format!(
-                        "Merge operation '{}' must have 'inputs' array",
-                        op_request.name
-                    )
-                })?;
-
-                if inputs.is_empty() {
-                    return Err(format!(
-                        "Merge operation '{}' must have at least one input",
-                        op_request.name
-                    ));
-                }
-
-                let mut builder = MergePlaybackOp::builder(spec);
-
-                for (i, input) in inputs.iter().enumerate() {
-                    // Get samples for this input
-                    let samples = if let Some(ref samples) = input.samples {
-                        samples.clone()
-                    } else if let Some(ref file_path) = input.file_path {
-                        load_audio_samples(file_path, sample_rate, channels)?
-                    } else {
-                        return Err(format!(
-                            "Merge input {} in operation '{}' must have either 'samples' or 'filePath'",
-                            i, op_request.name
-                        ));
-                    };
-
-                    // TODO: Per-input gain could be supported by wrapping in a GainOp
-                    // For now, gain is applied at the merge operation level
-                    let child_op = SamplePlayableOp::new(samples, spec);
-
-                    let offset = SampleTime::from_seconds(input.offset, sample_rate);
-                    builder = builder.add_input(Box::new(child_op), offset);
-                }
-
-                Box::new(builder.build())
-            }
-        };
-
-        let op_duration = op.duration().unwrap_or(SampleTime::new(0));
-        let op_duration_seconds = op_duration.to_seconds(sample_rate);
-
-        // Calculate timeline positions
-        let start = SampleTime::from_seconds(op_request.start_time, sample_rate);
-        let end = if let Some(end_time) = op_request.end_time {
-            SampleTime::from_seconds(end_time, sample_rate)
-        } else {
-            start + op_duration
-        };
-
-        // Schedule the operation
-        let op_id = graph.schedule_op(op, start, end).map_err(|e| {
-            format!(
-                "Failed to schedule operation '{}': {:?}",
-                op_request.name, e
-            )
-        })?;
-
-        // Apply gain if specified
-        if let Some(gain) = op_request.gain {
-            graph.timeline.write().unwrap().set_gain(op_id, gain);
-        }
-
-        op_id_map.insert(op_request.name.clone(), op_id);
-
+    tauri::async_runtime::spawn_blocking(move || {
         if let Ok(logger) = logging_service.lock() {
-            log_debug!(
+            log_info!(
                 logger,
                 LogSystem::Playback,
                 "op_build_graph",
                 &format!(
-                    "Added operation '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s)",
-                    op_request.name,
-                    op_id,
-                    op_request.start_time,
-                    end.to_seconds(sample_rate),
-                    op_duration_seconds
+                    "Building playback graph with {} operations",
+                    request.operations.len()
                 )
             );
         }
-    }
 
-    let total_duration = graph.duration();
-    let total_duration_seconds = total_duration.to_seconds(sample_rate);
-
-    // Store the graph and ID map
-    *state.op_id_map.write().unwrap() = op_id_map;
-    state.set_graph(graph);
-
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Playback,
-            "op_build_graph",
-            &format!(
-                "Graph built successfully: {} operations, {:.2}s total duration",
-                request.operations.len(),
-                total_duration_seconds
-            )
+        // Emit started event
+        send_channel_event!(
+            on_event,
+            OpPlaybackBuildGraphEvent::Started {
+                operation_count: request.operations.len(),
+            }
         );
-    }
 
-    Ok(BuildGraphResponse {
-        operation_count: request.operations.len(),
-        total_duration_seconds,
-        sample_rate,
-        channels,
+        // Stop any current playback
+        stop_current_playback(&state);
+
+        let sample_rate = request.sample_rate.unwrap_or(44100);
+        let channels = request.channels.unwrap_or(2);
+        let spec = AudioSpec::new(sample_rate, channels);
+
+        // Update state
+        *state.spec.write().unwrap() = spec;
+        state
+            .sample_rate
+            .store(sample_rate as u64, Ordering::Relaxed);
+        state
+            .loop_playback
+            .store(request.loop_playback.unwrap_or(true), Ordering::Relaxed);
+
+        // Create new graph
+        let graph = Arc::new(PlaybackGraph::new(spec));
+        let mut op_id_map = HashMap::new();
+
+        for (index, op_request) in request.operations.iter().enumerate() {
+            // Create the playable operation based on type
+            let op: Box<dyn PlayableOp> = match op_request.op_type {
+                OpType::Sample => {
+                    // Get samples (either from file or directly provided)
+                    let samples = if let Some(ref samples) = op_request.samples {
+                        samples.clone()
+                    } else if let Some(ref file_path) = op_request.file_path {
+                        // Load samples from file
+                        load_audio_samples(file_path, sample_rate, channels)?
+                    } else {
+                        return Err(format!(
+                            "Sample operation '{}' must have either 'samples' or 'filePath'",
+                            op_request.name
+                        ));
+                    };
+
+                    Box::new(SamplePlayableOp::new(samples, spec))
+                }
+                OpType::Merge => {
+                    // Build a merge operation from child inputs
+                    let inputs = op_request.inputs.as_ref().ok_or_else(|| {
+                        format!(
+                            "Merge operation '{}' must have 'inputs' array",
+                            op_request.name
+                        )
+                    })?;
+
+                    if inputs.is_empty() {
+                        return Err(format!(
+                            "Merge operation '{}' must have at least one input",
+                            op_request.name
+                        ));
+                    }
+
+                    let mut builder = MergePlaybackOp::builder(spec);
+
+                    for (i, input) in inputs.iter().enumerate() {
+                        // Get samples for this input
+                        let samples = if let Some(ref samples) = input.samples {
+                            samples.clone()
+                        } else if let Some(ref file_path) = input.file_path {
+                            load_audio_samples(file_path, sample_rate, channels)?
+                        } else {
+                            return Err(format!(
+                                "Merge input {} in operation '{}' must have either 'samples' or 'filePath'",
+                                i, op_request.name
+                            ));
+                        };
+
+                        // TODO: Per-input gain could be supported by wrapping in a GainOp
+                        // For now, gain is applied at the merge operation level
+                        let child_op = SamplePlayableOp::new(samples, spec);
+
+                        let offset = SampleTime::from_seconds(input.offset, sample_rate);
+                        builder = builder.add_input(Box::new(child_op), offset);
+                    }
+
+                    Box::new(builder.build())
+                }
+            };
+
+            let op_duration = op.duration().unwrap_or(SampleTime::new(0));
+            let op_duration_seconds = op_duration.to_seconds(sample_rate);
+
+            // Calculate timeline positions
+            let start = SampleTime::from_seconds(op_request.start_time, sample_rate);
+            let end = if let Some(end_time) = op_request.end_time {
+                SampleTime::from_seconds(end_time, sample_rate)
+            } else {
+                start + op_duration
+            };
+
+            // Schedule the operation
+            let op_id = graph.schedule_op(op, start, end).map_err(|e| {
+                format!(
+                    "Failed to schedule operation '{}': {:?}",
+                    op_request.name, e
+                )
+            })?;
+
+            // Apply gain if specified
+            if let Some(gain) = op_request.gain {
+                graph.timeline.write().unwrap().set_gain(op_id, gain);
+            }
+
+            op_id_map.insert(op_request.name.clone(), op_id);
+
+            // Emit progress event
+            send_channel_event!(
+                on_event,
+                OpPlaybackBuildGraphEvent::Progress {
+                    operation_name: op_request.name.clone(),
+                    operation_index: index,
+                    total_operations: request.operations.len(),
+                    duration_seconds: op_duration_seconds,
+                }
+            );
+
+            if let Ok(logger) = logging_service.lock() {
+                log_debug!(
+                    logger,
+                    LogSystem::Playback,
+                    "op_build_graph",
+                    &format!(
+                        "Added operation '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s)",
+                        op_request.name,
+                        op_id,
+                        op_request.start_time,
+                        end.to_seconds(sample_rate),
+                        op_duration_seconds
+                    )
+                );
+            }
+        }
+
+        let total_duration = graph.duration();
+        let total_duration_seconds = total_duration.to_seconds(sample_rate);
+
+        // Store the graph and ID map
+        *state.op_id_map.write().unwrap() = op_id_map;
+        state.set_graph(graph);
+
+        // Emit finished event
+        send_channel_event!(
+            on_event,
+            OpPlaybackBuildGraphEvent::Finished {
+                operation_count: request.operations.len(),
+                total_duration_seconds,
+                sample_rate,
+                channels,
+            }
+        );
+
+        if let Ok(logger) = logging_service.lock() {
+            log_info!(
+                logger,
+                LogSystem::Playback,
+                "op_build_graph",
+                &format!(
+                    "Graph built successfully: {} operations, {:.2}s total duration",
+                    request.operations.len(),
+                    total_duration_seconds
+                )
+            );
+        }
+
+        Ok(BuildGraphResponse {
+            operation_count: request.operations.len(),
+            total_duration_seconds,
+            sample_rate,
+            channels,
+        })
     })
+    .await
+    .map_err(|e| format!("Failed to execute build graph task: {}", e))?
 }
 
 /// Start playback of the current graph
