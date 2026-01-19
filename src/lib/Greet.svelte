@@ -23,6 +23,7 @@
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { opPlaybackService } from './state/opPlaybackService';
   import { undo, redo, canUndo, canRedo } from './state/undo';
+  import { TIMELINE_RESIZE } from './config/timelineConfig';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -36,9 +37,22 @@
   let timelineComponent: any;
   let cleanupWaveformService: (() => void) | null = null;
 
-  // Resizable timeline state
-  let timelineHeight = 30; // percentage (vh)
+  // Resizable timeline state - stored in appState.uiSettings
   let isDraggingDivider = false;
+
+  // Reactive timeline height from appState
+  $: timelineHeight = $appState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
+
+  // Update appState when timeline height changes
+  function setTimelineHeight(height: number) {
+    appState.update(s => ({
+      ...s,
+      uiSettings: {
+        ...s.uiSettings,
+        timelineHeight: height,
+      },
+    }));
+  }
 
   // async function onDrop(event) {
   //   filedropEvent = event;
@@ -138,8 +152,12 @@
     // Calculate new timeline height as percentage
     const newHeightPercent = ((viewportHeight - mouseY) / viewportHeight) * 100;
 
-    // Constrain between 10% and 60%
-    timelineHeight = Math.max(10, Math.min(60, newHeightPercent));
+    // Constrain using config values
+    const constrainedHeight = Math.max(
+      TIMELINE_RESIZE.MIN_HEIGHT_PERCENT,
+      Math.min(TIMELINE_RESIZE.MAX_HEIGHT_PERCENT, newHeightPercent)
+    );
+    setTimelineHeight(constrainedHeight);
   }
 
   function handleDividerMouseUp() {
@@ -179,8 +197,7 @@
         </div>
       </div>
     </div>
-
-    <!-- Resizable divider -->
+    <!-- Resizable divider - invisible, just changes cursor on hover -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
@@ -191,15 +208,7 @@
       aria-orientation="horizontal"
       aria-label="Resize timeline"
       tabindex="0"
-    >
-      <div class="divider-line"></div>
-      <div class="divider-handle">
-        <svg width="40" height="8" viewBox="0 0 40 8">
-          <rect x="8" y="2" width="24" height="1" fill="currentColor" opacity="0.5" />
-          <rect x="8" y="5" width="24" height="1" fill="currentColor" opacity="0.5" />
-        </svg>
-      </div>
-    </div>
+    ></div>
 
     <div style:height="{timelineHeight}vh" class="timeline-container">
       <PlottedInfo></PlottedInfo>
@@ -256,33 +265,6 @@
 
   .timeline-divider.dragging {
     background: var(--bs-primary);
-  }
-
-  .divider-line {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: var(--bs-border-color-translucent);
-  }
-
-  .divider-handle {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--bs-secondary-color);
-    opacity: 0.6;
-    transition: opacity 0.15s ease;
-    pointer-events: none;
-  }
-
-  .timeline-divider:hover .divider-handle,
-  .timeline-divider:focus .divider-handle,
-  .timeline-divider.dragging .divider-handle {
-    opacity: 1;
-    color: var(--bs-primary-text-emphasis);
   }
 
   /* Prevent text selection during drag */

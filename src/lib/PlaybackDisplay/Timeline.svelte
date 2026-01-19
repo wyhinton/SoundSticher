@@ -46,6 +46,7 @@
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
   import { removeOperationSourcesFromCurrentOpCommand, type OperationId } from '$lib/state/undo';
+  import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
 
   const dispatch = createEventDispatcher();
 
@@ -54,19 +55,19 @@
   let axisGroup: SVGGElement;
   let pathGroup: SVGGElement;
 
-  // SVG Layout constants
-  const topPadding = 20;
-  const axisHeight = 20;
-  const baseContentHeight = 80; // Design height for waveform content
+  // SVG Layout constants from centralized config
+  const topPadding = TIMELINE_LAYOUT.TOP_PADDING;
+  const axisHeight = TIMELINE_LAYOUT.AXIS_HEIGHT;
+  const baseContentHeight = TIMELINE_LAYOUT.BASE_CONTENT_HEIGHT;
 
   // Reactive dimensions - now tracks both width and height
   let width = 0;
-  let height = 120; // Default height, will be updated by ResizeObserver
+  let height: number = TIMELINE_LAYOUT.DEFAULT_HEIGHT; // Default height, will be updated by ResizeObserver
 
   // Computed scalable region dimensions
   $: contentHeight = height - topPadding - axisHeight;
   $: contentScaleY = contentHeight / baseContentHeight;
-  $: tempYCenter = baseContentHeight / 2; // Center line in design space (40px of 80px)
+  $: tempYCenter = TIMELINE_DERIVED.CENTER_Y; // Center line in design space
 
   // D3 Manager instance
   let d3Manager: D3TimelineManager | null = null;
@@ -392,7 +393,7 @@
 
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
-      height = container.clientHeight || 120; // Fallback to default if height is 0
+      height = container.clientHeight || TIMELINE_LAYOUT.DEFAULT_HEIGHT; // Fallback to default if height is 0
     });
 
     resizeObserver.observe(container);
@@ -638,26 +639,25 @@
       </g>
     </svg>
   </div>
-
-  <!-- Debug Panel -->
-  {#if $timelineDebugMode}
-    <TimelineDebugPanel
-      {isDragging}
-      {draggedSegmentIndex}
-      {dropIndicatorIndex}
-      {dropIndicatorX}
-      {width}
-      {scaleX}
-      {playHeadPosition}
-      {currentTransform}
-      {timelineItems}
-      {originalPathWidth}
-      {selectedSegments}
-      {lastSelectedIndex}
-      {segmentsToMove}
-    />
-  {/if}
 </div>
+<!-- Debug Panel -->
+{#if $timelineDebugMode}
+  <TimelineDebugPanel
+    {isDragging}
+    {draggedSegmentIndex}
+    {dropIndicatorIndex}
+    {dropIndicatorX}
+    {width}
+    {scaleX}
+    {playHeadPosition}
+    {currentTransform}
+    {timelineItems}
+    {originalPathWidth}
+    {selectedSegments}
+    {lastSelectedIndex}
+    {segmentsToMove}
+  />
+{/if}
 
 <style>
   .svg-container {
