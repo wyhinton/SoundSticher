@@ -236,7 +236,7 @@
   .merge-op-flow {
     background: var(--panel-bg, #1e1e2e);
     overflow: hidden;
-    min-width: 480px;
+    /* min-width: 480px; */
     height: 100%;
     display: flex;
     flex-direction: column;

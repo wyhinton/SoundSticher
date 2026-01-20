@@ -140,8 +140,8 @@
   </div>
 
   {#if isExpanded}
-    <div class="panel-content" style:height={200}>
-      <div class="flow-container">
+    <Splitpanes theme="modern-them">
+      <Pane minSize={90}>
         {#if mergeOperations.length > 0}
           <!-- Show MergeOpFlow components for each merge operation in splitpanes with rows -->
           <div
@@ -204,24 +204,30 @@
             </button>
           </div>
         {/if}
-      </div>
+      </Pane>
 
-      <div class="operation-creation-panel">
-        <div
-          class="creation-header"
-          style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
-        >
-          <h4>Add Operations</h4>
+      <Pane minSize={10} maxSize={10}>
+        <div class="operation-creation-panel">
+          <div
+            class="creation-header"
+            style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
+          >
+            <h4>Add Operations</h4>
+          </div>
+          <div class="operation-buttons">
+            <button
+              class="operation-add-btn"
+              onclick={addMergeOperation}
+              title="Add merge operation"
+            >
+              <span class="operation-icon">🔗</span>
+              <span class="operation-label">Merge</span>
+              <i class="fa fa-plus"></i>
+            </button>
+          </div>
         </div>
-        <div class="operation-buttons">
-          <button class="operation-add-btn" onclick={addMergeOperation} title="Add merge operation">
-            <span class="operation-icon">🔗</span>
-            <span class="operation-label">Merge</span>
-            <i class="fa fa-plus"></i>
-          </button>
-        </div>
-      </div>
-    </div>
+      </Pane>
+    </Splitpanes>
   {/if}
 </div>
 
@@ -313,25 +319,12 @@
     line-height: 1.2;
   }
 
-  .panel-content {
-    display: flex;
-    width: 100%;
-    flex: 1;
-  }
-
-  .flow-container {
-    flex: 1;
-    position: relative;
-    border-right: 1px solid var(--border-color, #313244);
-  }
-
   .merge-flows-container {
     height: 100%;
     width: 100%;
   }
 
   .operation-creation-panel {
-    width: 200px;
     background: var(--panel-bg, #1e1e2e);
     border-left: 1px solid var(--border-color, #313244);
     display: flex;
