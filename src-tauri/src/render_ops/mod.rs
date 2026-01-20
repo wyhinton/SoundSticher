@@ -5,4 +5,5 @@ pub mod split_render;
 pub mod trait_def;
 
 pub use merge_render::*;
+pub use sample_render::*;
 pub use trait_def::*;

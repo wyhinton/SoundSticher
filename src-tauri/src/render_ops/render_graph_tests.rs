@@ -9,7 +9,8 @@ use crate::error::Error;
 use crate::graph::OpId;
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
-use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation};
+use crate::playback::op_playback::AudioSpec;
+use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
 use serde::{Deserialize, Serialize};
 
 /// Test the scheduler by submitting multiple tasks and observing execution
@@ -259,39 +260,100 @@ pub async fn test_operation_with_params(
                 );
             }
 
-            // Create dummy audio artifacts for testing
-            let audio1 = AudioArtifact {
-                path: std::path::PathBuf::from("test1.wav"),
-                format: "wav".to_string(),
-                sample_rate,
-                channels: 2,
-                duration: 5.0,
-                metadata: HashMap::new(),
+            // Create a unique work directory for this operation
+            let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+            let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
+            
+            // Check if child operations are provided
+            let input_artifacts = if let Some(child_ops) = params.parameters.get("child_operations") {
+                if let Some(ops_array) = child_ops.as_array() {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("Executing {} child operations for merge", ops_array.len())
+                        );
+                    }
+
+                    let mut artifacts = Vec::new();
+                    
+                    // Execute each child operation
+                    for (idx, child_op_data) in ops_array.iter().enumerate() {
+                        let op_type = child_op_data.get("type")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| Error::Io(std::io::Error::other(
+                                format!("Child operation {} missing 'type' field", idx)
+                            )))?;
+                        
+                        let op_params = child_op_data.get("parameters")
+                            .cloned()
+                            .unwrap_or(serde_json::json!({}));
+                        
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!("Executing child operation {}: {}", idx + 1, op_type)
+                            );
+                        }
+                        
+                        // Execute the child operation based on its type
+                        let artifact = execute_child_operation(
+                            op_type,
+                            op_params,
+                            &base_artifacts_dir,
+                            &mut op_map,
+                            sample_rate,
+                        )?;
+                        
+                        artifacts.push(artifact);
+                    }
+                    
+                    artifacts
+                } else {
+                    return Err(Error::Io(std::io::Error::other(
+                        "child_operations must be an array"
+                    )));
+                }
+            } else {
+                // Fallback: Create dummy audio artifacts for testing if no child ops
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        "No child operations provided, using dummy test artifacts"
+                    );
+                }
+                
+                vec![
+                    AudioArtifact {
+                        path: std::path::PathBuf::from("test1.wav"),
+                        format: "wav".to_string(),
+                        sample_rate,
+                        channels: 2,
+                        duration: 5.0,
+                        metadata: HashMap::new(),
+                    },
+                    AudioArtifact {
+                        path: std::path::PathBuf::from("test2.wav"),
+                        format: "wav".to_string(),
+                        sample_rate,
+                        channels: 2,
+                        duration: 3.0,
+                        metadata: HashMap::new(),
+                    },
+                ]
             };
 
-            let audio2 = AudioArtifact {
-                path: std::path::PathBuf::from("test2.wav"),
-                format: "wav".to_string(),
-                sample_rate,
-                channels: 2,
-                duration: 3.0,
-                metadata: HashMap::new(),
-            };
-
-            // Create inputs
+            // Create inputs for merge operation
             let mut inputs = HashMap::new();
             inputs.insert(
                 "inputs".to_string(),
-                Artifact::AudioList(vec![audio1, audio2]),
+                Artifact::AudioList(input_artifacts.clone()),
             );
 
-            // Create operation context
-            let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
             let op_id = op_map.insert(());
-
-            // Create a unique work directory for this operation
-            let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
-            let work_dir = base_artifacts_dir.join(format!("test_op_params_{:?}", op_id));
+            let work_dir = base_artifacts_dir.join(format!("test_op_merge_{:?}", op_id));
 
             // Ensure the work directory exists
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
@@ -312,25 +374,26 @@ pub async fn test_operation_with_params(
                 progress_callback: None,
             };
 
-            // Execute the operation
+            // Execute the merge operation
             match operation.execute(context) {
                 Ok(result) => {
                     if let Ok(logger) = logging_service.lock() {
                         log_info!(
                             logger,
                             LogSystem::Combine,
-                            "Operation with custom parameters executed successfully"
+                            "Merge operation with child operations executed successfully"
                         );
                     }
 
                     // Return a detailed message with the parameters used
                     Ok(format!(
-                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⚙️ Parameters:\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
+                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: {} audio files\n⚙️ Parameters:\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
                         operation_name,
                         match result {
                             Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
                             _ => "Processed successfully".to_string()
                         },
+                        input_artifacts.len(),
                         output_format,
                         sample_rate,
                         bit_depth,
@@ -343,7 +406,7 @@ pub async fn test_operation_with_params(
                         log_info!(
                             logger,
                             LogSystem::Combine,
-                            &format!("Operation with custom parameters failed: {:?}", e)
+                            &format!("Merge operation with child operations failed: {:?}", e)
                         );
                     }
                     Err(Error::Io(std::io::Error::other(format!(
@@ -581,5 +644,75 @@ pub async fn test_operation_with_params(
                 operation_name
             ))
         }
+    }
+}
+
+/// Helper function to execute a child operation and return its artifact
+fn execute_child_operation(
+    op_type: &str,
+    parameters: serde_json::Value,
+    base_artifacts_dir: &std::path::Path,
+    op_map: &mut slotmap::SlotMap<OpId, ()>,
+    default_sample_rate: u32,
+) -> Result<AudioArtifact, Error> {
+    match op_type {
+        "sample_load" | "load_audio" | "audio_file" => {
+            // Create a SampleOpRender operation
+            let operation = SampleOpRender::new(
+                Vec::new(), // Empty samples - will be loaded from file
+                AudioSpec {
+                    sample_rate: default_sample_rate,
+                    channels: 2,
+                },
+            );
+
+            // Validate parameters
+            operation.validate_parameters(&parameters).map_err(|e| {
+                Error::Io(std::io::Error::other(format!(
+                    "Parameter validation failed for {}: {:?}",
+                    op_type, e
+                )))
+            })?;
+
+            // Create operation context
+            let op_id = op_map.insert(());
+            let work_dir = base_artifacts_dir.join(format!("child_op_{:?}", op_id));
+            
+            if let Err(e) = std::fs::create_dir_all(&work_dir) {
+                return Err(Error::Io(std::io::Error::other(format!(
+                    "Failed to create work directory for child op: {}",
+                    e
+                ))));
+            }
+
+            let context = OperationContext {
+                op_id,
+                work_dir,
+                inputs: HashMap::new(), // No inputs for load operations
+                parameters,
+                progress_callback: None,
+            };
+
+            // Execute the operation
+            let artifact = operation.execute(context).map_err(|e| {
+                Error::Io(std::io::Error::other(format!(
+                    "Child operation {} failed: {:?}",
+                    op_type, e
+                )))
+            })?;
+
+            // Extract AudioArtifact from result
+            match artifact {
+                Artifact::Audio(audio) => Ok(audio),
+                _ => Err(Error::Io(std::io::Error::other(
+                    "Child operation did not return an audio artifact"
+                ))),
+            }
+        }
+        // Add more operation types as they are implemented
+        _ => Err(Error::Io(std::io::Error::other(format!(
+            "Unsupported child operation type: {}. Supported types: sample_load, load_audio, audio_file",
+            op_type
+        )))),
     }
 }
