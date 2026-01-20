@@ -644,11 +644,6 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
             });
 
             currentOffset += duration;
-
-            // Add gap if specified in MergeOp
-            if (op.gapSeconds > 0) {
-              currentOffset += op.gapSeconds;
-            }
           }
         } else if (sourceOp.kind === 'merge') {
           // For nested merge operations, recursively convert them
@@ -656,11 +651,6 @@ async function buildPlaybackGraphFromMergeOp(): Promise<void> {
 
           result.push(...nestedResult.operations);
           currentOffset += nestedResult.totalDuration;
-
-          // Add gap if specified in MergeOp
-          if (op.gapSeconds > 0) {
-            currentOffset += op.gapSeconds;
-          }
         }
       }
 

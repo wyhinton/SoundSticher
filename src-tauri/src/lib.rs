@@ -31,7 +31,7 @@ mod looping_samples_buffer;
 mod macros;
 mod metadata;
 mod op_playback_commands;
-mod ops;
+mod render_ops;
 mod playback;
 mod playback_ops;
 mod sample_playback;
@@ -243,7 +243,7 @@ pub fn run() {
                 use crate::artifacts::ArtifactStorage;
                 use crate::cook::{CookScheduler, SchedulerConfig};
                 use crate::graph::{InvalidationManager, OperationNodeManager};
-                use crate::ops::{MergeOpRender, OperationRegistry};
+                use crate::render_ops::{MergeOpRender, OperationRegistry};
 
                 // Create operation registry and register operations
                 let mut operation_registry = OperationRegistry::new();
@@ -358,7 +358,6 @@ pub fn run() {
             get_logging_config,
             get_metadata,
             graph_tests::test_operation_with_params,
-            graph_tests::test_operation,
             graph_tests::test_scheduler,
             op_playback_commands::op_playback_build_graph,
             op_playback_commands::op_playback_clear_graph,

@@ -71,7 +71,6 @@ export interface MergeOp extends BaseOperation {
   kind: 'merge';
   sources: OperationSource[];
   outputPath: string;
-  gapSeconds: number;
   format: string;
 }
 
@@ -137,10 +136,10 @@ export interface OperationInfo {
 export const OperationInfoDictionary: Record<OperationDef['kind'], OperationInfo> = {
   merge: {
     icon: '➕',
-    label: 'Combine',
+    label: 'Merge',
     description: 'Concatenate multiple audio files into a single output file',
     category: 'render',
-    params: ['source', 'outputPath', 'gapSeconds', 'crossfadeSeconds', 'format'],
+    params: ['source', 'outputPath', 'format'],
   },
   pipeline: {
     icon: '🔀',

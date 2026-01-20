@@ -32,28 +32,6 @@
     }
   }
 
-  async function handleTestOperation() {
-    if (!selectedOperationId || !selectedOperation) return;
-
-    isTestingOperation = true;
-    testResult = null;
-
-    try {
-      const result = await invokeWithPerf<string>('test_operation', {
-        operationName: selectedOperation.kind,
-      });
-
-      console.log('Operation test result:', result);
-      testResult = { type: 'success', message: result };
-    } catch (error) {
-      console.log(error);
-      console.error('Error testing operation:', error);
-      testResult = { type: 'error', message: JSON.stringify(error) };
-    } finally {
-      isTestingOperation = false;
-    }
-  }
-
   async function handleTestWithParams() {
     if (!selectedOperationId || !selectedOperation) return;
 

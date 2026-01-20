@@ -78,7 +78,6 @@ const opId = createOperation('My Merge', {
   kind: 'merge',
   sources: [...],
   outputPath: '...',
-  gapSeconds: 0,
   format: 'wav'
 }, 'frozen'); // Optional: override default policy
 ```
@@ -191,7 +190,6 @@ const mergeId = createOperation('Master Mix', {
   kind: 'merge',
   sources: [...100sources],
   outputPath: './output/master.wav',
-  gapSeconds: 0,
   format: 'wav'
 });
 

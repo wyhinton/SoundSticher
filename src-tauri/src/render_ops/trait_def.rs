@@ -94,7 +94,7 @@ impl OperationContext {
 }
 
 /// Trait that all operations must implement
-pub trait Operation: Send + Sync + std::fmt::Debug {
+pub trait RenderOperation: Send + Sync + std::fmt::Debug {
     /// Get the operation name/type
     fn name(&self) -> &str;
 
@@ -171,7 +171,7 @@ impl std::fmt::Display for OperationCategory {
 /// Registry for operation types
 #[derive(Debug)]
 pub struct OperationRegistry {
-    operations: HashMap<String, Box<dyn Operation>>,
+    operations: HashMap<String, Box<dyn RenderOperation>>,
 }
 
 impl OperationRegistry {
@@ -184,14 +184,14 @@ impl OperationRegistry {
     /// Register a new operation type
     pub fn register<T>(&mut self, operation: T)
     where
-        T: Operation + 'static,
+        T: RenderOperation + 'static,
     {
         let name = operation.name().to_string();
         self.operations.insert(name, Box::new(operation));
     }
 
     /// Get an operation by name
-    pub fn get(&self, name: &str) -> Option<&dyn Operation> {
+    pub fn get(&self, name: &str) -> Option<&dyn RenderOperation> {
         self.operations.get(name).map(|op| op.as_ref())
     }
 
@@ -201,7 +201,7 @@ impl OperationRegistry {
     }
 
     /// Get operations by category
-    pub fn get_by_category(&self, category: OperationCategory) -> Vec<&dyn Operation> {
+    pub fn get_by_category(&self, category: OperationCategory) -> Vec<&dyn RenderOperation> {
         self.operations
             .values()
             .filter(|op| op.category() == category)

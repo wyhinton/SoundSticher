@@ -1,7 +1,9 @@
 // Split operation implementation
 
 use crate::artifacts::{Artifact, AudioArtifact};
-use crate::ops::{Operation, OperationCategory, OperationContext, OperationError, OperationResult};
+use crate::render_ops::{
+    OperationCategory, OperationContext, OperationError, OperationResult, RenderOperation,
+};
 
 #[derive(Debug)]
 pub struct SplitOperation {
@@ -24,7 +26,7 @@ impl SplitOperation {
     }
 }
 
-impl Operation for SplitOperation {
+impl RenderOperation for SplitOperation {
     fn name(&self) -> &str {
         "split"
     }

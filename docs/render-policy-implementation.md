@@ -135,7 +135,6 @@ const mergeId = createOperation(
     kind: 'merge',
     sources: [...100files],
     outputPath: './master.wav',
-    gapSeconds: 0,
     format: 'wav'
   },
   'frozen' // Pre-frozen on creation

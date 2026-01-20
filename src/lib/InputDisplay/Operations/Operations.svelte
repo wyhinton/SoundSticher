@@ -14,24 +14,7 @@
 
   // Parameter schemas for different operation types
   const parameterSchemas: Record<string, any> = {
-    combine: {
-      crossfade_ms: {
-        type: 'number',
-        min: 0,
-        max: 5000,
-        default: 100,
-        label: 'Crossfade (ms)',
-        step: 10,
-      },
-      gap_seconds: {
-        type: 'number',
-        min: 0,
-        max: 60,
-        default: 0,
-        step: 0.1,
-        label: 'Gap (seconds)',
-      },
-      normalize: { type: 'boolean', default: false, label: 'Normalize Audio' },
+    merge: {
       sample_rate: {
         type: 'select',
         options: [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],

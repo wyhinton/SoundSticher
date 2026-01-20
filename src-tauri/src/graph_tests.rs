@@ -9,7 +9,7 @@ use crate::error::Error;
 use crate::graph::OpId;
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::{MergeOpRender, Operation, OperationContext};
+use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation};
 use serde::{Deserialize, Serialize};
 
 /// Test the scheduler by submitting multiple tasks and observing execution
@@ -19,11 +19,7 @@ pub async fn test_scheduler(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
     if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Cook,
-            "Starting scheduler test"
-        );
+        log_info!(logger, LogSystem::Cook, "Starting scheduler test");
     }
 
     // Create test tasks
@@ -36,7 +32,7 @@ pub async fn test_scheduler(
             Ok(s) => s,
             Err(_) => {
                 return Err(Error::Io(std::io::Error::other(
-                    "Failed to acquire scheduler lock"
+                    "Failed to acquire scheduler lock",
                 )));
             }
         };
@@ -45,7 +41,7 @@ pub async fn test_scheduler(
         for i in 0..3 {
             let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
             let op_id = op_map.insert(());
-            
+
             let task = CookTask {
                 op_id,
                 operation_type: "merge".to_string(),
@@ -73,7 +69,7 @@ pub async fn test_scheduler(
             }
         }
     } // Lock is automatically dropped here
-    
+
     // Wait a moment for tasks to potentially execute
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
@@ -83,7 +79,7 @@ pub async fn test_scheduler(
             Ok(s) => s,
             Err(_) => {
                 return Err(Error::Io(std::io::Error::other(
-                    "Failed to acquire scheduler lock for stats"
+                    "Failed to acquire scheduler lock for stats",
                 )));
             }
         };
@@ -93,11 +89,7 @@ pub async fn test_scheduler(
     let elapsed = start_time.elapsed();
 
     if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Cook,
-            "Scheduler test completed"
-        );
+        log_info!(logger, LogSystem::Cook, "Scheduler test completed");
     }
 
     let result = format!(
@@ -126,158 +118,24 @@ pub async fn test_scheduler(
     Ok(result)
 }
 
-/// Test individual operations by executing them directly
-#[tauri::command]
-pub async fn test_operation(
-    operation_name: String,
-    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<String, Error> {
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Combine,
-            &format!("Testing operation: {}", operation_name)
-        );
-    }
-
-    // For basic testing, we'll simulate operations
-    match operation_name.as_str() {
-        "combine_active" | "combine" | "merge" => {
-            // Create a test merge operation
-            let operation = MergeOpRender::new();
-            
-            // Create dummy audio artifacts for testing
-            let audio1 = AudioArtifact {
-                path: std::path::PathBuf::from("test1.wav"),
-                format: "wav".to_string(),
-                sample_rate: 44100,
-                channels: 2,
-                duration: 5.0,
-                metadata: HashMap::new(),
-            };
-            
-            let audio2 = AudioArtifact {
-                path: std::path::PathBuf::from("test2.wav"),
-                format: "wav".to_string(),
-                sample_rate: 44100,
-                channels: 2,
-                duration: 3.0,
-                metadata: HashMap::new(),
-            };
-
-            // Create inputs
-            let mut inputs = HashMap::new();
-            inputs.insert(
-                "inputs".to_string(),
-                Artifact::AudioList(vec![audio1, audio2])
-            );
-
-            // Create parameters
-            let parameters = serde_json::json!({});
-
-            // Create operation context
-            let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
-            let op_id = op_map.insert(());
-            
-            // Create a unique work directory for this operation
-            let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
-            let work_dir = base_artifacts_dir.join(format!("test_op_{:?}", op_id));
-            
-            // Ensure the work directory exists
-            if let Err(e) = std::fs::create_dir_all(&work_dir) {
-                return Err(Error::Io(std::io::Error::other(
-                    format!("Failed to create work directory: {}", e)
-                )));
-            }
-            
-            // Store work_dir display string before moving work_dir
-            let work_dir_display = work_dir.display().to_string();
-            
-            let context = OperationContext {
-                op_id,
-                work_dir,
-                inputs,
-                parameters,
-                progress_callback: None,
-            };
-
-            // Execute the operation
-            match operation.execute(context) {
-                Ok(result) => {
-                    if let Ok(logger) = logging_service.lock() {
-                        log_info!(
-                            logger,
-                            LogSystem::Combine,
-                            "Operation executed successfully"
-                        );
-                    }
-                    
-                    // Return a more user-friendly message
-                    Ok(format!(
-                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⏱️ Estimated Duration: 8.0 seconds\n📁 Work Directory: {}",
-                        operation_name,
-                        match result {
-                            Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
-                            _ => "Processed successfully".to_string()
-                        },
-                        work_dir_display
-                    ))
-                }
-                Err(e) => {
-                    if let Ok(logger) = logging_service.lock() {
-                        log_info!(
-                            logger,
-                            LogSystem::Combine,
-                            &format!("Operation failed: {:?}", e)
-                        );
-                    }
-                    Err(Error::Io(std::io::Error::other(
-                        format!("Operation failed: {:?}", e)
-                    )))
-                }
-            }
-        }
-        "master_pipeline" => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    "Simulating pipeline operation"
-                );
-            }
-            Ok(format!(
-                "✅ Pipeline operation '{}' simulated successfully!\n\n🔗 This would run a sequence of operations:\n  1. combine_active\n  2. normalize\n  3. export\n\n⚠️ Note: This is a simulation - actual pipeline execution not yet implemented.",
-                operation_name
-            ))
-        }
-        _ => {
-            Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("❌ Unknown operation: {}\n\n💡 Available operations:\n  • combine_active\n  • master_pipeline", operation_name)
-            )))
-        }
-    }
-}
-
 /// Parameters for testing operations with custom values
 /// This struct accepts any JSON parameters for different operation types
-/// 
+///
 /// Supported operation types and their parameters:
-/// 
+///
 /// **merge/combine/combine_active:**
-/// - gap_seconds: f64 (gap between tracks, default: 0.0)
 /// - output_format: string ("wav", "mp3", "flac", default: "wav")
 /// - sample_rate: u32 (Hz, default: 44100)
 /// - bit_depth: u32 (bits, default: 16)
-/// 
+///
 /// **master_pipeline:**
 /// - operations: array of strings (pipeline steps, default: ["combine", "normalize", "export"])
 /// - parallel_execution: bool (run steps in parallel when possible, default: false)
-/// 
+///
 /// **normalize:**
 /// - target_db: f64 (target level in dB, default: -12.0)
 /// - preserve_peaks: bool (preserve peak levels, default: true)
-/// 
+///
 /// **export:**
 /// - format: string (output format, default: "wav")
 /// - quality: string ("low", "medium", "high", default: "high")
@@ -294,7 +152,6 @@ impl Default for TestOperationParams {
     fn default() -> Self {
         Self {
             parameters: serde_json::json!({
-                "gap_seconds": 0.0,
                 "output_format": "wav",
                 "sample_rate": 44100,
                 "bit_depth": 16
@@ -305,32 +162,32 @@ impl Default for TestOperationParams {
 }
 
 /// Test individual operations with custom parameters from the UI
-/// 
+///
 /// TODO: BACKEND VALIDATION IMPLEMENTATION NEEDED
 /// Currently, parameter validation is handled primarily on the frontend side.
 /// Future work should implement comprehensive backend validation including:
-/// 
+///
 /// 1. **Parameter Type Validation:**
 ///    - Ensure numeric parameters are within valid ranges
 ///    - Validate string parameters against allowed values (e.g., formats)
 ///    - Check required vs optional parameters per operation type
-/// 
+///
 /// 2. **Operation-Specific Validation:**
 ///    - merge/combine: validate crossfade_ms >= 0, sample_rate > 0, etc.
 ///    - pipeline: validate operation steps exist and can be chained
 ///    - normalize: validate target_db is reasonable (e.g., -60 to 0 dB)
 ///    - export: validate output paths, format compatibility
-/// 
+///
 /// 3. **Cross-Parameter Validation:**
 ///    - Ensure parameter combinations are valid
 ///    - Check for conflicting settings
 ///    - Validate resource requirements (file paths, memory usage, etc.)
-/// 
+///
 /// 4. **Schema-Based Validation:**
 ///    - Define JSON schemas for each operation type
 ///    - Use a validation library like `jsonschema` or `serde_valid`
 ///    - Provide detailed error messages for invalid parameters
-/// 
+///
 /// 5. **Security Validation:**
 ///    - Sanitize file paths to prevent directory traversal
 ///    - Validate parameter sizes to prevent DoS attacks
@@ -345,7 +202,10 @@ pub async fn test_operation_with_params(
         log_info!(
             logger,
             LogSystem::Combine,
-            &format!("Testing operation: {} with params: {:?}", operation_name, params)
+            &format!(
+                "Testing operation: {} with params: {:?}",
+                operation_name, params
+            )
         );
     }
 
@@ -357,35 +217,33 @@ pub async fn test_operation_with_params(
         "merge" => {
             // Create a test merge operation
             let operation = MergeOpRender::new();
-            
+
             // Extract and validate merge-specific parameters with improved error handling
-            let gap_seconds = match params.parameters.get("gap_seconds") {
-                Some(v) => v.as_f64().unwrap_or(0.0).max(0.0), // Ensure non-negative
-                None => 0.0
-            };
-            
             let sample_rate = match params.parameters.get("sample_rate") {
-                Some(v) => v.as_u64()
+                Some(v) => v
+                    .as_u64()
                     .map(|v| v as u32)
                     .unwrap_or(44100)
-                    .max(8000)  // Minimum reasonable sample rate
+                    .max(8000) // Minimum reasonable sample rate
                     .min(192000), // Maximum reasonable sample rate
-                None => 44100
+                None => 44100,
             };
-            
+
             let bit_depth = match params.parameters.get("bit_depth") {
                 Some(v) => {
                     let depth = v.as_u64().map(|v| v as u32).unwrap_or(16);
                     // Only allow standard bit depths
                     match depth {
                         8 | 16 | 24 | 32 => depth,
-                        _ => 16 // Default to 16-bit for invalid values
+                        _ => 16, // Default to 16-bit for invalid values
                     }
-                },
-                None => 16
+                }
+                None => 16,
             };
-            
-            let output_format = params.parameters.get("output_format")
+
+            let output_format = params
+                .parameters
+                .get("output_format")
                 .and_then(|v| v.as_str())
                 .filter(|&s| ["wav", "mp3", "flac", "ogg", "m4a"].contains(&s)) // Validate against known formats
                 .unwrap_or("wav");
@@ -395,8 +253,8 @@ pub async fn test_operation_with_params(
                     logger,
                     LogSystem::Combine,
                     &format!(
-                        "Processing merge operation with validated parameters: gap={}s, format={}, rate={}Hz, depth={}bit",
-                        gap_seconds, output_format, sample_rate, bit_depth
+                        "Processing merge operation with validated parameters: format={}, rate={}Hz, depth={}bit",
+                        output_format, sample_rate, bit_depth
                     )
                 );
             }
@@ -410,7 +268,7 @@ pub async fn test_operation_with_params(
                 duration: 5.0,
                 metadata: HashMap::new(),
             };
-            
+
             let audio2 = AudioArtifact {
                 path: std::path::PathBuf::from("test2.wav"),
                 format: "wav".to_string(),
@@ -424,27 +282,28 @@ pub async fn test_operation_with_params(
             let mut inputs = HashMap::new();
             inputs.insert(
                 "inputs".to_string(),
-                Artifact::AudioList(vec![audio1, audio2])
+                Artifact::AudioList(vec![audio1, audio2]),
             );
 
             // Create operation context
             let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
             let op_id = op_map.insert(());
-            
+
             // Create a unique work directory for this operation
             let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
             let work_dir = base_artifacts_dir.join(format!("test_op_params_{:?}", op_id));
-            
+
             // Ensure the work directory exists
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
-                return Err(Error::Io(std::io::Error::other(
-                    format!("Failed to create work directory: {}", e)
-                )));
+                return Err(Error::Io(std::io::Error::other(format!(
+                    "Failed to create work directory: {}",
+                    e
+                ))));
             }
-            
+
             // Store work_dir display string before moving work_dir
             let work_dir_display = work_dir.display().to_string();
-            
+
             let context = OperationContext {
                 op_id,
                 work_dir,
@@ -463,16 +322,15 @@ pub async fn test_operation_with_params(
                             "Operation with custom parameters executed successfully"
                         );
                     }
-                    
+
                     // Return a detailed message with the parameters used
                     Ok(format!(
-                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⚙️ Parameters:\n  • Gap: {:.2}s\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
+                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⚙️ Parameters:\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
                         operation_name,
                         match result {
                             Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
                             _ => "Processed successfully".to_string()
                         },
-                        gap_seconds,
                         output_format,
                         sample_rate,
                         bit_depth,
@@ -488,9 +346,10 @@ pub async fn test_operation_with_params(
                             &format!("Operation with custom parameters failed: {:?}", e)
                         );
                     }
-                    Err(Error::Io(std::io::Error::other(
-                        format!("Operation failed: {:?}", e)
-                    )))
+                    Err(Error::Io(std::io::Error::other(format!(
+                        "Operation failed: {:?}",
+                        e
+                    ))))
                 }
             }
         }
@@ -504,28 +363,47 @@ pub async fn test_operation_with_params(
             }
 
             // Extract and validate pipeline-specific parameters
-            let operations = params.parameters.get("operations")
+            let operations = params
+                .parameters
+                .get("operations")
                 .and_then(|v| v.as_array())
                 .map(|arr| {
-                    let steps: Vec<String> = arr.iter()
+                    let steps: Vec<String> = arr
+                        .iter()
                         .filter_map(|v| v.as_str())
-                        .filter(|&s| ["combine", "normalize", "export", "merge", "compress"].contains(&s)) // Validate steps
+                        .filter(|&s| {
+                            ["combine", "normalize", "export", "merge", "compress"].contains(&s)
+                        }) // Validate steps
                         .map(|s| s.to_string())
                         .collect();
-                    
+
                     if steps.is_empty() {
-                        vec!["combine".to_string(), "normalize".to_string(), "export".to_string()]
+                        vec![
+                            "combine".to_string(),
+                            "normalize".to_string(),
+                            "export".to_string(),
+                        ]
                     } else {
                         steps
                     }
                 })
-                .unwrap_or_else(|| vec!["combine".to_string(), "normalize".to_string(), "export".to_string()]);
-            
-            let parallel_execution = params.parameters.get("parallel_execution")
+                .unwrap_or_else(|| {
+                    vec![
+                        "combine".to_string(),
+                        "normalize".to_string(),
+                        "export".to_string(),
+                    ]
+                });
+
+            let parallel_execution = params
+                .parameters
+                .get("parallel_execution")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-                
-            let batch_size = params.parameters.get("batch_size")
+
+            let batch_size = params
+                .parameters
+                .get("batch_size")
                 .and_then(|v| v.as_u64())
                 .map(|v| (v as u32).max(1).min(100)) // Reasonable batch size limits
                 .unwrap_or(10);
@@ -545,23 +423,25 @@ pub async fn test_operation_with_params(
         "normalize" => {
             // Extract and validate normalize operation parameters
             let target_db = match params.parameters.get("target_db") {
-                Some(v) => v.as_f64()
-                    .unwrap_or(-12.0)
-                    .clamp(-60.0, 0.0),
-                None => -12.0
+                Some(v) => v.as_f64().unwrap_or(-12.0).clamp(-60.0, 0.0),
+                None => -12.0,
             };
-            
-            let preserve_peaks = params.parameters.get("preserve_peaks")
+
+            let preserve_peaks = params
+                .parameters
+                .get("preserve_peaks")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-                
-            let target_lufs = params.parameters.get("target_lufs").map(|v| v.as_f64()
-                    .unwrap_or(-23.0)
-                    .clamp(-40.0, -6.0));
-            
-            let true_peak_limit = params.parameters.get("true_peak_limit").map(|v| v.as_f64()
-                    .unwrap_or(-1.0)
-                    .clamp(-6.0, 0.0));
+
+            let target_lufs = params
+                .parameters
+                .get("target_lufs")
+                .map(|v| v.as_f64().unwrap_or(-23.0).clamp(-40.0, -6.0));
+
+            let true_peak_limit = params
+                .parameters
+                .get("true_peak_limit")
+                .map(|v| v.as_f64().unwrap_or(-1.0).clamp(-6.0, 0.0));
 
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -578,11 +458,11 @@ pub async fn test_operation_with_params(
                 format!("  • Target dB: {:.1}", target_db),
                 format!("  • Preserve Peaks: {}", preserve_peaks),
             ];
-            
+
             if let Some(lufs) = target_lufs {
                 parameter_lines.push(format!("  • Target LUFS: {:.1}", lufs));
             }
-            
+
             if let Some(peak_limit) = true_peak_limit {
                 parameter_lines.push(format!("  • True Peak Limit: {:.1} dB", peak_limit));
             }
@@ -596,32 +476,42 @@ pub async fn test_operation_with_params(
         }
         "export" => {
             // Extract and validate export operation parameters
-            let format = params.parameters.get("format")
+            let format = params
+                .parameters
+                .get("format")
                 .and_then(|v| v.as_str())
                 .filter(|&s| ["wav", "mp3", "flac", "ogg", "m4a", "aac"].contains(&s)) // Validate format
                 .unwrap_or("wav");
-                
-            let quality = params.parameters.get("quality")
+
+            let quality = params
+                .parameters
+                .get("quality")
                 .and_then(|v| v.as_str())
                 .filter(|&s| ["low", "medium", "high", "lossless"].contains(&s)) // Validate quality
                 .unwrap_or("high");
-                
-            let output_path = params.parameters.get("output_path")
+
+            let output_path = params
+                .parameters
+                .get("output_path")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.trim().is_empty()) // Ensure non-empty path
                 .unwrap_or("./output");
-                
-            let bit_rate = params.parameters.get("bit_rate").map(|v| v.as_u64()
-                    .map(|v| v as u32)
-                    .unwrap_or(320)
-                    .clamp(64, 2048));
-            
-            let sample_rate = params.parameters.get("sample_rate").map(|v| v.as_u64()
+
+            let bit_rate = params
+                .parameters
+                .get("bit_rate")
+                .map(|v| v.as_u64().map(|v| v as u32).unwrap_or(320).clamp(64, 2048));
+
+            let sample_rate = params.parameters.get("sample_rate").map(|v| {
+                v.as_u64()
                     .map(|v| v as u32)
                     .unwrap_or(44100)
-                    .clamp(8000, 19200));
-            
-            let normalize_before_export = params.parameters.get("normalize_before_export")
+                    .clamp(8000, 19200)
+            });
+
+            let normalize_before_export = params
+                .parameters
+                .get("normalize_before_export")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
@@ -642,11 +532,11 @@ pub async fn test_operation_with_params(
                 format!("  • Output Path: {}", output_path),
                 format!("  • Normalize Before Export: {}", normalize_before_export),
             ];
-            
+
             if let Some(br) = bit_rate {
                 parameter_lines.push(format!("  • Bit Rate: {} kbps", br));
             }
-            
+
             if let Some(sr) = sample_rate {
                 parameter_lines.push(format!("  • Sample Rate: {} Hz", sr));
             }
@@ -664,10 +554,13 @@ pub async fn test_operation_with_params(
                 log_info!(
                     logger,
                     LogSystem::Combine,
-                    &format!("Processing generic operation '{}' with parameters", operation_name)
+                    &format!(
+                        "Processing generic operation '{}' with parameters",
+                        operation_name
+                    )
                 );
             }
-            
+
             // Try to provide helpful information based on parameter structure
             let param_summary = if let Some(obj) = params.parameters.as_object() {
                 let keys: Vec<String> = obj.keys().cloned().collect();
@@ -679,7 +572,7 @@ pub async fn test_operation_with_params(
             } else {
                 "Parameters provided as non-object".to_string()
             };
-            
+
             Ok(format!(
                 "⚙️ Generic operation '{}' simulated!\n\n📋 {}\n📝 Raw Parameters:\n{}\n\n💡 Supported operations with specific parameter handling:\n  • combine_active / merge / combine\n  • master_pipeline\n  • normalize\n  • export\n\n🔧 To add support for '{}', update the match statement in test_operation_with_params.\n\n⚠️ Note: This is a generic simulation - no specific operation logic implemented.",
                 operation_name,

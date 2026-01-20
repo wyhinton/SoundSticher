@@ -1,7 +1,9 @@
 // Merge operation implementation
 
 use crate::artifacts::{Artifact, AudioArtifact};
-use crate::ops::{Operation, OperationCategory, OperationContext, OperationError, OperationResult};
+use crate::render_ops::{
+    OperationCategory, OperationContext, OperationError, OperationResult, RenderOperation,
+};
 use crate::util::id_utils;
 
 #[derive(Debug)]
@@ -29,7 +31,7 @@ impl MergeOpRender {
     }
 }
 
-impl Operation for MergeOpRender {
+impl RenderOperation for MergeOpRender {
     fn name(&self) -> &str {
         "merge"
     }
