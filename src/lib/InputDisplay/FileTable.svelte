@@ -77,7 +77,7 @@
   }
 </script>
 
-<div class="w-fill-available card d-flex flex-column position-relative">
+<div class="w-fill-available card d-flex flex-column position-relative h-fill-available">
   <div class="d-flex flex-column h-fill-available" style:background-color="#080808">
     <div class="d-flex flex-column"></div>
     {#if $currentOperationFileList.length === 0}

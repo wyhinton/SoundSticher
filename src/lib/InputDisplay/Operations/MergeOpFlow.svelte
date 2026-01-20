@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SvelteFlow, Controls, Background } from '@xyflow/svelte';
+  import { SvelteFlow, Controls, Background, useSvelteFlow } from '@xyflow/svelte';
   import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
@@ -15,7 +15,12 @@
   export let operationId: OperationId;
   export let operationName: string;
   export let isSelected: boolean = false;
+  export let panelHeight: number;
+  const { zoomIn, zoomOut, setZoom, fitView, setCenter, setViewport } = useSvelteFlow();
 
+  $: {
+    fitView();
+  }
   $: opInfo = OperationInfoDictionary[operation.kind];
 
   // Create a reactive key that includes sources data to ensure re-rendering

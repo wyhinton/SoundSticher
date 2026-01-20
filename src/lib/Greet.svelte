@@ -19,7 +19,7 @@
   import { opPlaybackService } from './state/opPlaybackService';
   import { undo, redo, canUndo, canRedo } from './state/undo';
   import { TIMELINE_RESIZE } from './config/timelineConfig';
-  import { Pane, Splitpanes } from 'svelte-splitpanes';
+  import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -32,6 +32,7 @@
   let contextMenuWrapper: ContextMenuWrapper;
   let timelineComponent: any;
   let cleanupWaveformService: (() => void) | null = null;
+  let operationsPanelHeight: number = 0;
 
   // Reactive timeline height from appState
   $: timelineHeight =
@@ -127,6 +128,14 @@
     contextMenuWrapper?.updateTimelineSelection(event.detail);
   }
 
+  //TODO: ID BASED GET PANEL
+  // Handle resize of operations panel
+  function handleOperationsPanelResize(event: CustomEvent<number>) {
+    if (event.detail) {
+      operationsPanelHeight = (event.detail as any as IPaneSizingEvent[])[0].size;
+    }
+  }
+
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeyPress);
     cleanupWaveformService?.();
@@ -156,14 +165,18 @@
 
             <!-- Right side: Operations and File Table -->
             <Pane>
-              <Splitpanes theme="modern-theme" horizontal>
+              <Splitpanes
+                theme="modern-theme"
+                horizontal
+                on:resize={e => handleOperationsPanelResize(e)}
+              >
                 <!-- Operations Flow Panel -->
-                <Pane size={30} minSize={15} maxSize={50}>
-                  <OperationsFlowPanel />
+                <Pane size={50} minSize={15} maxSize={50} class="operations-flow-pane">
+                  <OperationsFlowPanel panelHeight={operationsPanelHeight} />
                 </Pane>
 
                 <!-- File Table -->
-                <Pane>
+                <Pane size={50}>
                   <FileTable />
                 </Pane>
               </Splitpanes>
