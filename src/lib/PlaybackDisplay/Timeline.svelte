@@ -533,13 +533,7 @@
     cursor: {isDragging ? 'grabbing' : 'default'};
     "
   >
-    <svg
-      class="waveform-svg-parent"
-      style:outline={'1px solid red'}
-      bind:this={svgEl}
-      {height}
-      viewBox={`0 0 ${width} ${height}`}
-    >
+    <svg class="waveform-svg-parent" bind:this={svgEl} viewBox={`0 0 ${width} ${height}`}>
       <!-- Fixed header region (top padding) -->
       <g class="fixed-header" transform={`translate(0, 0)`}>
         <!-- Reserved space for future header content -->
@@ -666,10 +660,12 @@
 <style>
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
+    overflow: hidden;
   }
   svg {
     width: 100%;
-    height: auto;
+    height: 100%;
+    display: block;
   }
 
   :global(g.axis text) {
