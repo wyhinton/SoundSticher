@@ -6,21 +6,23 @@
     type AddOperationCommand,
     type DeleteMultipleOperationsCommand,
   } from '$lib/state/undo';
-
   import MergeOpFlow from './MergeOpFlow.svelte';
   import { dropzone } from '$lib/attachments/droppable';
+  import { SvelteFlowProvider } from '@xyflow/svelte';
+  import { Pane, Splitpanes } from 'svelte-splitpanes';
 
   // Panel visibility
   export let isExpanded = true;
+  // Panel height passed from parent Splitpanes resize events
+  export let panelHeight: number = 0;
+  // @ts-ignore - panelHeight is used for tracking/debugging resize events
 
-  // Use selected operation ID from global state
+  // Log panel height whenever it changes
+  $: if (panelHeight > 0) {
+    console.log('📏 OperationsFlowPanel height changed:', panelHeight);
+  }
+
   $: selectedOperationId = $appState.uiSettings?.selectedOperationId || null;
-
-  // Panel height management
-  let panelHeight = 200; // default height in pixels
-  let isResizing = false;
-  let resizeStartY = 0;
-  let resizeStartHeight = 0;
 
   // Get MergeOp operations with revision tracking
   $: mergeOperations = $appState.operations?.defs
@@ -44,6 +46,16 @@
     total: mergeOperations.length,
     merge: mergeOperations.length,
   };
+
+  // Group operations into rows of 5
+  $: operationRows = (() => {
+    const rows = [];
+    const OPERATIONS_PER_ROW = 5;
+    for (let i = 0; i < mergeOperations.length; i += OPERATIONS_PER_ROW) {
+      rows.push(mergeOperations.slice(i, i + OPERATIONS_PER_ROW));
+    }
+    return rows;
+  })();
 
   // Add merge operation
   function addMergeOperation() {
@@ -87,41 +99,10 @@
     dispatch(command, `Delete All Operations (${allOperationIds.length} operations)`);
   }
 
-  // Resize functionality
-  function startResize(event: MouseEvent) {
-    isResizing = true;
-    resizeStartY = event.clientY;
-    resizeStartHeight = panelHeight;
-
-    // Prevent text selection during resize
-    document.body.style.userSelect = 'none';
-
-    // Add global event listeners
-    document.addEventListener('mousemove', handleResize);
-    document.addEventListener('mouseup', stopResize);
-
-    event.preventDefault();
-  }
-
-  function handleResize(event: MouseEvent) {
-    if (!isResizing) return;
-
-    const deltaY = event.clientY - resizeStartY;
-    const newHeight = Math.max(150, Math.min(800, resizeStartHeight + deltaY)); // Min 150px, max 800px
-    panelHeight = newHeight;
-  }
-
-  function stopResize() {
-    isResizing = false;
-    document.body.style.userSelect = '';
-
-    // Remove global event listeners
-    document.removeEventListener('mousemove', handleResize);
-    document.removeEventListener('mouseup', stopResize);
-  }
+  // Resize functionality - removed
 </script>
 
-<div class="operations-flow-panel" class:collapsed={!isExpanded}>
+<div class="operations-flow-panel h-fill-available" class:collapsed={!isExpanded}>
   <div
     class="panel-header"
     style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
@@ -159,12 +140,12 @@
   </div>
 
   {#if isExpanded}
-    <div class="panel-content" style="height: {panelHeight}px;">
-      <div class="flow-container">
+    <Splitpanes theme="modern-them">
+      <Pane minSize={90}>
         {#if mergeOperations.length > 0}
-          <!-- Show MergeOpFlow components for each merge operation -->
+          <!-- Show MergeOpFlow components for each merge operation in splitpanes with rows -->
           <div
-            class="merge-flows-row h-100 d-flex"
+            class="merge-flows-container h-100"
             use:dropzone={{
               accepts: ['sample'],
               on_drop: ({ data, sourceId }) => {
@@ -172,14 +153,47 @@
               },
             }}
           >
-            {#each mergeOperations as mergeOp (mergeOp.revisionKey)}
-              <MergeOpFlow
-                operation={mergeOp.operation}
-                operationId={mergeOp.id}
-                operationName={mergeOp.name}
-                isSelected={selectedOperationId === mergeOp.id}
-              />
-            {/each}
+            {#if operationRows.length === 1}
+              <!-- Single row: horizontal splitpanes -->
+              <Splitpanes theme="modern-theme">
+                {#each operationRows[0] as mergeOp (mergeOp.revisionKey)}
+                  <Pane minSize={10}>
+                    <SvelteFlowProvider>
+                      <MergeOpFlow
+                        operation={mergeOp.operation}
+                        operationId={mergeOp.id}
+                        operationName={mergeOp.name}
+                        isSelected={selectedOperationId === mergeOp.id}
+                        {panelHeight}
+                      />
+                    </SvelteFlowProvider>
+                  </Pane>
+                {/each}
+              </Splitpanes>
+            {:else}
+              <!-- Multiple rows: horizontal for columns, vertical for rows -->
+              <Splitpanes theme="modern-theme" horizontal>
+                {#each operationRows as row, rowIndex (rowIndex)}
+                  <Pane minSize={10}>
+                    <Splitpanes theme="modern-theme">
+                      {#each row as mergeOp (mergeOp.revisionKey)}
+                        <Pane minSize={10}>
+                          <SvelteFlowProvider>
+                            <MergeOpFlow
+                              operation={mergeOp.operation}
+                              operationId={mergeOp.id}
+                              operationName={mergeOp.name}
+                              isSelected={selectedOperationId === mergeOp.id}
+                              {panelHeight}
+                            />
+                          </SvelteFlowProvider>
+                        </Pane>
+                      {/each}
+                    </Splitpanes>
+                  </Pane>
+                {/each}
+              </Splitpanes>
+            {/if}
           </div>
         {:else}
           <div class="empty-state">
@@ -190,39 +204,30 @@
             </button>
           </div>
         {/if}
-      </div>
+      </Pane>
 
-      <div class="operation-creation-panel">
-        <div
-          class="creation-header"
-          style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
-        >
-          <h4>Add Operations</h4>
+      <Pane minSize={10} maxSize={10}>
+        <div class="operation-creation-panel">
+          <div
+            class="creation-header"
+            style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
+          >
+            <h4>Add Operations</h4>
+          </div>
+          <div class="operation-buttons">
+            <button
+              class="operation-add-btn"
+              onclick={addMergeOperation}
+              title="Add merge operation"
+            >
+              <span class="operation-icon">🔗</span>
+              <span class="operation-label">Merge</span>
+              <i class="fa fa-plus"></i>
+            </button>
+          </div>
         </div>
-        <div class="operation-buttons">
-          <button class="operation-add-btn" onclick={addMergeOperation} title="Add merge operation">
-            <span class="operation-icon">🔗</span>
-            <span class="operation-label">Merge</span>
-            <i class="fa fa-plus"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Resize handle -->
-    <div
-      class="resize-handle"
-      class:resizing={isResizing}
-      onmousedown={startResize}
-      title="Drag to resize panel height"
-      role="separator"
-      aria-label="Resize panel height"
-      tabindex="0"
-    >
-      <div class="resize-indicator">
-        <i class="fa fa-grip-lines"></i>
-      </div>
-    </div>
+      </Pane>
+    </Splitpanes>
   {/if}
 </div>
 
@@ -303,16 +308,6 @@
     color: #f59e0b;
   }
 
-  .badge-edit {
-    background: rgba(139, 92, 246, 0.2);
-    color: #8b5cf6;
-  }
-
-  .badge-meta {
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
-  }
-
   .header-actions {
     display: flex;
     gap: 2px;
@@ -324,57 +319,12 @@
     line-height: 1.2;
   }
 
-  .panel-content {
-    display: flex;
-    width: 100%;
-    /* height is now set via inline style */
-  }
-
-  .resize-handle {
-    height: 8px;
-    background: var(--panel-bg, #1e1e2e);
-    border-top: 1px solid var(--border-color, #313244);
-    cursor: row-resize;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s;
-    user-select: none;
-  }
-
-  .resize-handle:hover {
-    background: var(--hover-bg, #313244);
-  }
-
-  .resize-handle.resizing {
-    background: var(--hover-bg, #313244);
-  }
-
-  .resize-indicator {
-    color: var(--text-muted, #a6adc8);
-    font-size: 0.7rem;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-  }
-
-  .resize-handle:hover .resize-indicator {
-    opacity: 1;
-  }
-
-  .flow-container {
-    flex: 1;
-    position: relative;
-    border-right: 1px solid var(--border-color, #313244);
-  }
-
-  .merge-flows-row {
+  .merge-flows-container {
     height: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    width: 100%;
   }
 
   .operation-creation-panel {
-    width: 200px;
     background: var(--panel-bg, #1e1e2e);
     border-left: 1px solid var(--border-color, #313244);
     display: flex;
