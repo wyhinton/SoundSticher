@@ -1,4 +1,5 @@
 pub mod merge_render;
+pub mod render_graph_tests;
 pub mod sample_render;
 pub mod split_render;
 pub mod trait_def;

@@ -25,7 +25,6 @@ mod encoder;
 mod error;
 mod favorites;
 mod graph;
-mod graph_tests;
 mod logging;
 mod looping_samples_buffer;
 mod macros;
@@ -357,8 +356,8 @@ pub fn run() {
             get_file_paths_in_folder,
             get_logging_config,
             get_metadata,
-            graph_tests::test_operation_with_params,
-            graph_tests::test_scheduler,
+            render_ops::render_graph_tests::test_operation_with_params,
+            render_ops::render_graph_tests::test_scheduler,
             op_playback_commands::op_playback_build_graph,
             op_playback_commands::op_playback_clear_graph,
             op_playback_commands::op_playback_get_progress,
