@@ -2,7 +2,6 @@
 //
 // This operation simply reads from a pre-loaded buffer of audio samples.
 
-use crate::ops::Operation;
 use crate::playback::op_playback::{AudioSpec, PlayableOp, PlaybackResult, SampleTime};
 use std::sync::Arc;
 

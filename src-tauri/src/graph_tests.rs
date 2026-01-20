@@ -9,7 +9,7 @@ use crate::error::Error;
 use crate::graph::OpId;
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
-use crate::ops::{MergeOperation, Operation, OperationContext};
+use crate::ops::{MergeOpRender, Operation, OperationContext};
 use serde::{Deserialize, Serialize};
 
 /// Test the scheduler by submitting multiple tasks and observing execution
@@ -49,10 +49,7 @@ pub async fn test_scheduler(
             let task = CookTask {
                 op_id,
                 operation_type: "merge".to_string(),
-                parameters: serde_json::json!({
-                    "crossfade_ms": 100.0 * (i + 1) as f64,
-                    "normalize": i == 2
-                }),
+                parameters: serde_json::json!({}),
                 priority: CookTaskPriority::Normal,
                 status: TaskStatus::Pending,
                 created_at: SystemTime::now(),
@@ -147,7 +144,7 @@ pub async fn test_operation(
     match operation_name.as_str() {
         "combine_active" | "combine" | "merge" => {
             // Create a test merge operation
-            let operation = MergeOperation::new();
+            let operation = MergeOpRender::new();
             
             // Create dummy audio artifacts for testing
             let audio1 = AudioArtifact {
@@ -176,10 +173,7 @@ pub async fn test_operation(
             );
 
             // Create parameters
-            let parameters = serde_json::json!({
-                "crossfade_ms": 100.0,
-                "normalize": false
-            });
+            let parameters = serde_json::json!({});
 
             // Create operation context
             let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
@@ -271,8 +265,6 @@ pub async fn test_operation(
 /// Supported operation types and their parameters:
 /// 
 /// **merge/combine/combine_active:**
-/// - crossfade_ms: f64 (milliseconds for crossfade, default: 100.0)
-/// - normalize: bool (normalize output, default: false)
 /// - gap_seconds: f64 (gap between tracks, default: 0.0)
 /// - output_format: string ("wav", "mp3", "flac", default: "wav")
 /// - sample_rate: u32 (Hz, default: 44100)
@@ -302,8 +294,6 @@ impl Default for TestOperationParams {
     fn default() -> Self {
         Self {
             parameters: serde_json::json!({
-                "crossfade_ms": 100.0,
-                "normalize": false,
                 "gap_seconds": 0.0,
                 "output_format": "wav",
                 "sample_rate": 44100,
@@ -364,20 +354,11 @@ pub async fn test_operation_with_params(
 
     // For basic testing, we'll simulate operations with enhanced parameter extraction
     match operation_name.as_str() {
-        "combine_active" | "combine" | "merge" => {
+        "merge" => {
             // Create a test merge operation
-            let operation = MergeOperation::new();
+            let operation = MergeOpRender::new();
             
             // Extract and validate merge-specific parameters with improved error handling
-            let crossfade_ms = match params.parameters.get("crossfade_ms") {
-                Some(v) => v.as_f64().unwrap_or(100.0).max(0.0), // Ensure non-negative
-                None => 100.0
-            };
-            
-            let normalize = params.parameters.get("normalize")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-                
             let gap_seconds = match params.parameters.get("gap_seconds") {
                 Some(v) => v.as_f64().unwrap_or(0.0).max(0.0), // Ensure non-negative
                 None => 0.0
@@ -414,8 +395,8 @@ pub async fn test_operation_with_params(
                     logger,
                     LogSystem::Combine,
                     &format!(
-                        "Processing merge operation with validated parameters: crossfade={}ms, normalize={}, gap={}s, format={}, rate={}Hz, depth={}bit",
-                        crossfade_ms, normalize, gap_seconds, output_format, sample_rate, bit_depth
+                        "Processing merge operation with validated parameters: gap={}s, format={}, rate={}Hz, depth={}bit",
+                        gap_seconds, output_format, sample_rate, bit_depth
                     )
                 );
             }
@@ -485,14 +466,12 @@ pub async fn test_operation_with_params(
                     
                     // Return a detailed message with the parameters used
                     Ok(format!(
-                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⚙️ Parameters:\n  • Crossfade: {:.1}ms\n  • Normalize: {}\n  • Gap: {:.2}s\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
+                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: 2 test audio files\n⚙️ Parameters:\n  • Gap: {:.2}s\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
                         operation_name,
                         match result {
                             Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
                             _ => "Processed successfully".to_string()
                         },
-                        crossfade_ms,
-                        normalize,
                         gap_seconds,
                         output_format,
                         sample_rate,

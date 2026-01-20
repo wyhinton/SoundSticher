@@ -2,15 +2,14 @@
 
 use crate::artifacts::{Artifact, AudioArtifact};
 use crate::ops::{Operation, OperationCategory, OperationContext, OperationError, OperationResult};
-use crate::playback::PlayableOp;
 use crate::util::id_utils;
 
 #[derive(Debug)]
-pub struct MergeOperation {
+pub struct MergeOpRender {
     pub merge_type: MergeType,
 }
 
-impl Default for MergeOperation {
+impl Default for MergeOpRender {
     fn default() -> Self {
         Self::new()
     }
@@ -22,7 +21,7 @@ pub enum MergeType {
     Concatenate,
 }
 
-impl MergeOperation {
+impl MergeOpRender {
     pub fn new() -> Self {
         Self {
             merge_type: MergeType::Concatenate,
@@ -30,7 +29,7 @@ impl MergeOperation {
     }
 }
 
-impl Operation for MergeOperation {
+impl Operation for MergeOpRender {
     fn name(&self) -> &str {
         "merge"
     }
@@ -42,25 +41,12 @@ impl Operation for MergeOperation {
     fn parameter_schema(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
-            "properties": {
-                "crossfade_ms": {
-                    "type": "number",
-                    "minimum": 0,
-                    "default": 0,
-                    "description": "Crossfade duration in milliseconds for concatenation"
-                },
-                "normalize": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Normalize output after merging"
-                }
-            }
+            "properties": {}
         })
     }
 
     fn validate_parameters(&self, _parameters: &serde_json::Value) -> Result<(), OperationError> {
-        // Only concatenation is supported, so no validation needed for merge_type
-        // Could validate crossfade_ms and normalize parameters if needed
+        // Only concatenation is supported, no parameters needed
         Ok(())
     }
 
@@ -87,10 +73,6 @@ impl Operation for MergeOperation {
 
         context.report_progress(0.1);
 
-        // Get parameters
-        let crossfade_ms: f64 = context.get_parameter("crossfade_ms").unwrap_or(0.0);
-        let normalize: bool = context.get_parameter("normalize").unwrap_or(false);
-
         context.report_progress(0.3);
 
         // Create output path
@@ -100,14 +82,7 @@ impl Operation for MergeOperation {
         ));
 
         // Perform concatenation
-        self.concatenate_audio(&input_files, &output_path, crossfade_ms, &context)?;
-
-        context.report_progress(0.8);
-
-        // Normalize if requested
-        if normalize {
-            self.normalize_audio(&output_path, &context)?;
-        }
+        self.concatenate_audio(&input_files, &output_path, &context)?;
 
         context.report_progress(0.9);
 
@@ -144,15 +119,14 @@ impl Operation for MergeOperation {
     }
 }
 
-impl MergeOperation {
+impl MergeOpRender {
     fn concatenate_audio(
         &self,
         inputs: &[AudioArtifact],
         output_path: &std::path::Path,
-        _crossfade_ms: f64,
         context: &OperationContext,
     ) -> Result<(), OperationError> {
-        // TODO: Implement audio concatenation with optional crossfade
+        // TODO: Implement audio concatenation
         // For now, this is a placeholder that would use an audio library like cpal or symphonia
 
         // Progress tracking for concatenation
@@ -162,24 +136,11 @@ impl MergeOperation {
 
             // TODO: Process each input file
             // - Load audio data
-            // - Apply crossfade if not first file
             // - Append to output buffer
         }
 
         // TODO: Write final output
         std::fs::write(output_path, b"placeholder_concatenated_audio")?;
-        Ok(())
-    }
-
-    fn normalize_audio(
-        &self,
-        _file_path: &std::path::Path,
-        _context: &OperationContext,
-    ) -> Result<(), OperationError> {
-        // TODO: Implement audio normalization
-        // - Find peak amplitude
-        // - Calculate normalization factor
-        // - Apply to all samples
         Ok(())
     }
 }

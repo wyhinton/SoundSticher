@@ -243,11 +243,11 @@ pub fn run() {
                 use crate::artifacts::ArtifactStorage;
                 use crate::cook::{CookScheduler, SchedulerConfig};
                 use crate::graph::{InvalidationManager, OperationNodeManager};
-                use crate::ops::{MergeOperation, OperationRegistry};
+                use crate::ops::{MergeOpRender, OperationRegistry};
 
                 // Create operation registry and register operations
                 let mut operation_registry = OperationRegistry::new();
-                operation_registry.register(MergeOperation::new());
+                operation_registry.register(MergeOpRender::new());
                 let operation_registry = Arc::new(operation_registry);
 
                 // Create other components

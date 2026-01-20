@@ -23,7 +23,7 @@
   let resizeStartHeight = 0;
 
   // Get MergeOp operations with revision tracking
-  $: mergeOperations = $appState.operations?.defs
+  $: MergeOpRenders = $appState.operations?.defs
     ? Object.entries($appState.operations.defs)
         .filter(([id, def]) => def.kind === 'merge')
         .map(([id, def]) => {
@@ -41,12 +41,12 @@
 
   // Stats for MergeOps only
   $: stats = {
-    total: mergeOperations.length,
-    merge: mergeOperations.length,
+    total: MergeOpRenders.length,
+    merge: MergeOpRenders.length,
   };
 
   // Add merge operation
-  function addMergeOperation() {
+  function addMergeOpRender() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const operationName = `merge_${timestamp}`;
 
@@ -161,7 +161,7 @@
   {#if isExpanded}
     <div class="panel-content" style="height: {panelHeight}px;">
       <div class="flow-container">
-        {#if mergeOperations.length > 0}
+        {#if MergeOpRenders.length > 0}
           <!-- Show MergeOpFlow components for each merge operation -->
           <div
             class="merge-flows-row h-100 d-flex"
@@ -172,7 +172,7 @@
               },
             }}
           >
-            {#each mergeOperations as mergeOp (mergeOp.revisionKey)}
+            {#each MergeOpRenders as mergeOp (mergeOp.revisionKey)}
               <MergeOpFlow
                 operation={mergeOp.operation}
                 operationId={mergeOp.id}
@@ -185,7 +185,7 @@
           <div class="empty-state">
             <i class="fa fa-project-diagram fa-3x"></i>
             <p>No merge operations defined</p>
-            <button class="btn btn-sm btn-primary" onclick={addMergeOperation}>
+            <button class="btn btn-sm btn-primary" onclick={addMergeOpRender}>
               <i class="fa fa-plus"></i> Add Merge Operation
             </button>
           </div>
@@ -200,7 +200,7 @@
           <h4>Add Operations</h4>
         </div>
         <div class="operation-buttons">
-          <button class="operation-add-btn" onclick={addMergeOperation} title="Add merge operation">
+          <button class="operation-add-btn" onclick={addMergeOpRender} title="Add merge operation">
             <span class="operation-icon">🔗</span>
             <span class="operation-label">Merge</span>
             <i class="fa fa-plus"></i>
