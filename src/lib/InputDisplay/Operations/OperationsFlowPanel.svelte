@@ -9,6 +9,7 @@
   import MergeOpFlow from './MergeOpFlow.svelte';
   import { dropzone } from '$lib/attachments/droppable';
   import { SvelteFlowProvider } from '@xyflow/svelte';
+  import { Pane, Splitpanes } from 'svelte-splitpanes';
 
   // Panel visibility
   export let isExpanded = true;
@@ -45,6 +46,16 @@
     total: mergeOperations.length,
     merge: mergeOperations.length,
   };
+
+  // Group operations into rows of 5
+  $: operationRows = (() => {
+    const rows = [];
+    const OPERATIONS_PER_ROW = 5;
+    for (let i = 0; i < mergeOperations.length; i += OPERATIONS_PER_ROW) {
+      rows.push(mergeOperations.slice(i, i + OPERATIONS_PER_ROW));
+    }
+    return rows;
+  })();
 
   // Add merge operation
   function addMergeOperation() {
@@ -132,9 +143,9 @@
     <div class="panel-content" style:height={200}>
       <div class="flow-container">
         {#if mergeOperations.length > 0}
-          <!-- Show MergeOpFlow components for each merge operation -->
+          <!-- Show MergeOpFlow components for each merge operation in splitpanes with rows -->
           <div
-            class="merge-flows-row h-100 d-flex"
+            class="merge-flows-container h-100"
             use:dropzone={{
               accepts: ['sample'],
               on_drop: ({ data, sourceId }) => {
@@ -142,17 +153,47 @@
               },
             }}
           >
-            {#each mergeOperations as mergeOp (mergeOp.revisionKey)}
-              <SvelteFlowProvider>
-                <MergeOpFlow
-                  operation={mergeOp.operation}
-                  operationId={mergeOp.id}
-                  operationName={mergeOp.name}
-                  isSelected={selectedOperationId === mergeOp.id}
-                  {panelHeight}
-                />
-              </SvelteFlowProvider>
-            {/each}
+            {#if operationRows.length === 1}
+              <!-- Single row: horizontal splitpanes -->
+              <Splitpanes theme="modern-theme">
+                {#each operationRows[0] as mergeOp (mergeOp.revisionKey)}
+                  <Pane minSize={10}>
+                    <SvelteFlowProvider>
+                      <MergeOpFlow
+                        operation={mergeOp.operation}
+                        operationId={mergeOp.id}
+                        operationName={mergeOp.name}
+                        isSelected={selectedOperationId === mergeOp.id}
+                        {panelHeight}
+                      />
+                    </SvelteFlowProvider>
+                  </Pane>
+                {/each}
+              </Splitpanes>
+            {:else}
+              <!-- Multiple rows: horizontal for columns, vertical for rows -->
+              <Splitpanes theme="modern-theme" horizontal>
+                {#each operationRows as row, rowIndex (rowIndex)}
+                  <Pane minSize={10}>
+                    <Splitpanes theme="modern-theme">
+                      {#each row as mergeOp (mergeOp.revisionKey)}
+                        <Pane minSize={10}>
+                          <SvelteFlowProvider>
+                            <MergeOpFlow
+                              operation={mergeOp.operation}
+                              operationId={mergeOp.id}
+                              operationName={mergeOp.name}
+                              isSelected={selectedOperationId === mergeOp.id}
+                              {panelHeight}
+                            />
+                          </SvelteFlowProvider>
+                        </Pane>
+                      {/each}
+                    </Splitpanes>
+                  </Pane>
+                {/each}
+              </Splitpanes>
+            {/if}
           </div>
         {:else}
           <div class="empty-state">
@@ -284,10 +325,9 @@
     border-right: 1px solid var(--border-color, #313244);
   }
 
-  .merge-flows-row {
+  .merge-flows-container {
     height: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
+    width: 100%;
   }
 
   .operation-creation-panel {

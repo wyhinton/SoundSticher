@@ -35,8 +35,7 @@
   let operationsPanelHeight: number = 0;
 
   // Reactive timeline height from appState
-  $: timelineHeight =
-    $appState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
+  $: timelineHeight = TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
 
   // Update appState when timeline height changes
   function setTimelineHeight(height: number) {
@@ -148,13 +147,13 @@
   <MainDebugToolbar />
   <Splitpanes theme="modern-theme" horizontal style="height: 100vh">
     <!-- Debug Toolbar - Development Only (fixed size when visible) -->
-    {#if import.meta.env.DEV}
+    <!-- {#if import.meta.env.DEV}
       <Pane size={5} minSize={5} maxSize={5}></Pane>
-    {/if}
+    {/if} -->
 
     <!-- Main content area (resizable) -->
     <Pane>
-      <Splitpanes theme="modern-theme" horizontal>
+      <Splitpanes theme="modern-theme" horizontal on:resize={e => handleOperationsPanelResize(e)}>
         <!-- Top content area with left panel and operations/files -->
         <Pane minSize={20}>
           <Splitpanes theme="modern-theme">
