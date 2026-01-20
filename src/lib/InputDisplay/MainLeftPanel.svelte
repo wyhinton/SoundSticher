@@ -1,42 +1,12 @@
 <script lang="ts">
-  import { appState, setActiveTab } from '../state/state.svelte';
+  import { appState, setActiveTab } from '$lib/state/state.svelte';
   import Favorites from './Favorites.svelte';
   import Groups from './Groups/Groups.svelte';
   import Operations from './Operations/Operations.svelte';
-
-  const MIN_PANEL_WIDTH = 200;
-  const MAX_PANEL_WIDTH = 600;
-  let isResizing: boolean = false;
-  let panelWidth: number = 400; // Default width
-
-  function handleResizeStart(event: MouseEvent) {
-    event.preventDefault();
-    isResizing = true;
-
-    const startX = event.clientX;
-    const startWidth = panelWidth;
-
-    function handleMouseMove(e: MouseEvent) {
-      if (!isResizing) return;
-
-      const deltaX = e.clientX - startX;
-      const newWidth = Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, startWidth + deltaX));
-      panelWidth = newWidth;
-    }
-
-    function handleMouseUp() {
-      isResizing = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    }
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }
 </script>
 
 <!-- Tab panel section -->
-<section class="tab-panel-section" style="width: {panelWidth}px; min-width: {panelWidth}px;">
+<section class="tab-panel-section">
   <div class="tab-panel-container">
     <!-- Tab navigation -->
     <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
@@ -112,17 +82,6 @@
       {/if}
     </div>
   </div>
-
-  <!-- Vertical resize handle on the right -->
-  <div
-    class="resize-handle"
-    class:resizing={isResizing}
-    onmousedown={handleResizeStart}
-    role="separator"
-    aria-label="Resize panel width"
-  >
-    <div class="resize-indicator"></div>
-  </div>
 </section>
 
 <style>
@@ -130,7 +89,7 @@
     position: relative;
     height: 100%;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     background-color: rgb(15 21 27);
     border-right: 1px solid #555;
   }
@@ -140,7 +99,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    width: inherit;
+    width: 100%;
   }
 
   /* Tab styles */
@@ -215,56 +174,5 @@
   .tab-panel p {
     margin: 0 0 12px 0;
     color: #ccc;
-  }
-
-  /* Vertical resize handle */
-  .resize-handle {
-    width: 8px;
-    background-color: rgb(15 21 27);
-    cursor: ew-resize;
-    border-left: 1px solid #555;
-    border-right: 1px solid #555;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s ease;
-  }
-
-  .resize-handle:hover {
-    background-color: #2a2a2a;
-  }
-
-  .resize-handle.resizing {
-    background-color: #3a3a3a;
-  }
-
-  .resize-indicator {
-    height: 40px;
-    width: 2px;
-    background-color: #666;
-    border-radius: 1px;
-    position: relative;
-  }
-
-  .resize-indicator::before {
-    content: '';
-    position: absolute;
-    left: -2px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background-color: #666;
-    border-radius: 1px;
-  }
-
-  .resize-indicator::after {
-    content: '';
-    position: absolute;
-    left: 2px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background-color: #666;
-    border-radius: 1px;
   }
 </style>
