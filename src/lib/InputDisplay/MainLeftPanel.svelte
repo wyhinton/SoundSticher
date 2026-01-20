@@ -9,6 +9,7 @@
 <section class="tab-panel-section">
   <div class="tab-panel-container">
     <!-- Tab navigation -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
     <nav class="tab-navigation" role="tablist" aria-label="Source panel tabs">
       <button
         class="tab"

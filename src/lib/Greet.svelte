@@ -136,12 +136,11 @@
 <!-- <Toolbar></Toolbar> -->
 
 <div class="main-content">
+  <MainDebugToolbar />
   <Splitpanes theme="modern-theme" horizontal style="height: 100vh">
     <!-- Debug Toolbar - Development Only (fixed size when visible) -->
     {#if import.meta.env.DEV}
-      <Pane size={5} minSize={5} maxSize={5}>
-        <MainDebugToolbar />
-      </Pane>
+      <Pane size={5} minSize={5} maxSize={5}></Pane>
     {/if}
 
     <!-- Main content area (resizable) -->

@@ -8,14 +8,12 @@
     isItemActive,
     canItemBeDragged,
     getItemColor,
-    isAudioFileItem,
     getItemSvgPath,
   } from '../utils/timelineHelpers';
   import TimelineSegment from './Timeline/TimelineSegment.svelte';
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
   import DropIndicator from './Timeline/DropIndicator.svelte';
-  import { audioFileStateManager } from '../state/stateSynchronization';
   import {
     selectionService,
     selectedIds,
