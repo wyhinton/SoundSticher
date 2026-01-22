@@ -263,9 +263,10 @@ pub async fn test_operation_with_params(
             // Create a unique work directory for this operation
             let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
             let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
-            
+
             // Check if child operations are provided
-            let input_artifacts = if let Some(child_ops) = params.parameters.get("child_operations") {
+            let input_artifacts = if let Some(child_ops) = params.parameters.get("child_operations")
+            {
                 if let Some(ops_array) = child_ops.as_array() {
                     if let Ok(logger) = logging_service.lock() {
                         log_info!(
@@ -276,19 +277,24 @@ pub async fn test_operation_with_params(
                     }
 
                     let mut artifacts = Vec::new();
-                    
+
                     // Execute each child operation
                     for (idx, child_op_data) in ops_array.iter().enumerate() {
-                        let op_type = child_op_data.get("type")
+                        let op_type = child_op_data
+                            .get("type")
                             .and_then(|v| v.as_str())
-                            .ok_or_else(|| Error::Io(std::io::Error::other(
-                                format!("Child operation {} missing 'type' field", idx)
-                            )))?;
-                        
-                        let op_params = child_op_data.get("parameters")
+                            .ok_or_else(|| {
+                                Error::Io(std::io::Error::other(format!(
+                                    "Child operation {} missing 'type' field",
+                                    idx
+                                )))
+                            })?;
+
+                        let op_params = child_op_data
+                            .get("parameters")
                             .cloned()
                             .unwrap_or(serde_json::json!({}));
-                        
+
                         if let Ok(logger) = logging_service.lock() {
                             log_info!(
                                 logger,
@@ -296,7 +302,7 @@ pub async fn test_operation_with_params(
                                 &format!("Executing child operation {}: {}", idx + 1, op_type)
                             );
                         }
-                        
+
                         // Execute the child operation based on its type
                         let artifact = execute_child_operation(
                             op_type,
@@ -305,14 +311,14 @@ pub async fn test_operation_with_params(
                             &mut op_map,
                             sample_rate,
                         )?;
-                        
+
                         artifacts.push(artifact);
                     }
-                    
+
                     artifacts
                 } else {
                     return Err(Error::Io(std::io::Error::other(
-                        "child_operations must be an array"
+                        "child_operations must be an array",
                     )));
                 }
             } else {
@@ -324,7 +330,7 @@ pub async fn test_operation_with_params(
                         "No child operations provided, using dummy test artifacts"
                     );
                 }
-                
+
                 vec![
                     AudioArtifact {
                         path: std::path::PathBuf::from("test1.wav"),
@@ -656,7 +662,7 @@ fn execute_child_operation(
     default_sample_rate: u32,
 ) -> Result<AudioArtifact, Error> {
     match op_type {
-        "sample_load" | "load_audio" | "audio_file" => {
+        "sample" => {
             // Create a SampleOpRender operation
             let operation = SampleOpRender::new(
                 Vec::new(), // Empty samples - will be loaded from file
@@ -677,7 +683,7 @@ fn execute_child_operation(
             // Create operation context
             let op_id = op_map.insert(());
             let work_dir = base_artifacts_dir.join(format!("child_op_{:?}", op_id));
-            
+
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
                 return Err(Error::Io(std::io::Error::other(format!(
                     "Failed to create work directory for child op: {}",
@@ -705,13 +711,13 @@ fn execute_child_operation(
             match artifact {
                 Artifact::Audio(audio) => Ok(audio),
                 _ => Err(Error::Io(std::io::Error::other(
-                    "Child operation did not return an audio artifact"
+                    "Child operation did not return an audio artifact",
                 ))),
             }
         }
         // Add more operation types as they are implemented
         _ => Err(Error::Io(std::io::Error::other(format!(
-            "Unsupported child operation type: {}. Supported types: sample_load, load_audio, audio_file",
+            "Unsupported child operation type: {}. Supported types: sample",
             op_type
         )))),
     }

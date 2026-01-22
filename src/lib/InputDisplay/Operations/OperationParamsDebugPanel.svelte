@@ -46,10 +46,21 @@
     try {
       const operationType = getOperationType(selectedOperation);
 
+      // Build child operations from the operation's sources for merge operations
+      const childOperations = buildChildOperationsFromSources(selectedOperation);
+
+      // Merge operationParams with child_operations if they exist
+      const enhancedParams = {
+        ...operationParams,
+        ...(childOperations.length > 0 ? { child_operations: childOperations } : {}),
+      };
+
+      console.log('Testing operation with params:', { operationType, enhancedParams });
+
       const result = await invokeWithPerf<string>('test_operation_with_params', {
         operationName: operationType,
         params: {
-          parameters: operationParams,
+          parameters: enhancedParams,
           operation_type: operationType,
         },
       });
@@ -59,10 +70,58 @@
     } catch (error) {
       console.log(error);
       console.error('Error testing operation with params:', error);
-      paramTestResult = { type: 'error', message: JSON.stringify(error) };
+      paramTestResult = { type: 'error', message: String(error) };
     } finally {
       isTestingWithParams = false;
     }
+  }
+
+  /**
+   * Build child operations from the operation's sources property.
+   * Converts MergeOp.sources into child_operations array for the backend.
+   *
+   * For now, uses test audio files from the assets folder since we don't have
+   * direct access to timeline file paths during testing.
+   */
+  function buildChildOperationsFromSources(
+    operation: OperationDef
+  ): Array<{ type: string; parameters: any }> {
+    const childOps: Array<{ type: string; parameters: any }> = [];
+
+    // Only process merge operations with sources
+    if (operation.kind !== 'merge' || !operation.sources || operation.sources.length === 0) {
+      return childOps;
+    }
+
+    console.log('Building child operations from sources:', operation.sources);
+
+    // For testing, use asset audio files
+    // TODO: In production, resolve actual file paths from timeline items or source resolution
+    const testAudioFiles = [
+      'assets/test_audio/420688__abletunes__abletunes-tsd-808-04-e.wav',
+      'assets/test_audio/420689__abletunes__abletunes-tsd-808-03-c.wav',
+    ];
+
+    // Create a sample operation for each test file
+    // In production, this would map each source to its corresponding file(s)
+    for (let i = 0; i < Math.min(operation.sources.length, testAudioFiles.length); i++) {
+      const source = operation.sources[i];
+      const filePath = testAudioFiles[i];
+
+      if (source) {
+        childOps.push({
+          type: 'sample',
+          parameters: {
+            file_path: filePath,
+            name: `${source.type}_${i + 1}`,
+          },
+        });
+      }
+    }
+
+    console.log(`Created ${childOps.length} child operations for testing`);
+
+    return childOps;
   }
 
   async function handleTestScheduler() {
