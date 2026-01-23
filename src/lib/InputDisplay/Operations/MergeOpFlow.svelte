@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SvelteFlow, Controls, Background } from '@xyflow/svelte';
+  import { SvelteFlow, Background, useSvelteFlow } from '@xyflow/svelte';
   import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
@@ -9,14 +9,21 @@
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
+  import { onMount } from 'svelte';
   import OpSettingsTools from './OpSettingsTools.svelte';
-  import { dropzone } from '$lib/attachments/droppable';
 
   export let operation: MergeOp;
   export let operationId: OperationId;
   export let operationName: string;
   export let isSelected: boolean = false;
+  export let panelHeight: number;
+  const { fitView } = useSvelteFlow();
 
+  $: {
+    if (panelHeight > 0) {
+      fitView({ padding: 1 });
+    }
+  }
   $: opInfo = OperationInfoDictionary[operation.kind];
 
   // Create a reactive key that includes sources data to ensure re-rendering
@@ -151,24 +158,6 @@
   }
 
   // Handle keyboard events for debug toggle
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.ctrlKey && event.shiftKey && event.code === 'Space') {
-      event.preventDefault();
-      showDebugInfo = !showDebugInfo;
-
-      if (showDebugInfo) {
-        updateDebugInfo();
-        // Start periodic updates when debug is shown
-        debugUpdateInterval = setInterval(updateDebugInfo, 100);
-      } else {
-        // Clear interval when debug is hidden
-        if (debugUpdateInterval) {
-          clearInterval(debugUpdateInterval);
-          debugUpdateInterval = null;
-        }
-      }
-    }
-  }
 
   // Update debug information from flow instance
   function updateDebugInfo() {
@@ -187,16 +176,13 @@
     }
   }
 
+  onMount(() => {
+    setTimeout(() => {
+      fitView({ padding: 1 });
+    }, 100);
+  });
+
   // Handle viewport changes to update debug info
-  function onViewportChange(viewport: { x: number; y: number; zoom: number }) {
-    if (showDebugInfo) {
-      debugInfo = {
-        x: Math.round(viewport.x * 100) / 100,
-        y: Math.round(viewport.y * 100) / 100,
-        zoom: Math.round(viewport.zoom * 100) / 100,
-      };
-    }
-  }
 
   $: flowData = generateCombineFlow(mergeOpSources);
 </script>
@@ -254,7 +240,7 @@
   .merge-op-flow {
     background: var(--panel-bg, #1e1e2e);
     overflow: hidden;
-    min-width: 480px;
+    /* min-width: 480px; */
     height: 100%;
     display: flex;
     flex-direction: column;

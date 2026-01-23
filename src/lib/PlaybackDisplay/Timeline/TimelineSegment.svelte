@@ -253,6 +253,7 @@
     color: white;
     font-weight: 500;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    padding: 0px;
   }
 
   /* MergeOp (group) specific styling */

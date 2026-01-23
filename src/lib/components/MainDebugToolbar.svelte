@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import {
     appState,
     callSiteTrackingEnabled,
@@ -30,6 +31,11 @@
   let durationTestResult: DurationResponse | null = null;
   let durationTestLoading = false;
   let durationTestError: string | null = null;
+
+  // GIF Recording state
+  let gifRecordingName = 'recording';
+  let gifRecordingDelay = 2;
+  let gifRecordingDuration = 5;
 
   // Global keyboard shortcut handler
   function handleGlobalKeydown(event: KeyboardEvent) {
@@ -535,6 +541,72 @@ Project: Sound Stitch (Tauri + SvelteKit)
       console.log('🔧 Debug: CSS outlines disabled');
     }
   }
+  // Record screen GIF using window bounds
+  async function recordScreenGif() {
+    try {
+      // Get window info from Tauri's native API
+      const currentWindow = getCurrentWindow();
+      const position = await currentWindow.outerPosition();
+      const size = await currentWindow.outerSize();
+
+      console.log('🔧 Debug: Window Position:', position);
+      console.log('🔧 Debug: Window Size:', size);
+
+      const off = 0;
+      // Extract window bounds
+      const x = position.x + off;
+      const y = position.y;
+      const width = size.width;
+      const height = size.height;
+      const region = `${x},${y},${width},${height}`;
+
+      console.log('🔧 Debug: Starting GIF recording with region:', region);
+      console.log(
+        `🔧 Debug: Name: ${gifRecordingName}, Delay: ${gifRecordingDelay}s, Duration: ${gifRecordingDuration}s`
+      );
+
+      // Use Tauri shell plugin to run the recording script with command-line arguments
+      // Use relative path from src-tauri directory (where the process runs)
+      const result = await invoke('plugin:shell|execute', {
+        program: 'node',
+        args: [
+          '../scripts/record-gif.mjs',
+          `--name=${gifRecordingName}`,
+          `--delay=${gifRecordingDelay}`,
+          `--duration=${gifRecordingDuration}`,
+          `--region=${region}`,
+        ],
+        options: {
+          env: {},
+        },
+      });
+
+      console.log('🔧 Debug: GIF recording script started');
+      console.log('🔧 Debug: Script output:', result);
+
+      // Show success message with region info
+      alert(
+        `🎬 GIF Recording Started!\n\n` +
+          `Name: ${gifRecordingName}\n` +
+          `Region: ${region}\n` +
+          `Window: ${width}x${height} at (${x}, ${y})\n` +
+          `Delay: ${gifRecordingDelay}s\n` +
+          `Duration: ${gifRecordingDuration}s\n\n` +
+          `Recording will start automatically!`
+      );
+    } catch (error) {
+      console.error('Debug: Failed to start GIF recording:', error);
+
+      // Fallback: show instructions
+      alert(
+        `❌ Failed to start recording automatically.\n\n` +
+          `Please run manually:\n` +
+          `1. Open terminal in project root\n` +
+          `2. Run: node scripts/record-gif.mjs\n\n` +
+          `Error: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
 </script>
 
 {#if isVisible}
@@ -621,6 +693,49 @@ Project: Sound Stitch (Tauri + SvelteKit)
         >
           <i class="fa fa-border-all"></i>
           CSS Outlines
+        </button>
+      </div>
+
+      <div class="button-group">
+        <span class="group-title">Record GIF</span>
+        <div class="gif-recording-inputs">
+          <input
+            type="text"
+            class="gif-input"
+            placeholder="Name..."
+            bind:value={gifRecordingName}
+            title="Recording name"
+          />
+          <div class="gif-number-inputs">
+            <input
+              type="number"
+              class="gif-input-number"
+              min="0"
+              max="10"
+              bind:value={gifRecordingDelay}
+              title="Delay (seconds)"
+              placeholder="Delay"
+            />
+            <span class="input-label">s delay</span>
+            <input
+              type="number"
+              class="gif-input-number"
+              min="1"
+              max="60"
+              bind:value={gifRecordingDuration}
+              title="Duration (seconds)"
+              placeholder="Duration"
+            />
+            <span class="input-label">s duration</span>
+          </div>
+        </div>
+        <button
+          class="btn btn-xs btn-outline-danger"
+          on:click={recordScreenGif}
+          title="Record screen GIF of main window"
+        >
+          <i class="fa fa-video-camera"></i>
+          Record GIF
         </button>
       </div>
 
@@ -1024,6 +1139,59 @@ Project: Sound Stitch (Tauri + SvelteKit)
     background: var(--bs-dark);
     color: var(--bs-light);
     min-width: 150px;
+  }
+
+  /* GIF Recording styles */
+  .gif-recording-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 2px;
+  }
+
+  .gif-input {
+    font-size: 9px;
+    padding: 2px 4px;
+    border: 1px solid var(--bs-secondary);
+    border-radius: 2px;
+    background: var(--bs-dark);
+    color: var(--bs-light);
+    width: 100%;
+  }
+
+  .gif-input::placeholder {
+    color: var(--bs-secondary);
+  }
+
+  .gif-number-inputs {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .gif-input-number {
+    font-size: 9px;
+    padding: 2px 4px;
+    border: 1px solid var(--bs-secondary);
+    border-radius: 2px;
+    background: var(--bs-dark);
+    color: var(--bs-light);
+    width: 35px;
+    text-align: center;
+  }
+
+  .input-label {
+    font-size: 8px;
+    color: var(--bs-secondary);
+    white-space: nowrap;
+    margin-right: 4px;
+  }
+
+  .gif-input-number::-webkit-inner-spin-button,
+  .gif-input-number::-webkit-outer-spin-button {
+    opacity: 0.5;
+    height: 12px;
   }
 
   .duration-test-input:disabled {

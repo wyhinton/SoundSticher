@@ -25,7 +25,7 @@
   };
 </script>
 
-<footer class="status-footer d-flex justify-content-between align-items-center px-3 py-1">
+<footer class="status-footer h-100 d-flex justify-content-between align-items-center px-3 py-1">
   <div class="d-flex gap-4 align-items-center" style="margin-bottom: -3px">
     <!-- Status Message -->
     <div class="status-item">

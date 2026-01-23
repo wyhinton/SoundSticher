@@ -55,7 +55,29 @@
             "core:window:allow-set-position",
             "core:window:allow-set-theme",
             "core:window:allow-set-progress-bar",
-            "core:window:allow-set-effects"
+            "core:window:allow-set-effects",
+            {
+              "identifier": "shell:allow-execute",
+              "allow": [
+                {
+                  "name": "exec-sh",
+                  "cmd": "sh",
+                  "args": [
+                    "-c",
+                    {
+                      "validator": "\\S+"
+                    }
+                  ],
+                  "sidecar": false
+                },
+                {
+                  "name": "node",
+                  "cmd": "node",
+                  "args": true,
+                  "sidecar": false
+                }
+              ]
+            }
           ]
         }
       ],

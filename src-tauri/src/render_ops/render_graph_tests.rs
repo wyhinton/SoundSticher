@@ -199,18 +199,58 @@ pub async fn test_operation_with_params(
     params: TestOperationParams,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
+    let start_time = std::time::Instant::now();
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Combine,
             &format!(
-                "Testing operation: {} with params: {:?}",
-                operation_name, params
+                "🚀 Starting test_operation_with_params - Operation: '{}', Type: {:?}",
+                operation_name,
+                params.operation_type.as_deref().unwrap_or("unknown")
             )
         );
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "📄 Input parameters structure: {}",
+                serde_json::to_string_pretty(&params.parameters)
+                    .unwrap_or_else(|_| "Invalid JSON".to_string())
+            )
+        );
+
+        // Log parameter count and types for debugging
+        if let Some(obj) = params.parameters.as_object() {
+            let param_summary: Vec<String> = obj
+                .iter()
+                .map(|(key, value)| {
+                    let value_type = if value.is_string() {
+                        format!("string({})", value.as_str().unwrap().len())
+                    } else if value.is_number() {
+                        "number".to_string()
+                    } else if value.is_boolean() {
+                        "boolean".to_string()
+                    } else if value.is_array() {
+                        format!("array[{}]", value.as_array().unwrap().len())
+                    } else if value.is_object() {
+                        format!("object({})", value.as_object().unwrap().len())
+                    } else {
+                        "null".to_string()
+                    };
+                    format!("{}={}", key, value_type)
+                })
+                .collect();
+
+            log_info!(
+                logger,
+                LogSystem::Combine,
+                &format!("📊 Parameter analysis: {}", param_summary.join(", "))
+            );
+        }
     }
 
-    // TODO: Implement comprehensive backend validation for different operation types
     // For now, validation is handled on the frontend side, but we need proper backend validation
 
     // For basic testing, we'll simulate operations with enhanced parameter extraction
@@ -221,33 +261,112 @@ pub async fn test_operation_with_params(
 
             // Extract and validate merge-specific parameters with improved error handling
             let sample_rate = match params.parameters.get("sample_rate") {
-                Some(v) => v
-                    .as_u64()
-                    .map(|v| v as u32)
-                    .unwrap_or(44100)
-                    .max(8000) // Minimum reasonable sample rate
-                    .min(192000), // Maximum reasonable sample rate
-                None => 44100,
+                Some(v) => {
+                    let rate = v
+                        .as_u64()
+                        .map(|v| v as u32)
+                        .unwrap_or(44100)
+                        .max(8000) // Minimum reasonable sample rate
+                        .min(192000); // Maximum reasonable sample rate
+
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!(
+                                "🎵 Sample rate parameter: raw={:?} -> validated={}",
+                                v, rate
+                            )
+                        );
+                    }
+                    rate
+                }
+                None => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            "🎵 Sample rate parameter: missing -> using default 44100"
+                        );
+                    }
+                    44100
+                }
             };
 
             let bit_depth = match params.parameters.get("bit_depth") {
                 Some(v) => {
-                    let depth = v.as_u64().map(|v| v as u32).unwrap_or(16);
+                    let raw_depth = v.as_u64().map(|v| v as u32).unwrap_or(16);
                     // Only allow standard bit depths
-                    match depth {
-                        8 | 16 | 24 | 32 => depth,
-                        _ => 16, // Default to 16-bit for invalid values
+                    let validated_depth = match raw_depth {
+                        8 | 16 | 24 | 32 => raw_depth,
+                        _ => {
+                            if let Ok(logger) = logging_service.lock() {
+                                log_info!(
+                                    logger,
+                                    LogSystem::Combine,
+                                    &format!(
+                                        "⚠️ Invalid bit depth {} -> defaulting to 16",
+                                        raw_depth
+                                    )
+                                );
+                            }
+                            16 // Default to 16-bit for invalid values
+                        }
+                    };
+
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!(
+                                "🎵 Bit depth parameter: raw={:?} -> validated={}",
+                                v, validated_depth
+                            )
+                        );
                     }
+                    validated_depth
                 }
-                None => 16,
+                None => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            "🎵 Bit depth parameter: missing -> using default 16"
+                        );
+                    }
+                    16
+                }
             };
 
             let output_format = params
                 .parameters
                 .get("output_format")
                 .and_then(|v| v.as_str())
-                .filter(|&s| ["wav", "mp3", "flac", "ogg", "m4a"].contains(&s)) // Validate against known formats
-                .unwrap_or("wav");
+                .filter(|&s| {
+                    let valid = ["wav", "mp3", "flac", "ogg", "m4a"].contains(&s);
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!(
+                                "🎵 Output format validation: '{}' -> {}",
+                                s,
+                                if valid { "valid" } else { "invalid" }
+                            )
+                        );
+                    }
+                    valid
+                })
+                .unwrap_or_else(|| {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            "🎵 Output format parameter: missing/invalid -> using default 'wav'"
+                        );
+                    }
+                    "wav"
+                });
 
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -280,10 +399,31 @@ pub async fn test_operation_with_params(
 
                     // Execute each child operation
                     for (idx, child_op_data) in ops_array.iter().enumerate() {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!(
+                                    "🔄 Processing child operation {}/{}: {}",
+                                    idx + 1,
+                                    ops_array.len(),
+                                    serde_json::to_string_pretty(child_op_data)
+                                        .unwrap_or_else(|_| "Invalid JSON".to_string())
+                                )
+                            );
+                        }
+
                         let op_type = child_op_data
                             .get("type")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
+                                if let Ok(logger) = logging_service.lock() {
+                                    log_info!(
+                                        logger,
+                                        LogSystem::Combine,
+                                        &format!("❌ Child operation {} missing 'type' field", idx)
+                                    );
+                                }
                                 Error::Io(std::io::Error::other(format!(
                                     "Child operation {} missing 'type' field",
                                     idx
@@ -293,7 +433,30 @@ pub async fn test_operation_with_params(
                         let op_params = child_op_data
                             .get("parameters")
                             .cloned()
-                            .unwrap_or(serde_json::json!({}));
+                            .unwrap_or_else(|| {
+                                if let Ok(logger) = logging_service.lock() {
+                                    log_info!(
+                                        logger,
+                                        LogSystem::Combine,
+                                        &format!("⚠️ Child operation {} has no parameters, using empty object", idx)
+                                    );
+                                }
+                                serde_json::json!({})
+                            });
+
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!(
+                                    "🎯 Child operation {}: type='{}', params={}",
+                                    idx,
+                                    op_type,
+                                    serde_json::to_string_pretty(&op_params)
+                                        .unwrap_or_else(|_| "Invalid JSON".to_string())
+                                )
+                            );
+                        }
 
                         if let Ok(logger) = logging_service.lock() {
                             log_info!(
@@ -383,17 +546,22 @@ pub async fn test_operation_with_params(
             // Execute the merge operation
             match operation.execute(context) {
                 Ok(result) => {
+                    let elapsed = start_time.elapsed();
+
                     if let Ok(logger) = logging_service.lock() {
                         log_info!(
                             logger,
                             LogSystem::Combine,
-                            "Merge operation with child operations executed successfully"
+                            &format!(
+                                "✅ Merge operation with child operations executed successfully in {:?}. Processed {} input files.",
+                                elapsed, input_artifacts.len()
+                            )
                         );
                     }
 
                     // Return a detailed message with the parameters used
                     Ok(format!(
-                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: {} audio files\n⚙️ Parameters:\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n\n🔍 Raw Parameters: {}",
+                        "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: {} audio files\n⚙️ Parameters:\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n⏱️ Execution Time: {:?}\n\n🔍 Raw Parameters: {}",
                         operation_name,
                         match result {
                             Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
@@ -404,20 +572,26 @@ pub async fn test_operation_with_params(
                         sample_rate,
                         bit_depth,
                         work_dir_display,
+                        elapsed,
                         serde_json::to_string_pretty(&params.parameters).unwrap_or_else(|_| "Invalid JSON".to_string())
                     ))
                 }
                 Err(e) => {
+                    let elapsed = start_time.elapsed();
+
                     if let Ok(logger) = logging_service.lock() {
                         log_info!(
                             logger,
                             LogSystem::Combine,
-                            &format!("Merge operation with child operations failed: {:?}", e)
+                            &format!(
+                                "❌ Merge operation with child operations failed after {:?}: {:?}",
+                                elapsed, e
+                            )
                         );
                     }
                     Err(Error::Io(std::io::Error::other(format!(
-                        "Operation failed: {:?}",
-                        e
+                        "Operation failed after {:?}: {:?}",
+                        elapsed, e
                     ))))
                 }
             }
@@ -492,25 +666,73 @@ pub async fn test_operation_with_params(
         "normalize" => {
             // Extract and validate normalize operation parameters
             let target_db = match params.parameters.get("target_db") {
-                Some(v) => v.as_f64().unwrap_or(-12.0).clamp(-60.0, 0.0),
-                None => -12.0,
+                Some(v) => {
+                    let db = v.as_f64().unwrap_or(-12.0).clamp(-60.0, 0.0);
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("🎚️ Target dB parameter: raw={:?} -> validated={:.1}", v, db)
+                        );
+                    }
+                    db
+                }
+                None => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            "🎚️ Target dB parameter: missing -> using default -12.0"
+                        );
+                    }
+                    -12.0
+                }
             };
 
             let preserve_peaks = params
                 .parameters
                 .get("preserve_peaks")
                 .and_then(|v| v.as_bool())
-                .unwrap_or(true);
+                .unwrap_or_else(|| {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            "🎚️ Preserve peaks parameter: missing -> using default true"
+                        );
+                    }
+                    true
+                });
 
-            let target_lufs = params
-                .parameters
-                .get("target_lufs")
-                .map(|v| v.as_f64().unwrap_or(-23.0).clamp(-40.0, -6.0));
+            let target_lufs = params.parameters.get("target_lufs").map(|v| {
+                let lufs = v.as_f64().unwrap_or(-23.0).clamp(-40.0, -6.0);
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "🎚️ Target LUFS parameter: raw={:?} -> validated={:.1}",
+                            v, lufs
+                        )
+                    );
+                }
+                lufs
+            });
 
-            let true_peak_limit = params
-                .parameters
-                .get("true_peak_limit")
-                .map(|v| v.as_f64().unwrap_or(-1.0).clamp(-6.0, 0.0));
+            let true_peak_limit = params.parameters.get("true_peak_limit").map(|v| {
+                let peak = v.as_f64().unwrap_or(-1.0).clamp(-6.0, 0.0);
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "🎚️ True peak limit parameter: raw={:?} -> validated={:.1}",
+                            v, peak
+                        )
+                    );
+                }
+                peak
+            });
 
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -642,12 +864,26 @@ pub async fn test_operation_with_params(
                 "Parameters provided as non-object".to_string()
             };
 
+            let elapsed = start_time.elapsed();
+
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "✅ Generic operation '{}' completed in {:?}. Parameters processed: {}",
+                        operation_name, elapsed, param_summary
+                    )
+                );
+            }
+
             Ok(format!(
-                "⚙️ Generic operation '{}' simulated!\n\n📋 {}\n📝 Raw Parameters:\n{}\n\n💡 Supported operations with specific parameter handling:\n  • combine_active / merge / combine\n  • master_pipeline\n  • normalize\n  • export\n\n🔧 To add support for '{}', update the match statement in test_operation_with_params.\n\n⚠️ Note: This is a generic simulation - no specific operation logic implemented.",
+                "⚙️ Generic operation '{}' simulated!\n\n📋 {}\n📝 Raw Parameters:\n{}\n\n💡 Supported operations with specific parameter handling:\n  • combine_active / merge / combine\n  • master_pipeline\n  • normalize\n  • export\n\n🔧 To add support for '{}', update the match statement in test_operation_with_params.\n\n⚠️ Note: This is a generic simulation - no specific operation logic implemented.\n\n⏱️ Execution time: {:?}",
                 operation_name,
                 param_summary,
                 serde_json::to_string_pretty(&params.parameters).unwrap_or_else(|_| "Invalid JSON".to_string()),
-                operation_name
+                operation_name,
+                elapsed
             ))
         }
     }
