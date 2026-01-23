@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invokeWithPerf } from '$lib/state/performance';
-  import type { OperationDef, OperationId } from '$lib/state/operation';
+  import type { OperationDef, OperationId, OperationsState } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
+  import { get } from 'svelte/store';
 
   // Props
   export let selectedOperation: OperationDef | null = null;
@@ -45,22 +46,33 @@
 
     try {
       const operationType = getOperationType(selectedOperation);
+      const currentState = get(appState);
 
-      // Build child operations from the operation's sources for merge operations
-      const childOperations = buildChildOperationsFromSources(selectedOperation);
+      // Get the full operations state to send to backend
+      const operationsState = currentState.operations ?? { defs: {}, order: [] };
 
-      // Merge operationParams with child_operations if they exist
-      const enhancedParams = {
-        ...operationParams,
-        ...(childOperations.length > 0 ? { child_operations: childOperations } : {}),
+      // Convert operations defs to a serializable format
+      const serializedOperations = {
+        defs: operationsState.defs,
+        order: operationsState.order ?? [],
       };
 
-      console.log('Testing operation with params:', { operationType, enhancedParams });
+      console.log('Testing operation with full context:', {
+        operationType,
+        targetOperationId: selectedOperationId,
+        operationsCount: Object.keys(serializedOperations.defs).length,
+        operationParams,
+      });
 
       const result = await invokeWithPerf<string>('test_operation_with_params', {
         operationName: operationType,
         params: {
-          parameters: enhancedParams,
+          parameters: {
+            ...operationParams,
+            // Include the full operations context for the backend to resolve dependencies
+            __operations_context: serializedOperations,
+            __target_operation_id: selectedOperationId,
+          },
           operation_type: operationType,
         },
       });
@@ -77,51 +89,22 @@
   }
 
   /**
-   * Build child operations from the operation's sources property.
-   * Converts MergeOp.sources into child_operations array for the backend.
+   * @deprecated This function is no longer used.
+   * Instead, we pass the full operations state to the backend via __operations_context,
+   * allowing the backend to resolve all dependencies and sources directly.
    *
-   * For now, uses test audio files from the assets folder since we don't have
-   * direct access to timeline file paths during testing.
+   * The backend will:
+   * 1. Parse the operations context from __operations_context
+   * 2. Find the target operation from __target_operation_id
+   * 3. Recursively resolve all sources (files, groups, other operations)
+   * 4. Execute the operation with its full dependency graph
    */
   function buildChildOperationsFromSources(
-    operation: OperationDef
+    _operation: OperationDef
   ): Array<{ type: string; parameters: any }> {
-    const childOps: Array<{ type: string; parameters: any }> = [];
-
-    // Only process merge operations with sources
-    if (operation.kind !== 'merge' || !operation.sources || operation.sources.length === 0) {
-      return childOps;
-    }
-
-    console.log('Building child operations from sources:', operation.sources);
-
-    // For testing, use asset audio files
-    // TODO: In production, resolve actual file paths from timeline items or source resolution
-    const testAudioFiles = [
-      'assets/test_audio/420688__abletunes__abletunes-tsd-808-04-e.wav',
-      'assets/test_audio/420689__abletunes__abletunes-tsd-808-03-c.wav',
-    ];
-
-    // Create a sample operation for each test file
-    // In production, this would map each source to its corresponding file(s)
-    for (let i = 0; i < Math.min(operation.sources.length, testAudioFiles.length); i++) {
-      const source = operation.sources[i];
-      const filePath = testAudioFiles[i];
-
-      if (source) {
-        childOps.push({
-          type: 'sample',
-          parameters: {
-            file_path: filePath,
-            name: `${source.type}_${i + 1}`,
-          },
-        });
-      }
-    }
-
-    console.log(`Created ${childOps.length} child operations for testing`);
-
-    return childOps;
+    // No longer building child operations on frontend
+    // The backend now handles dependency resolution from the full operations context
+    return [];
   }
 
   async function handleTestScheduler() {

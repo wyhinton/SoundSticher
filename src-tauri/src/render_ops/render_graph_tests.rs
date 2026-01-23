@@ -13,6 +13,151 @@ use crate::playback::op_playback::AudioSpec;
 use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
 use serde::{Deserialize, Serialize};
 
+// ============================================================================
+// FRONTEND OPERATION TYPES (matching src/lib/state/operation.ts)
+// ============================================================================
+
+/// Unique identifier for operations (matches TypeScript OperationId)
+pub type OperationId = String;
+
+/// Render policy for operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RenderPolicy {
+    Auto,
+    Manual,
+    Frozen,
+}
+
+/// Source types for operations (matches TypeScript OperationSource)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum OperationSource {
+    #[serde(rename = "group")]
+    Group {
+        #[serde(rename = "groupRef")]
+        group_ref: String,
+    },
+    #[serde(rename = "file")]
+    File {
+        #[serde(rename = "fileId")]
+        file_id: String,
+    },
+    #[serde(rename = "files")]
+    Files {
+        #[serde(rename = "fileIds")]
+        file_ids: Vec<String>,
+    },
+    #[serde(rename = "all")]
+    All,
+    #[serde(rename = "active")]
+    Active,
+    #[serde(rename = "section")]
+    Section {
+        #[serde(rename = "sectionIndex")]
+        section_index: i32,
+    },
+    #[serde(rename = "operation")]
+    Operation {
+        #[serde(rename = "operationId")]
+        operation_id: OperationId,
+    },
+    #[serde(rename = "previousOperation")]
+    PreviousOperation {
+        #[serde(rename = "operationId")]
+        operation_id: OperationId,
+    },
+}
+
+/// Base operation fields common to all operation types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BaseOperationFields {
+    pub id: OperationId,
+    pub name: String,
+    #[serde(rename = "renderPolicy")]
+    pub render_policy: Option<RenderPolicy>,
+}
+
+/// Operation definition enum matching frontend types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum FrontendOperationDef {
+    #[serde(rename = "merge")]
+    Merge {
+        id: OperationId,
+        name: String,
+        #[serde(rename = "renderPolicy")]
+        render_policy: Option<RenderPolicy>,
+        sources: Vec<OperationSource>,
+        #[serde(rename = "outputPath")]
+        output_path: String,
+        format: String,
+    },
+    #[serde(rename = "sample")]
+    Sample {
+        id: OperationId,
+        name: String,
+        #[serde(rename = "renderPolicy")]
+        render_policy: Option<RenderPolicy>,
+        sources: Vec<OperationSource>,
+    },
+    #[serde(rename = "pipeline")]
+    Pipeline {
+        id: OperationId,
+        name: String,
+        #[serde(rename = "renderPolicy")]
+        render_policy: Option<RenderPolicy>,
+        operations: Vec<OperationId>,
+        sources: Vec<OperationSource>,
+    },
+}
+
+impl FrontendOperationDef {
+    pub fn id(&self) -> &OperationId {
+        match self {
+            FrontendOperationDef::Merge { id, .. } => id,
+            FrontendOperationDef::Sample { id, .. } => id,
+            FrontendOperationDef::Pipeline { id, .. } => id,
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            FrontendOperationDef::Merge { name, .. } => name,
+            FrontendOperationDef::Sample { name, .. } => name,
+            FrontendOperationDef::Pipeline { name, .. } => name,
+        }
+    }
+
+    pub fn sources(&self) -> &[OperationSource] {
+        match self {
+            FrontendOperationDef::Merge { sources, .. } => sources,
+            FrontendOperationDef::Sample { sources, .. } => sources,
+            FrontendOperationDef::Pipeline { sources, .. } => sources,
+        }
+    }
+
+    pub fn kind(&self) -> &str {
+        match self {
+            FrontendOperationDef::Merge { .. } => "merge",
+            FrontendOperationDef::Sample { .. } => "sample",
+            FrontendOperationDef::Pipeline { .. } => "pipeline",
+        }
+    }
+}
+
+/// Operations state from frontend (matches TypeScript OperationsState)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FrontendOperationsState {
+    pub defs: HashMap<OperationId, FrontendOperationDef>,
+    #[serde(default)]
+    pub order: Vec<OperationId>,
+}
+
+// ============================================================================
+// TEST SCHEDULER
+// ============================================================================
+
 /// Test the scheduler by submitting multiple tasks and observing execution
 #[tauri::command]
 pub async fn test_scheduler(
@@ -251,6 +396,55 @@ pub async fn test_operation_with_params(
         }
     }
 
+    // Extract operations context from parameters (sent from frontend)
+    let operations_context: Option<FrontendOperationsState> =
+        params.parameters.get("__operations_context").and_then(|v| {
+            match serde_json::from_value::<FrontendOperationsState>(v.clone()) {
+                Ok(ctx) => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!(
+                                "📦 Operations context loaded: {} operations, order: {:?}",
+                                ctx.defs.len(),
+                                ctx.order
+                            )
+                        );
+                    }
+                    Some(ctx)
+                }
+                Err(e) => {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("⚠️ Failed to parse operations context: {:?}", e)
+                        );
+                    }
+                    None
+                }
+            }
+        });
+
+    let target_operation_id: Option<String> = params
+        .parameters
+        .get("__target_operation_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "🎯 Target operation ID: {:?}, Has context: {}",
+                target_operation_id,
+                operations_context.is_some()
+            )
+        );
+    }
+
     // For now, validation is handled on the frontend side, but we need proper backend validation
 
     // For basic testing, we'll simulate operations with enhanced parameter extraction
@@ -383,9 +577,129 @@ pub async fn test_operation_with_params(
             let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
             let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
 
-            // Check if child operations are provided
-            let input_artifacts = if let Some(child_ops) = params.parameters.get("child_operations")
+            // Resolve input artifacts from operations context
+            let input_artifacts = if let (Some(ctx), Some(target_id)) =
+                (&operations_context, &target_operation_id)
             {
+                // Get the target operation from the context
+                if let Some(target_op) = ctx.defs.get(target_id) {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!(
+                                "🎯 Found target operation '{}' (kind: {}) in context",
+                                target_op.name(),
+                                target_op.kind()
+                            )
+                        );
+                    }
+
+                    // Resolve sources from the operation
+                    let sources = target_op.sources();
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("📋 Operation has {} sources to resolve", sources.len())
+                        );
+                    }
+
+                    let mut artifacts = Vec::new();
+                    for (idx, source) in sources.iter().enumerate() {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!(
+                                    "🔄 Resolving source {}/{}: {:?}",
+                                    idx + 1,
+                                    sources.len(),
+                                    source
+                                )
+                            );
+                        }
+
+                        // Resolve source to artifact(s)
+                        match resolve_operation_source(
+                            source,
+                            ctx,
+                            &base_artifacts_dir,
+                            &mut op_map,
+                            sample_rate,
+                            &logging_service,
+                        ) {
+                            Ok(resolved_artifacts) => {
+                                if let Ok(logger) = logging_service.lock() {
+                                    log_info!(
+                                        logger,
+                                        LogSystem::Combine,
+                                        &format!(
+                                            "✅ Source {} resolved to {} artifact(s)",
+                                            idx + 1,
+                                            resolved_artifacts.len()
+                                        )
+                                    );
+                                }
+                                artifacts.extend(resolved_artifacts);
+                            }
+                            Err(e) => {
+                                if let Ok(logger) = logging_service.lock() {
+                                    log_info!(
+                                        logger,
+                                        LogSystem::Combine,
+                                        &format!(
+                                            "⚠️ Failed to resolve source {}: {:?}",
+                                            idx + 1,
+                                            e
+                                        )
+                                    );
+                                }
+                                // Continue with other sources
+                            }
+                        }
+                    }
+
+                    if artifacts.is_empty() {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                "⚠️ No artifacts resolved from sources, using dummy test artifacts"
+                            );
+                        }
+                        // Fall back to dummy artifacts
+                        vec![AudioArtifact {
+                            path: std::path::PathBuf::from("test1.wav"),
+                            format: "wav".to_string(),
+                            sample_rate,
+                            channels: 2,
+                            duration: 5.0,
+                            metadata: HashMap::new(),
+                        }]
+                    } else {
+                        artifacts
+                    }
+                } else {
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("⚠️ Target operation '{}' not found in context", target_id)
+                        );
+                    }
+                    // Fall back to dummy artifacts
+                    vec![AudioArtifact {
+                        path: std::path::PathBuf::from("test1.wav"),
+                        format: "wav".to_string(),
+                        sample_rate,
+                        channels: 2,
+                        duration: 5.0,
+                        metadata: HashMap::new(),
+                    }]
+                }
+            } else if let Some(child_ops) = params.parameters.get("child_operations") {
+                // Legacy: handle child_operations array if provided
                 if let Some(ops_array) = child_ops.as_array() {
                     if let Ok(logger) = logging_service.lock() {
                         log_info!(
@@ -514,6 +828,74 @@ pub async fn test_operation_with_params(
                 ]
             };
 
+            // 🔍 DETAILED INPUT ARTIFACTS DEBUGGING
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔍 DETAILED ARTIFACT DEBUGGING: Total {} input artifacts resolved",
+                        input_artifacts.len()
+                    )
+                );
+                
+                for (idx, artifact) in input_artifacts.iter().enumerate() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "🎵 Artifact {}: path='{}', format='{}', sample_rate={}Hz, channels={}, duration={}s, metadata_keys=[{}]",
+                            idx + 1,
+                            artifact.path.display(),
+                            artifact.format,
+                            artifact.sample_rate,
+                            artifact.channels,
+                            artifact.duration,
+                            artifact.metadata.keys().cloned().collect::<Vec<String>>().join(", ")
+                        )
+                    );
+                    
+                    // Check if file actually exists and get its size
+                    if artifact.path.exists() {
+                        if let Ok(metadata) = std::fs::metadata(&artifact.path) {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!(
+                                    "📁 File {} exists: size={}KB",
+                                    idx + 1,
+                                    metadata.len() / 1024
+                                )
+                            );
+                        } else {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!("⚠️ File {} exists but metadata read failed", idx + 1)
+                            );
+                        }
+                    } else {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!("❌ File {} DOES NOT EXIST on disk: {}", idx + 1, artifact.path.display())
+                        );
+                    }
+                }
+
+                // Log what's being passed to the merge operation
+                let total_expected_duration: f64 = input_artifacts.iter().map(|a| a.duration).sum();
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📊 Input summary: {} files, total expected duration: {}s",
+                        input_artifacts.len(),
+                        total_expected_duration
+                    )
+                );
+            }
+
             // Create inputs for merge operation
             let mut inputs = HashMap::new();
             inputs.insert(
@@ -535,6 +917,35 @@ pub async fn test_operation_with_params(
             // Store work_dir display string before moving work_dir
             let work_dir_display = work_dir.display().to_string();
 
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 About to execute merge operation with work_dir: {}, op_id: {:?}",
+                        work_dir_display, op_id
+                    )
+                );
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 Operation context inputs contains: {} entries",
+                        inputs.len()
+                    )
+                );
+                if let Some(Artifact::AudioList(list)) = inputs.get("inputs") {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "🔧 AudioList in inputs contains {} audio artifacts",
+                            list.len()
+                        )
+                    );
+                }
+            }
+
             let context = OperationContext {
                 op_id,
                 work_dir,
@@ -553,10 +964,92 @@ pub async fn test_operation_with_params(
                             logger,
                             LogSystem::Combine,
                             &format!(
-                                "✅ Merge operation with child operations executed successfully in {:?}. Processed {} input files.",
+                                "✅ Merge operation executed successfully in {:?}. Processed {} input files.",
                                 elapsed, input_artifacts.len()
                             )
                         );
+
+                        // 🔍 DETAILED RESULT DEBUGGING
+                        match &result {
+                            Artifact::Audio(audio) => {
+                                log_info!(
+                                    logger,
+                                    LogSystem::Combine,
+                                    &format!(
+                                        "🎵 Result audio artifact: path='{}', format='{}', sample_rate={}Hz, channels={}, duration={}s",
+                                        audio.path.display(),
+                                        audio.format,
+                                        audio.sample_rate,
+                                        audio.channels,
+                                        audio.duration
+                                    )
+                                );
+
+                                // Check the actual output file size
+                                if audio.path.exists() {
+                                    if let Ok(metadata) = std::fs::metadata(&audio.path) {
+                                        log_info!(
+                                            logger,
+                                            LogSystem::Combine,
+                                            &format!(
+                                                "📁 Output file created: size={}KB ({}bytes)",
+                                                metadata.len() / 1024,
+                                                metadata.len()
+                                            )
+                                        );
+                                        
+                                        if metadata.len() < 1024 {
+                                            log_info!(
+                                                logger,
+                                                LogSystem::Combine,
+                                                "⚠️ WARNING: Output file is very small (< 1KB)! This indicates a problem with audio data."
+                                            );
+                                        }
+                                    } else {
+                                        log_info!(
+                                            logger,
+                                            LogSystem::Combine,
+                                            "❌ Output file exists but metadata read failed"
+                                        );
+                                    }
+                                } else {
+                                    log_info!(
+                                        logger,
+                                        LogSystem::Combine,
+                                        &format!("❌ Output file DOES NOT EXIST: {}", audio.path.display())
+                                    );
+                                }
+
+                                // Log metadata from result
+                                if !audio.metadata.is_empty() {
+                                    log_info!(
+                                        logger,
+                                        LogSystem::Combine,
+                                        &format!(
+                                            "📊 Result metadata: {}",
+                                            audio.metadata.iter()
+                                                .map(|(k, v)| format!("{}={}", k, v))
+                                                .collect::<Vec<_>>()
+                                                .join(", ")
+                                        )
+                                    );
+                                }
+                            }
+                            Artifact::AudioList(list) => {
+                                log_info!(
+                                    logger,
+                                    LogSystem::Combine,
+                                    &format!("🎵 Result is AudioList with {} items", list.len())
+                                );
+                            }
+                            _ => {
+                                log_info!(
+                                    logger,
+                                    LogSystem::Combine,
+                                    "🎵 Result is not an audio artifact type"
+                                );
+                            }
+                        }
                     }
 
                     // Return a detailed message with the parameters used
@@ -564,7 +1057,17 @@ pub async fn test_operation_with_params(
                         "✅ Operation '{}' completed successfully!\n\n📄 Result: {}\n🔧 Operation Type: Merge/Combine\n📊 Input Files: {} audio files\n⚙️ Parameters:\n  • Format: {}\n  • Sample Rate: {}Hz\n  • Bit Depth: {}bit\n📁 Work Directory: {}\n⏱️ Execution Time: {:?}\n\n🔍 Raw Parameters: {}",
                         operation_name,
                         match result {
-                            Artifact::Audio(audio) => format!("Audio file: {}", audio.path.display()),
+                            Artifact::Audio(audio) => {
+                                let size_info = if audio.path.exists() {
+                                    match std::fs::metadata(&audio.path) {
+                                        Ok(metadata) => format!(" ({}KB)", metadata.len() / 1024),
+                                        Err(_) => " (size unknown)".to_string(),
+                                    }
+                                } else {
+                                    " (FILE NOT FOUND)".to_string()
+                                };
+                                format!("Audio file: {}{}", audio.path.display(), size_info)
+                            },
                             _ => "Processed successfully".to_string()
                         },
                         input_artifacts.len(),
@@ -662,109 +1165,7 @@ pub async fn test_operation_with_params(
                 operations.len(),
                 serde_json::to_string_pretty(&params.parameters).unwrap_or_else(|_| "Invalid JSON".to_string())
             ))
-        }
-        "normalize" => {
-            // Extract and validate normalize operation parameters
-            let target_db = match params.parameters.get("target_db") {
-                Some(v) => {
-                    let db = v.as_f64().unwrap_or(-12.0).clamp(-60.0, 0.0);
-                    if let Ok(logger) = logging_service.lock() {
-                        log_info!(
-                            logger,
-                            LogSystem::Combine,
-                            &format!("🎚️ Target dB parameter: raw={:?} -> validated={:.1}", v, db)
-                        );
-                    }
-                    db
-                }
-                None => {
-                    if let Ok(logger) = logging_service.lock() {
-                        log_info!(
-                            logger,
-                            LogSystem::Combine,
-                            "🎚️ Target dB parameter: missing -> using default -12.0"
-                        );
-                    }
-                    -12.0
-                }
-            };
-
-            let preserve_peaks = params
-                .parameters
-                .get("preserve_peaks")
-                .and_then(|v| v.as_bool())
-                .unwrap_or_else(|| {
-                    if let Ok(logger) = logging_service.lock() {
-                        log_info!(
-                            logger,
-                            LogSystem::Combine,
-                            "🎚️ Preserve peaks parameter: missing -> using default true"
-                        );
-                    }
-                    true
-                });
-
-            let target_lufs = params.parameters.get("target_lufs").map(|v| {
-                let lufs = v.as_f64().unwrap_or(-23.0).clamp(-40.0, -6.0);
-                if let Ok(logger) = logging_service.lock() {
-                    log_info!(
-                        logger,
-                        LogSystem::Combine,
-                        &format!(
-                            "🎚️ Target LUFS parameter: raw={:?} -> validated={:.1}",
-                            v, lufs
-                        )
-                    );
-                }
-                lufs
-            });
-
-            let true_peak_limit = params.parameters.get("true_peak_limit").map(|v| {
-                let peak = v.as_f64().unwrap_or(-1.0).clamp(-6.0, 0.0);
-                if let Ok(logger) = logging_service.lock() {
-                    log_info!(
-                        logger,
-                        LogSystem::Combine,
-                        &format!(
-                            "🎚️ True peak limit parameter: raw={:?} -> validated={:.1}",
-                            v, peak
-                        )
-                    );
-                }
-                peak
-            });
-
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "Processing normalize operation: target_db={:.1}, preserve_peaks={}, lufs={:?}, peak_limit={:?}",
-                        target_db, preserve_peaks, target_lufs, true_peak_limit
-                    )
-                );
-            }
-
-            let mut parameter_lines = vec![
-                format!("  • Target dB: {:.1}", target_db),
-                format!("  • Preserve Peaks: {}", preserve_peaks),
-            ];
-
-            if let Some(lufs) = target_lufs {
-                parameter_lines.push(format!("  • Target LUFS: {:.1}", lufs));
-            }
-
-            if let Some(peak_limit) = true_peak_limit {
-                parameter_lines.push(format!("  • True Peak Limit: {:.1} dB", peak_limit));
-            }
-
-            Ok(format!(
-                "✅ Normalize operation '{}' simulated successfully!\n\n🔊 Normalization Settings:\n{}\n⚙️ Raw Parameters: {}\n\n⚠️ Note: This is a simulation - actual normalization not yet implemented.",
-                operation_name,
-                parameter_lines.join("\n"),
-                serde_json::to_string_pretty(&params.parameters).unwrap_or_else(|_| "Invalid JSON".to_string())
-            ))
-        }
+        },
         "export" => {
             // Extract and validate export operation parameters
             let format = params
@@ -956,5 +1357,317 @@ fn execute_child_operation(
             "Unsupported child operation type: {}. Supported types: sample",
             op_type
         )))),
+    }
+}
+
+/// Resolve an OperationSource to a list of AudioArtifacts
+///
+/// This function handles the different source types that can be specified
+/// in an operation definition, recursively resolving dependencies as needed.
+fn resolve_operation_source(
+    source: &OperationSource,
+    ctx: &FrontendOperationsState,
+    base_artifacts_dir: &std::path::Path,
+    op_map: &mut slotmap::SlotMap<OpId, ()>,
+    sample_rate: u32,
+    logging_service: &State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<Vec<AudioArtifact>, Error> {
+    match source {
+        OperationSource::File { file_id } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("📁 Resolving single file source: {}", file_id)
+                );
+            }
+            // For now, create a placeholder artifact with reasonable duration for testing
+            // TODO: Resolve actual file path from timeline state
+            let placeholder_duration = 3.0; // 3 seconds for testing
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 Creating placeholder audio artifact for file '{}' with duration={}s",
+                        file_id, placeholder_duration
+                    )
+                );
+            }
+            
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from(file_id),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: {
+                    let mut meta = HashMap::new();
+                    meta.insert("source_type".to_string(), "file".to_string());
+                    meta.insert("file_id".to_string(), file_id.clone());
+                    meta.insert("is_placeholder".to_string(), "true".to_string());
+                    meta
+                },
+            }])
+        }
+        OperationSource::Files { file_ids } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("📁 Resolving {} file sources", file_ids.len())
+                );
+            }
+            // Create placeholder artifacts for each file with reasonable durations
+            let artifacts: Vec<AudioArtifact> = file_ids
+                .iter()
+                .enumerate()
+                .map(|(idx, file_id)| {
+                    // Vary the duration for testing (2-5 seconds)
+                    let placeholder_duration = 2.0 + (idx as f64 * 0.5);
+                    if let Ok(logger) = logging_service.lock() {
+                        log_info!(
+                            logger,
+                            LogSystem::Combine,
+                            &format!(
+                                "🔧 Creating placeholder audio artifact {}/{} for file '{}' with duration={}s",
+                                idx + 1, file_ids.len(), file_id, placeholder_duration
+                            )
+                        );
+                    }
+                    
+                    AudioArtifact {
+                        path: std::path::PathBuf::from(file_id),
+                        format: "wav".to_string(),
+                        sample_rate,
+                        channels: 2,
+                        duration: placeholder_duration,
+                        metadata: {
+                            let mut meta = HashMap::new();
+                            meta.insert("source_type".to_string(), "files".to_string());
+                            meta.insert("file_id".to_string(), file_id.clone());
+                            meta.insert("is_placeholder".to_string(), "true".to_string());
+                            meta.insert("placeholder_index".to_string(), idx.to_string());
+                            meta
+                        },
+                    }
+                })
+                .collect();
+                
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📊 Created {} placeholder artifacts with total duration: {}s",
+                        artifacts.len(),
+                        artifacts.iter().map(|a| a.duration).sum::<f64>()
+                    )
+                );
+            }
+            
+            Ok(artifacts)
+        }
+        OperationSource::Group { group_ref } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("👥 Resolving group source: {}", group_ref)
+                );
+            }
+            // TODO: Resolve actual group files from groups state
+            let placeholder_duration = 4.0; // 4 seconds for testing
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 Creating placeholder group artifact for '{}' with duration={}s",
+                        group_ref, placeholder_duration
+                    )
+                );
+            }
+            
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from(format!("group_{}.wav", group_ref)),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: {
+                    let mut meta = HashMap::new();
+                    meta.insert("source_type".to_string(), "group".to_string());
+                    meta.insert("group_ref".to_string(), group_ref.clone());
+                    meta.insert("is_placeholder".to_string(), "true".to_string());
+                    meta
+                },
+            }])
+        }
+        OperationSource::Operation { operation_id } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("🔗 Resolving operation dependency: {}", operation_id)
+                );
+            }
+            // Recursively resolve the dependent operation
+            if let Some(dep_op) = ctx.defs.get(operation_id) {
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "🔄 Recursively resolving operation '{}' (kind: {})",
+                            dep_op.name(),
+                            dep_op.kind()
+                        )
+                    );
+                }
+                // Get sources from the dependent operation
+                let dep_sources = dep_op.sources();
+                let mut all_artifacts = Vec::new();
+                for dep_source in dep_sources {
+                    let artifacts = resolve_operation_source(
+                        dep_source,
+                        ctx,
+                        base_artifacts_dir,
+                        op_map,
+                        sample_rate,
+                        logging_service,
+                    )?;
+                    all_artifacts.extend(artifacts);
+                }
+                Ok(all_artifacts)
+            } else {
+                Err(Error::Io(std::io::Error::other(format!(
+                    "Dependent operation '{}' not found in context",
+                    operation_id
+                ))))
+            }
+        }
+        OperationSource::PreviousOperation { operation_id } => {
+            // Same as Operation source
+            resolve_operation_source(
+                &OperationSource::Operation {
+                    operation_id: operation_id.clone(),
+                },
+                ctx,
+                base_artifacts_dir,
+                op_map,
+                sample_rate,
+                logging_service,
+            )
+        }
+        OperationSource::All => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    "📚 Resolving 'all' source - TODO: needs timeline state"
+                );
+            }
+            // TODO: Resolve all files from timeline state
+            let placeholder_duration = 6.0; // 6 seconds for testing
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 Creating placeholder 'all' artifact with duration={}s",
+                        placeholder_duration
+                    )
+                );
+            }
+            
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from("all_files_placeholder.wav"),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: {
+                    let mut meta = HashMap::new();
+                    meta.insert("source_type".to_string(), "all".to_string());
+                    meta.insert("is_placeholder".to_string(), "true".to_string());
+                    meta
+                },
+            }])
+        }
+        OperationSource::Active => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    "🎯 Resolving 'active' source - TODO: needs timeline state"
+                );
+            }
+            // TODO: Resolve active files from timeline state
+            let placeholder_duration = 5.0; // 5 seconds for testing
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 Creating placeholder 'active' artifact with duration={}s",
+                        placeholder_duration
+                    )
+                );
+            }
+            
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from("active_files_placeholder.wav"),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: {
+                    let mut meta = HashMap::new();
+                    meta.insert("source_type".to_string(), "active".to_string());
+                    meta.insert("is_placeholder".to_string(), "true".to_string());
+                    meta
+                },
+            }])
+        }
+        OperationSource::Section { section_index } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📍 Resolving section source: {} - TODO: needs timeline state",
+                        section_index
+                    )
+                );
+            }
+            // TODO: Resolve section files from timeline state
+            let placeholder_duration = 3.5; // 3.5 seconds for testing
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔧 Creating placeholder section artifact for section {} with duration={}s",
+                        section_index, placeholder_duration
+                    )
+                );
+            }
+            
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from(format!("section_{}.wav", section_index)),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: {
+                    let mut meta = HashMap::new();
+                    meta.insert("source_type".to_string(), "section".to_string());
+                    meta.insert("section_index".to_string(), section_index.to_string());
+                    meta.insert("is_placeholder".to_string(), "true".to_string());
+                    meta
+                },
+            }])
+        }
     }
 }
