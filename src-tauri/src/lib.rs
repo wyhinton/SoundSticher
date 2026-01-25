@@ -356,7 +356,7 @@ pub fn run() {
             get_file_paths_in_folder,
             get_logging_config,
             get_metadata,
-            render_ops::render_graph_tests::test_operation_with_params,
+            render_ops::render_graph_tests::test_render_single_operation,
             render_ops::render_graph_tests::test_scheduler,
             op_playback_commands::op_playback_build_graph,
             op_playback_commands::op_playback_clear_graph,

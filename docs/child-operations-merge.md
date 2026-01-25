@@ -10,7 +10,7 @@ The render operation system supports a hierarchical structure where merge operat
 Frontend (TypeScript)          Backend (Rust)
 ─────────────────────          ──────────────
 
-MergeOp {                      test_operation_with_params(params) {
+MergeOp {                      test_render_single_operation(params) {
   sources: [                     child_operations: [
     { type: 'file', ... },         { type: 'sample', ... },
     { type: 'group', ... }         { type: 'sample', ... }
@@ -162,7 +162,7 @@ const params = {
   child_operations: childOperations,
 };
 
-await invoke('test_operation_with_params', {
+await invoke('test_render_single_operation', {
   operationName: 'merge',
   params: { parameters: params },
 });
@@ -171,7 +171,7 @@ await invoke('test_operation_with_params', {
 ### 3. Backend: Execute Child Operations
 
 ```rust
-// In test_operation_with_params()
+// In test_render_single_operation()
 if let Some(child_ops) = params.parameters.get("child_operations") {
     let mut artifacts = Vec::new();
 

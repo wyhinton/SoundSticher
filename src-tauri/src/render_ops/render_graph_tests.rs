@@ -339,7 +339,7 @@ impl Default for TestOperationParams {
 ///    - Validate parameter sizes to prevent DoS attacks
 ///    - Check permissions for file operations
 #[tauri::command]
-pub async fn test_operation_with_params(
+pub async fn test_render_single_operation(
     operation_name: String,
     params: TestOperationParams,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
@@ -351,7 +351,7 @@ pub async fn test_operation_with_params(
             logger,
             LogSystem::Combine,
             &format!(
-                "🚀 Starting test_operation_with_params - Operation: '{}', Type: {:?}",
+                "🚀 Starting test_render_single_operation - Operation: '{}', Type: {:?}",
                 operation_name,
                 params.operation_type.as_deref().unwrap_or("unknown")
             )
@@ -1275,7 +1275,7 @@ pub async fn test_operation_with_params(
             }
 
             Ok(format!(
-                "⚙️ Generic operation '{}' simulated!\n\n📋 {}\n📝 Raw Parameters:\n{}\n\n💡 Supported operations with specific parameter handling:\n  • combine_active / merge / combine\n  • master_pipeline\n  • normalize\n  • export\n\n🔧 To add support for '{}', update the match statement in test_operation_with_params.\n\n⚠️ Note: This is a generic simulation - no specific operation logic implemented.\n\n⏱️ Execution time: {:?}",
+                "⚙️ Generic operation '{}' simulated!\n\n📋 {}\n📝 Raw Parameters:\n{}\n\n💡 Supported operations with specific parameter handling:\n  • combine_active / merge / combine\n  • master_pipeline\n  • normalize\n  • export\n\n🔧 To add support for '{}', update the match statement in test_render_single_operation.\n\n⚠️ Note: This is a generic simulation - no specific operation logic implemented.\n\n⏱️ Execution time: {:?}",
                 operation_name,
                 param_summary,
                 serde_json::to_string_pretty(&params.parameters).unwrap_or_else(|_| "Invalid JSON".to_string()),

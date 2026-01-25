@@ -64,7 +64,7 @@
         operationParams,
       });
 
-      const result = await invokeWithPerf<string>('test_operation_with_params', {
+      const result = await invokeWithPerf<string>('test_render_single_operation', {
         operationName: operationType,
         params: {
           parameters: {
