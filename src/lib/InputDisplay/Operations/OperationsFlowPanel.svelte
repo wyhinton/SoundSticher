@@ -217,11 +217,61 @@
           <div class="operation-buttons">
             <button
               class="operation-add-btn"
-              onclick={addMergeOperation}
+              onclick={addMergeOpRender}
               title="Add merge operation"
             >
               <span class="operation-icon">🔗</span>
               <span class="operation-label">Merge</span>
+              <i class="fa fa-plus"></i>
+            </button>
+
+            <button
+              class="operation-add-btn"
+              onclick={() => console.log('Split operation - coming soon')}
+              title="Add split operation"
+            >
+              <span class="operation-icon">✂️</span>
+              <span class="operation-label">Split</span>
+              <i class="fa fa-plus"></i>
+            </button>
+
+            <button
+              class="operation-add-btn"
+              onclick={() => console.log('FX Rack operation - coming soon')}
+              title="Add FX rack operation"
+            >
+              <span class="operation-icon">🎛️</span>
+              <span class="operation-label">FX Rack</span>
+              <i class="fa fa-plus"></i>
+            </button>
+
+            <button
+              class="operation-add-btn"
+              onclick={() => console.log('Stems operation - coming soon')}
+              title="Add stems operation"
+            >
+              <span class="operation-icon">🎵</span>
+              <span class="operation-label">Stems</span>
+              <i class="fa fa-plus"></i>
+            </button>
+
+            <button
+              class="operation-add-btn"
+              onclick={() => console.log('Audio Wrangle operation - coming soon')}
+              title="Add audio wrangle operation"
+            >
+              <span class="operation-icon">🔧</span>
+              <span class="operation-label">Audio Wrangle</span>
+              <i class="fa fa-plus"></i>
+            </button>
+
+            <button
+              class="operation-add-btn"
+              onclick={() => console.log('Layer operation - coming soon')}
+              title="Add layer operation"
+            >
+              <span class="operation-icon">📚</span>
+              <span class="operation-label">Layer</span>
               <i class="fa fa-plus"></i>
             </button>
           </div>

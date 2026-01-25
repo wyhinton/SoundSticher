@@ -669,14 +669,13 @@ pub async fn test_operation_with_params(
                             );
                         }
                         // Fall back to dummy artifacts
-                        vec![AudioArtifact {
-                            path: std::path::PathBuf::from("test1.wav"),
-                            format: "wav".to_string(),
+                        vec![AudioArtifact::new(
+                            std::path::PathBuf::from("test1.wav"),
+                            "wav".to_string(),
                             sample_rate,
-                            channels: 2,
-                            duration: 5.0,
-                            metadata: HashMap::new(),
-                        }]
+                            2,
+                            5.0,
+                        )]
                     } else {
                         artifacts
                     }
@@ -689,14 +688,13 @@ pub async fn test_operation_with_params(
                         );
                     }
                     // Fall back to dummy artifacts
-                    vec![AudioArtifact {
-                        path: std::path::PathBuf::from("test1.wav"),
-                        format: "wav".to_string(),
+                    vec![AudioArtifact::new(
+                        std::path::PathBuf::from("test1.wav"),
+                        "wav".to_string(),
                         sample_rate,
-                        channels: 2,
-                        duration: 5.0,
-                        metadata: HashMap::new(),
-                    }]
+                        2,
+                        5.0,
+                    )]
                 }
             } else if let Some(child_ops) = params.parameters.get("child_operations") {
                 // Legacy: handle child_operations array if provided
@@ -809,22 +807,20 @@ pub async fn test_operation_with_params(
                 }
 
                 vec![
-                    AudioArtifact {
-                        path: std::path::PathBuf::from("test1.wav"),
-                        format: "wav".to_string(),
+                    AudioArtifact::new(
+                        std::path::PathBuf::from("test1.wav"),
+                        "wav".to_string(),
                         sample_rate,
-                        channels: 2,
-                        duration: 5.0,
-                        metadata: HashMap::new(),
-                    },
-                    AudioArtifact {
-                        path: std::path::PathBuf::from("test2.wav"),
-                        format: "wav".to_string(),
+                        2,
+                        5.0,
+                    ),
+                    AudioArtifact::new(
+                        std::path::PathBuf::from("test2.wav"),
+                        "wav".to_string(),
                         sample_rate,
-                        channels: 2,
-                        duration: 3.0,
-                        metadata: HashMap::new(),
-                    },
+                        2,
+                        3.0,
+                    ),
                 ]
             };
 
@@ -1408,6 +1404,7 @@ fn resolve_operation_source(
                     meta.insert("is_placeholder".to_string(), "true".to_string());
                     meta
                 },
+                data: None,
             }])
         }
         OperationSource::Files { file_ids } => {
@@ -1450,6 +1447,7 @@ fn resolve_operation_source(
                             meta.insert("placeholder_index".to_string(), idx.to_string());
                             meta
                         },
+                        data: None,
                     }
                 })
                 .collect();
@@ -1502,6 +1500,7 @@ fn resolve_operation_source(
                     meta.insert("is_placeholder".to_string(), "true".to_string());
                     meta
                 },
+                data: None,
             }])
         }
         OperationSource::Operation { operation_id } => {
@@ -1593,6 +1592,7 @@ fn resolve_operation_source(
                     meta.insert("is_placeholder".to_string(), "true".to_string());
                     meta
                 },
+                data: None,
             }])
         }
         OperationSource::Active => {
@@ -1628,6 +1628,7 @@ fn resolve_operation_source(
                     meta.insert("is_placeholder".to_string(), "true".to_string());
                     meta
                 },
+                data: None,
             }])
         }
         OperationSource::Section { section_index } => {
@@ -1667,6 +1668,7 @@ fn resolve_operation_source(
                     meta.insert("is_placeholder".to_string(), "true".to_string());
                     meta
                 },
+                data: None,
             }])
         }
     }

@@ -2,7 +2,7 @@
 //
 // This operation simply reads from a pre-loaded buffer of audio samples.
 
-use crate::artifacts::{Artifact, AudioArtifact};
+use crate::artifacts::{Artifact, AudioArtifact, AudioBuffer, AudioData};
 use crate::playback::op_playback::AudioSpec;
 use crate::render_ops::{
     OperationCategory, OperationContext, OperationError, OperationResult, RenderOperation,
@@ -145,14 +145,17 @@ impl RenderOperation for SampleOpRender {
         let file_path: String = context.get_parameter("file_path")?;
         let name: Option<String> = context.get_parameter("name").ok();
 
+        // Check if we should cache to disk (optional parameter, default false for in-memory)
+        let cache_to_disk: bool = context.get_parameter("cache_to_disk").unwrap_or(false);
+
         context.report_progress(0.1);
 
         // Load the audio file using symphonia
-        let (_samples, sample_rate, channels, duration) = load_audio_file(&file_path)?;
+        let (samples, sample_rate, channels, duration) = load_audio_file(&file_path)?;
 
         context.report_progress(0.8);
 
-        // Create AudioArtifact
+        // Create AudioArtifact - either in-memory or on-disk based on caching preference
         let path = PathBuf::from(&file_path);
         let format = path
             .extension()
@@ -160,8 +163,25 @@ impl RenderOperation for SampleOpRender {
             .unwrap_or("unknown")
             .to_string();
 
-        let mut artifact =
-            AudioArtifact::new(path.clone(), format, sample_rate, channels, duration);
+        let mut artifact = if cache_to_disk {
+            // Create a disk-backed artifact that references the source file
+            let mut a = AudioArtifact::new(path.clone(), format, sample_rate, channels, duration);
+
+            // But also store the loaded samples in memory for immediate use
+            let buffer = AudioBuffer::new(samples, sample_rate, channels);
+            a.set_audio_data(AudioData::InMemory(buffer));
+            a
+        } else {
+            // Create an in-memory artifact (preferred for pipeline operations)
+            let buffer = AudioBuffer::new(samples, sample_rate, channels);
+            let mut a = AudioArtifact::from_buffer(buffer);
+
+            // Store the original file path in metadata for reference
+            a.metadata
+                .insert("source_file".to_string(), file_path.clone());
+            a.metadata.insert("original_format".to_string(), format);
+            a
+        };
 
         // Add optional metadata
         if let Some(name) = name {

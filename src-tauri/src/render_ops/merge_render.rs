@@ -1,6 +1,12 @@
 // Merge operation implementation
+//
+// This operation merges multiple audio artifacts into a single output.
+// It supports both in-memory and on-disk input artifacts, consuming them
+// agnostically through the hybrid artifact model.
 
-use crate::artifacts::{Artifact, AudioArtifact};
+use crate::artifacts::{
+    load_audio_to_buffer, write_wav_file, Artifact, AudioArtifact, AudioBuffer, AudioData,
+};
 use crate::render_ops::{
     OperationCategory, OperationContext, OperationError, OperationResult, RenderOperation,
 };
@@ -57,7 +63,7 @@ impl RenderOperation for MergeOpRender {
 
         // Get input artifacts
         let inputs_artifact = context.get_input("inputs")?;
-        let input_files = match inputs_artifact {
+        let mut input_artifacts = match inputs_artifact {
             Artifact::Audio(audio) => vec![audio.clone()],
             Artifact::AudioList(list) => list.clone(),
             _ => {
@@ -67,7 +73,7 @@ impl RenderOperation for MergeOpRender {
             }
         };
 
-        if input_files.is_empty() {
+        if input_artifacts.is_empty() {
             return Err(OperationError::InvalidInput(
                 "At least one input file required".to_string(),
             ));
@@ -75,28 +81,33 @@ impl RenderOperation for MergeOpRender {
 
         context.report_progress(0.1);
 
-        context.report_progress(0.3);
+        // Perform concatenation - this now handles both in-memory and on-disk artifacts
+        let (merged_buffer, _sample_rate, _channels) =
+            self.concatenate_audio_buffers(&mut input_artifacts, &context)?;
 
-        // Create output path
+        context.report_progress(0.9);
+
+        // Create output path for the final file
         let output_path = context.work_dir.join(format!(
             "merged_{}.wav",
             id_utils::friendly_id(context.op_id, "op")
         ));
 
-        // Perform concatenation
-        self.concatenate_audio(&input_files, &output_path, &context)?;
+        // Write the merged output to disk (this is a final output, so we materialize)
+        write_wav_file(output_path.clone(), &merged_buffer).map_err(|e| {
+            OperationError::AudioError(format!("Failed to write merged audio: {}", e))
+        })?;
 
-        context.report_progress(0.9);
-
-        // Create output artifact
-        let output_audio = AudioArtifact {
-            path: output_path,
-            format: "wav".to_string(),
-            sample_rate: input_files[0].sample_rate, // Use first file's sample rate
-            channels: input_files[0].channels, // Use first file's channel count for concatenation
-            duration: input_files.iter().map(|audio| audio.duration).sum(), // Sum all durations
-            metadata: std::collections::HashMap::new(),
-        };
+        // Create output artifact - stores both the path and the in-memory buffer
+        let mut output_audio = AudioArtifact::from_buffer(merged_buffer);
+        output_audio.path = output_path.clone();
+        output_audio.format = "wav".to_string();
+        output_audio
+            .metadata
+            .insert("merge_type".to_string(), "concatenate".to_string());
+        output_audio
+            .metadata
+            .insert("input_count".to_string(), input_artifacts.len().to_string());
 
         context.report_progress(1.0);
         Ok(Artifact::Audio(output_audio))
@@ -122,27 +133,110 @@ impl RenderOperation for MergeOpRender {
 }
 
 impl MergeOpRender {
-    fn concatenate_audio(
+    /// Concatenate audio from multiple artifacts into a single buffer.
+    ///
+    /// This method handles both in-memory and on-disk artifacts transparently:
+    /// - In-memory artifacts: samples are read directly from the buffer
+    /// - On-disk artifacts: samples are loaded from the file
+    fn concatenate_audio_buffers(
         &self,
-        inputs: &[AudioArtifact],
-        output_path: &std::path::Path,
+        inputs: &mut [AudioArtifact],
         context: &OperationContext,
-    ) -> Result<(), OperationError> {
-        // TODO: Implement audio concatenation
-        // For now, this is a placeholder that would use an audio library like cpal or symphonia
-
-        // Progress tracking for concatenation
-        for (i, _input) in inputs.iter().enumerate() {
-            let progress = 0.2 + (0.6 * (i as f32 / inputs.len() as f32));
-            context.report_progress(progress);
-
-            // TODO: Process each input file
-            // - Load audio data
-            // - Append to output buffer
+    ) -> Result<(AudioBuffer, u32, u32), OperationError> {
+        if inputs.is_empty() {
+            return Err(OperationError::InvalidInput(
+                "No input artifacts to concatenate".to_string(),
+            ));
         }
 
-        // TODO: Write final output
-        std::fs::write(output_path, b"placeholder_concatenated_audio")?;
-        Ok(())
+        // Get metadata from first input (borrow ends after these lines)
+        let target_sample_rate = inputs[0].sample_rate;
+        let target_channels = inputs[0].channels;
+        let total_inputs = inputs.len();
+
+        // Collect all samples
+        let mut all_samples: Vec<f32> = Vec::new();
+
+        for i in 0..total_inputs {
+            let progress = 0.2 + (0.6 * (i as f32 / total_inputs as f32));
+            context.report_progress(progress);
+
+            // Get samples from the artifact (handles both in-memory and on-disk)
+            let artifact = &mut inputs[i];
+            let artifact_sample_rate = artifact.sample_rate;
+            let artifact_channels = artifact.channels;
+            let samples = self.get_samples_from_artifact(artifact)?;
+
+            // TODO: Add sample rate conversion if needed
+            if artifact_sample_rate != target_sample_rate {
+                // For now, just warn - proper implementation would resample
+                eprintln!(
+                    "Warning: Sample rate mismatch in input {}: {} vs target {}",
+                    i, artifact_sample_rate, target_sample_rate
+                );
+            }
+
+            // TODO: Add channel conversion if needed
+            if artifact_channels != target_channels {
+                eprintln!(
+                    "Warning: Channel count mismatch in input {}: {} vs target {}",
+                    i, artifact_channels, target_channels
+                );
+            }
+
+            all_samples.extend(samples);
+        }
+
+        let merged_buffer = AudioBuffer::new(all_samples, target_sample_rate, target_channels);
+
+        Ok((merged_buffer, target_sample_rate, target_channels))
+    }
+
+    /// Get audio samples from an artifact, regardless of whether it's in-memory or on-disk.
+    ///
+    /// This is the key abstraction that makes the merge operation agnostic to
+    /// how the input artifacts store their data.
+    fn get_samples_from_artifact(
+        &self,
+        artifact: &mut AudioArtifact,
+    ) -> Result<Vec<f32>, OperationError> {
+        match &artifact.data {
+            Some(AudioData::InMemory(buffer)) => {
+                // Already in memory - just clone the samples
+                Ok(buffer.samples.as_ref().clone())
+            }
+            Some(AudioData::OnDisk { path, .. }) => {
+                // On disk - load into buffer
+                let buffer = load_audio_to_buffer(path).map_err(|e| {
+                    OperationError::AudioError(format!(
+                        "Failed to load audio from {}: {}",
+                        path.display(),
+                        e
+                    ))
+                })?;
+                Ok(buffer.samples.as_ref().clone())
+            }
+            Some(AudioData::Reference { .. }) => Err(OperationError::InvalidInput(
+                "Cannot merge unresolved reference artifacts".to_string(),
+            )),
+            None => {
+                // Fallback: try to load from path field
+                if artifact.path.exists() {
+                    let buffer = load_audio_to_buffer(&artifact.path).map_err(|e| {
+                        OperationError::AudioError(format!(
+                            "Failed to load audio from {}: {}",
+                            artifact.path.display(),
+                            e
+                        ))
+                    })?;
+                    Ok(buffer.samples.as_ref().clone())
+                } else {
+                    Err(OperationError::InvalidInput(format!(
+                        "No audio data available for artifact: {}",
+                        artifact.path.display()
+                    )))
+                }
+            }
+        }
     }
 }

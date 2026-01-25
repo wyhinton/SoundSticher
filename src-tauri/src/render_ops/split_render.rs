@@ -299,6 +299,7 @@ impl SplitOperation {
                 meta.insert("segment_index".to_string(), index.to_string());
                 meta
             },
+            data: None, // Placeholder segment without audio data loaded
         })
     }
 }
