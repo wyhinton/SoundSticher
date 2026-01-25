@@ -99,13 +99,6 @@
    * 3. Recursively resolve all sources (files, groups, other operations)
    * 4. Execute the operation with its full dependency graph
    */
-  function buildChildOperationsFromSources(
-    _operation: OperationDef
-  ): Array<{ type: string; parameters: any }> {
-    // No longer building child operations on frontend
-    // The backend now handles dependency resolution from the full operations context
-    return [];
-  }
 
   async function handleTestScheduler() {
     isTestingScheduler = true;
