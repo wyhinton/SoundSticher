@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "sample.schema.json",
+  "title": "SampleOp",
+  "description": "Loads and processes individual audio samples",
+  "type": "object",
+  "allOf": [{ "$ref": "baseOperation.schema.json" }],
+  "required": ["kind", "sources"],
+  "properties": {
+    "kind": {
+      "const": "sample"
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "operationSource.schema.json" },
+      "minItems": 1,
+      "description": "Audio sources to load"
+    },
+    "params": {
+      "type": "object",
+      "description": "Sample operation parameters",
+      "properties": {
+        "trim_start_ms": {
+          "type": "integer",
+          "description": "Trim from start in milliseconds",
+          "minimum": 0,
+          "default": 0,
+          "ui": {
+            "control": "number",
+            "label": "Trim Start (ms)",
+            "group": "trim"
+          }
+        },
+        "trim_end_ms": {
+          "type": "integer",
+          "description": "Trim from end in milliseconds",
+          "minimum": 0,
+          "default": 0,
+          "ui": {
+            "control": "number",
+            "label": "Trim End (ms)",
+            "group": "trim"
+          }
+        },
+        "fade_in_ms": {
+          "type": "integer",
+          "description": "Fade in duration in milliseconds",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 0,
+          "ui": {
+            "control": "slider",
+            "label": "Fade In (ms)",
+            "step": 10,
+            "group": "fades"
+          }
+        },
+        "fade_out_ms": {
+          "type": "integer",
+          "description": "Fade out duration in milliseconds",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 0,
+          "ui": {
+            "control": "slider",
+            "label": "Fade Out (ms)",
+            "step": 10,
+            "group": "fades"
+          }
+        },
+        "gain_db": {
+          "type": "number",
+          "description": "Gain adjustment in dB",
+          "minimum": -60,
+          "maximum": 24,
+          "default": 0,
+          "ui": {
+            "control": "slider",
+            "label": "Gain (dB)",
+            "step": 0.5,
+            "group": "levels"
+          }
+        },
+        "reverse": {
+          "type": "boolean",
+          "description": "Reverse the audio",
+          "default": false,
+          "ui": {
+            "control": "checkbox",
+            "label": "Reverse",
+            "group": "effects"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

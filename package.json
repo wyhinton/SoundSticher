@@ -4,8 +4,9 @@
   "version": "0.2.2",
   "type": "module",
   "scripts": {
-    "build:web": "npm run sync:logging && vite build",
-    "build": "npm run sync:logging && tauri build",
+    "generate:types": "node scripts/generate-operation-types.js",
+    "build:web": "npm run generate:types && npm run sync:logging && vite build",
+    "build": "npm run generate:types && npm run sync:logging && tauri build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "dev:web": "npm run sync:logging && vite",
     "dev": "npm run sync:logging && tauri dev",

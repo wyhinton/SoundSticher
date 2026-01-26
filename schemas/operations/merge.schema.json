@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "merge.schema.json",
+  "title": "MergeOp",
+  "description": "Concatenates multiple audio files into a single output file",
+  "type": "object",
+  "allOf": [{ "$ref": "baseOperation.schema.json" }],
+  "required": ["kind", "sources", "outputPath", "params"],
+  "properties": {
+    "kind": {
+      "const": "merge"
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "operationSource.schema.json" },
+      "minItems": 1,
+      "description": "Audio sources to merge together"
+    },
+    "outputPath": {
+      "type": "string",
+      "description": "Path for the output file",
+      "default": "",
+      "ui": {
+        "control": "file-path",
+        "label": "Output Path",
+        "placeholder": "Select output location..."
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Merge operation parameters",
+      "required": ["sample_rate", "bit_depth", "format"],
+      "properties": {
+        "sample_rate": {
+          "type": "integer",
+          "description": "Output sample rate in Hz",
+          "enum": [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],
+          "default": 44100,
+          "ui": {
+            "control": "select",
+            "label": "Sample Rate (Hz)",
+            "group": "audio"
+          }
+        },
+        "bit_depth": {
+          "type": "integer",
+          "description": "Output bit depth",
+          "enum": [8, 16, 24, 32],
+          "default": 16,
+          "ui": {
+            "control": "select",
+            "label": "Bit Depth",
+            "group": "audio"
+          }
+        },
+        "format": {
+          "type": "string",
+          "description": "Output audio format",
+          "enum": ["wav", "mp3", "flac", "ogg", "m4a"],
+          "default": "wav",
+          "ui": {
+            "control": "select",
+            "label": "Output Format",
+            "group": "audio"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

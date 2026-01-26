@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "operationSource.schema.json",
+  "title": "OperationSource",
+  "description": "Defines the source(s) of audio data for an operation",
+  "oneOf": [
+    {
+      "type": "object",
+      "title": "GroupSource",
+      "required": ["type", "groupRef"],
+      "properties": {
+        "type": { "const": "group" },
+        "groupRef": {
+          "type": "string",
+          "description": "Reference to a named group of files"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "FileSource",
+      "required": ["type", "fileId"],
+      "properties": {
+        "type": { "const": "file" },
+        "fileId": {
+          "type": "string",
+          "description": "ID of a single file"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "FilesSource",
+      "required": ["type", "fileIds"],
+      "properties": {
+        "type": { "const": "files" },
+        "fileIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Array of file IDs"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "AllSource",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "all" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "ActiveSource",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "active" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "SectionSource",
+      "required": ["type", "sectionIndex"],
+      "properties": {
+        "type": { "const": "section" },
+        "sectionIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index of the section to use"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "OperationSource",
+      "required": ["type", "operationId"],
+      "properties": {
+        "type": { "const": "operation" },
+        "operationId": {
+          "type": "string",
+          "description": "ID of another operation whose output to use"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "title": "PreviousOperationSource",
+      "required": ["type", "operationId"],
+      "properties": {
+        "type": { "const": "previousOperation" },
+        "operationId": {
+          "type": "string",
+          "description": "ID of a previous operation in pipeline"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

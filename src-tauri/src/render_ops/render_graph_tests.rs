@@ -264,28 +264,7 @@ pub async fn test_scheduler(
     Ok(result)
 }
 
-/// Parameters for testing operations with custom values
-/// This struct accepts any JSON parameters for different operation types
-///
-/// Supported operation types and their parameters:
-///
-/// **merge/combine/combine_active:**
-/// - output_format: string ("wav", "mp3", "flac", default: "wav")
-/// - sample_rate: u32 (Hz, default: 44100)
-/// - bit_depth: u32 (bits, default: 16)
-///
-/// **master_pipeline:**
-/// - operations: array of strings (pipeline steps, default: ["combine", "normalize", "export"])
-/// - parallel_execution: bool (run steps in parallel when possible, default: false)
-///
-/// **normalize:**
-/// - target_db: f64 (target level in dB, default: -12.0)
-/// - preserve_peaks: bool (preserve peak levels, default: true)
-///
-/// **export:**
-/// - format: string (output format, default: "wav")
-/// - quality: string ("low", "medium", "high", default: "high")
-/// - output_path: string (output directory, default: "./output")
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TestOperationParams {
     /// Generic parameters map that can hold any operation-specific parameters

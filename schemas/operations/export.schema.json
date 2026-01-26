@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "export.schema.json",
+  "title": "ExportOp",
+  "description": "Exports audio to a specific format and location",
+  "type": "object",
+  "allOf": [{ "$ref": "baseOperation.schema.json" }],
+  "required": ["kind", "sources", "outputPath", "params"],
+  "properties": {
+    "kind": {
+      "const": "export"
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "operationSource.schema.json" },
+      "minItems": 1,
+      "description": "Audio sources to export"
+    },
+    "outputPath": {
+      "type": "string",
+      "description": "Output file path",
+      "ui": {
+        "control": "file-path",
+        "label": "Output Path",
+        "placeholder": "Select output location..."
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Export operation parameters",
+      "required": ["format", "quality"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Output audio format",
+          "enum": ["wav", "mp3", "flac", "ogg", "m4a", "aac"],
+          "default": "wav",
+          "ui": {
+            "control": "select",
+            "label": "Format",
+            "group": "format"
+          }
+        },
+        "quality": {
+          "type": "string",
+          "description": "Encoding quality preset",
+          "enum": ["low", "medium", "high", "lossless"],
+          "default": "high",
+          "ui": {
+            "control": "select",
+            "label": "Quality",
+            "group": "format"
+          }
+        },
+        "sample_rate": {
+          "type": "integer",
+          "description": "Output sample rate in Hz",
+          "enum": [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],
+          "default": 44100,
+          "ui": {
+            "control": "select",
+            "label": "Sample Rate (Hz)",
+            "group": "format"
+          }
+        },
+        "bit_depth": {
+          "type": "integer",
+          "description": "Output bit depth (for lossless formats)",
+          "enum": [8, 16, 24, 32],
+          "default": 16,
+          "ui": {
+            "control": "select",
+            "label": "Bit Depth",
+            "group": "format",
+            "showIf": { "format": ["wav", "flac"] }
+          }
+        },
+        "bit_rate": {
+          "type": "integer",
+          "description": "Bit rate in kbps (for lossy formats)",
+          "enum": [64, 96, 128, 160, 192, 224, 256, 320],
+          "default": 320,
+          "ui": {
+            "control": "select",
+            "label": "Bit Rate (kbps)",
+            "group": "format",
+            "showIf": { "format": ["mp3", "ogg", "m4a", "aac"] }
+          }
+        },
+        "normalize_before_export": {
+          "type": "boolean",
+          "description": "Normalize audio before exporting",
+          "default": false,
+          "ui": {
+            "control": "checkbox",
+            "label": "Normalize Before Export",
+            "group": "processing"
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Metadata to embed in the output file",
+          "properties": {
+            "title": { "type": "string" },
+            "artist": { "type": "string" },
+            "album": { "type": "string" },
+            "year": { "type": "integer" },
+            "genre": { "type": "string" },
+            "comment": { "type": "string" }
+          },
+          "ui": {
+            "control": "metadata-editor",
+            "label": "Metadata",
+            "group": "metadata",
+            "collapsed": true
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}
