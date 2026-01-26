@@ -1,7 +1,7 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT
  * Generated from JSON Schemas in /schemas/operations/
- * Generated at: 2026-01-26T20:52:35.551Z
+ * Generated at: 2026-01-26T21:48:31.202Z
  */
 
 
@@ -28,15 +28,6 @@ export interface MergeOpParams {
   sample_rate: 8000 | 11025 | 16000 | 22050 | 44100 | 48000 | 88200 | 96000;
   bit_depth: 8 | 16 | 24 | 32;
   format: "wav" | "mp3" | "flac" | "ogg" | "m4a";
-  target_db?: number;
-}
-
-/** Parameters for NormalizeOp operation */
-export interface NormalizeOpParams {
-  target_db: number;
-  mode?: "peak" | "rms" | "lufs";
-  preserve_stereo_balance?: boolean;
-  use_true_peak?: boolean;
 }
 
 /** Parameters for PipelineOp operation */
@@ -56,33 +47,18 @@ export interface SampleOpParams {
   reverse?: boolean;
 }
 
-/** Parameters for SplitOp operation */
-export interface SplitOpParams {
-  mode: "equal_parts" | "by_duration" | "at_markers" | "by_silence";
-  num_parts?: number;
-  segment_duration_ms?: number;
-  markers?: number[];
-  silence_threshold_db?: number;
-  min_silence_duration_ms?: number;
-  keep_silence?: boolean;
-  output_format?: "wav" | "mp3" | "flac" | "ogg";
-  naming_pattern?: string;
-}
-
 /** Union of all operation parameter types */
-export type OperationParams = ExportOpParams | MergeOpParams | NormalizeOpParams | PipelineOpParams | SampleOpParams | SplitOpParams;
+export type OperationParams = ExportOpParams | MergeOpParams | PipelineOpParams | SampleOpParams;
 
 /** All supported operation kinds */
-export type OperationKind = "export" | "merge" | "normalize" | "pipeline" | "sample" | "split";
+export type OperationKind = "export" | "merge" | "pipeline" | "sample";
 
 /** Default parameter values for each operation type */
 export const operationDefaults: Record<OperationKind, Record<string, unknown>> = {
   export: {"format":"wav","quality":"high","sample_rate":44100,"bit_depth":16,"bit_rate":320,"normalize_before_export":false},
-  merge: {"sample_rate":44100,"bit_depth":16,"format":"wav","target_db":-3},
-  normalize: {"target_db":-3,"mode":"peak","preserve_stereo_balance":true,"use_true_peak":false},
+  merge: {"sample_rate":44100,"bit_depth":16,"format":"wav"},
   pipeline: {"parallel":false,"continue_on_error":false,"cache_intermediates":false},
   sample: {"trim_start_ms":0,"trim_end_ms":0,"fade_in_ms":0,"fade_out_ms":0,"gain_db":0,"reverse":false},
-  split: {"mode":"equal_parts","num_parts":2,"segment_duration_ms":30000,"markers":[],"silence_threshold_db":-40,"min_silence_duration_ms":500,"keep_silence":false,"output_format":"wav","naming_pattern":"{name}_{index:03d}"},
 };
 
 /** UI control configuration for each operation type */
@@ -260,62 +236,6 @@ export const operationUIControls: Record<OperationKind, UIControl[]> = {
         "ogg",
         "m4a"
       ]
-    },
-    {
-      "key": "target_db",
-      "type": "slider",
-      "label": "Target Level (dB)",
-      "description": "Target level in dB for normalization",
-      "default": -3,
-      "group": "mixing",
-      "showIf": {
-        "normalize": true
-      },
-      "min": -60,
-      "max": 0,
-      "step": 0.5
-    }
-  ],
-  normalize: [
-    {
-      "key": "target_db",
-      "type": "slider",
-      "label": "Target Level (dB)",
-      "description": "Target peak level in dB",
-      "default": -3,
-      "group": "levels",
-      "min": -60,
-      "max": 0,
-      "step": 0.5
-    },
-    {
-      "key": "mode",
-      "type": "select",
-      "label": "Mode",
-      "description": "Normalization mode",
-      "default": "peak",
-      "group": "levels",
-      "options": [
-        "peak",
-        "rms",
-        "lufs"
-      ]
-    },
-    {
-      "key": "preserve_stereo_balance",
-      "type": "checkbox",
-      "label": "Preserve Stereo Balance",
-      "description": "Maintain relative levels between channels",
-      "default": true,
-      "group": "options"
-    },
-    {
-      "key": "use_true_peak",
-      "type": "checkbox",
-      "label": "True Peak Detection",
-      "description": "Use true peak detection (more accurate but slower)",
-      "default": false,
-      "group": "options"
     }
   ],
   pipeline: [
@@ -403,118 +323,6 @@ export const operationUIControls: Record<OperationKind, UIControl[]> = {
       "description": "Reverse the audio",
       "default": false,
       "group": "effects"
-    }
-  ],
-  split: [
-    {
-      "key": "mode",
-      "type": "select",
-      "label": "Split Mode",
-      "description": "Split mode",
-      "default": "equal_parts",
-      "group": "mode",
-      "options": [
-        "equal_parts",
-        "by_duration",
-        "at_markers",
-        "by_silence"
-      ]
-    },
-    {
-      "key": "num_parts",
-      "type": "number",
-      "label": "Number of Parts",
-      "description": "Number of equal parts to split into",
-      "default": 2,
-      "group": "mode",
-      "showIf": {
-        "mode": "equal_parts"
-      },
-      "min": 2,
-      "max": 100
-    },
-    {
-      "key": "segment_duration_ms",
-      "type": "number",
-      "label": "Segment Duration (ms)",
-      "description": "Duration of each segment in milliseconds",
-      "default": 30000,
-      "group": "mode",
-      "showIf": {
-        "mode": "by_duration"
-      },
-      "min": 100
-    },
-    {
-      "key": "markers",
-      "type": "marker-list",
-      "label": "Split Markers (ms)",
-      "description": "Split points in milliseconds",
-      "default": [],
-      "group": "mode",
-      "showIf": {
-        "mode": "at_markers"
-      }
-    },
-    {
-      "key": "silence_threshold_db",
-      "type": "slider",
-      "label": "Silence Threshold (dB)",
-      "description": "Threshold for silence detection in dB",
-      "default": -40,
-      "group": "mode",
-      "showIf": {
-        "mode": "by_silence"
-      },
-      "min": -96,
-      "max": 0,
-      "step": 1
-    },
-    {
-      "key": "min_silence_duration_ms",
-      "type": "number",
-      "label": "Min Silence Duration (ms)",
-      "description": "Minimum silence duration to trigger split",
-      "default": 500,
-      "group": "mode",
-      "showIf": {
-        "mode": "by_silence"
-      },
-      "min": 10
-    },
-    {
-      "key": "keep_silence",
-      "type": "checkbox",
-      "label": "Keep Silence",
-      "description": "Include silence portions in output",
-      "default": false,
-      "group": "mode",
-      "showIf": {
-        "mode": "by_silence"
-      }
-    },
-    {
-      "key": "output_format",
-      "type": "select",
-      "label": "Output Format",
-      "description": "Output format for split segments",
-      "default": "wav",
-      "group": "output",
-      "options": [
-        "wav",
-        "mp3",
-        "flac",
-        "ogg"
-      ]
-    },
-    {
-      "key": "naming_pattern",
-      "type": "text",
-      "label": "Naming Pattern",
-      "description": "Pattern for naming output files",
-      "default": "{name}_{index:03d}",
-      "group": "output",
-      "placeholder": "{name}_{index:03d}"
     }
   ],
 };

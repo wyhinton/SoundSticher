@@ -247,10 +247,19 @@ export function invertCommand(cmd: Command): Command {
       if (!cmd.originalOperation) {
         throw new Error('Cannot invert update-operation without originalOperation data');
       }
+      // Create a patch that contains only the fields that were changed
+      const inversePatch: Partial<Omit<OperationDef, 'id'>> = {};
+      for (const key in cmd.patch) {
+        if (key !== 'id' && key in cmd.originalOperation) {
+          inversePatch[key as keyof typeof inversePatch] = cmd.originalOperation[
+            key as keyof OperationDef
+          ] as any;
+        }
+      }
       return {
         type: 'update-operation',
         operationId: cmd.operationId,
-        patch: cmd.originalOperation,
+        patch: inversePatch,
       };
 
     case 'reorder-operations':

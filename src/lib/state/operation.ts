@@ -6,6 +6,7 @@ import {
   dispatch,
   type DeleteOperationCommand,
   type DeleteMultipleOperationsCommand,
+  type UpdateOperationCommand,
 } from './undo';
 
 // ============================================================================
@@ -65,6 +66,8 @@ export interface BaseOperation {
 export interface SampleOp extends BaseOperation {
   kind: 'sample';
   sources: OperationSource[];
+  /** Schema-driven operation parameters */
+  params?: Record<string, unknown>;
 }
 
 export interface MergeOp extends BaseOperation {
@@ -72,6 +75,8 @@ export interface MergeOp extends BaseOperation {
   sources: OperationSource[];
   outputPath: string;
   format: string;
+  /** Schema-driven operation parameters */
+  params?: Record<string, unknown>;
 }
 
 export interface PipelineOp extends BaseOperation {
@@ -80,6 +85,8 @@ export interface PipelineOp extends BaseOperation {
   operations: OperationId[];
   /** Sources for the first operation in the pipeline */
   sources: OperationSource[];
+  /** Schema-driven operation parameters */
+  params?: Record<string, unknown>;
 }
 
 export type OperationSource =
@@ -405,20 +412,13 @@ export function createOperation(
 }
 
 /**
- * @deprecated Use createOperation() instead. This function exists for backward compatibility.
- * Add a new operation definition by name (legacy API - generates ID internally)
- */
-export function addOperation(name: string, defWithoutId: NewOperationDef): OperationId {
-  return createOperation(name, defWithoutId);
-}
-
-/**
- * Update an existing operation's parameters by ID
+ * Update an existing operation's parameters by ID using the undo/redo system
  */
 export function updateOperationById(
   id: OperationId,
   patch: Partial<Omit<OperationDef, 'id'>>,
-  expectedKind?: OperationDef['kind']
+  expectedKind?: OperationDef['kind'],
+  label?: string
 ): void {
   const isLogging = get(loggingState).operationsLog;
 
@@ -426,35 +426,41 @@ export function updateOperationById(
     console.log(`📝 Operations: Updating operation id="${id}"`, { patch, expectedKind });
   }
 
-  appState.update(s => {
-    const def = s.operations?.defs?.[id];
-    if (!def) {
-      if (isLogging) {
-        console.warn(`⚠️ Operations: Cannot update id="${id}" - not found`);
-      }
-      return s;
-    }
-
-    if (expectedKind && def.kind !== expectedKind) {
-      if (isLogging) {
-        console.warn(
-          `⚠️ Operations: Cannot update id="${id}" - expected kind "${expectedKind}" but got "${def.kind}"`
-        );
-      }
-      return s;
-    }
-
-    // Preserve the original id, never allow it to be changed
-    s.operations!.defs[id] = { ...def, ...patch, id } as OperationDef;
-    s.operations!._version = (s.operations!._version ?? 0) + 1;
-    s._rev = (s._rev ?? 0) + 1;
-
+  // Validate operation exists and kind matches before dispatching
+  const def = get(appState).operations?.defs?.[id];
+  if (!def) {
     if (isLogging) {
-      console.log(`✅ Operations: Updated id="${id}" successfully`);
+      console.warn(`⚠️ Operations: Cannot update id="${id}" - not found`);
     }
+    return;
+  }
 
-    return s;
-  });
+  if (expectedKind && def.kind !== expectedKind) {
+    if (isLogging) {
+      console.warn(
+        `⚠️ Operations: Cannot update id="${id}" - expected kind "${expectedKind}" but got "${def.kind}"`
+      );
+    }
+    return;
+  }
+
+  // Dispatch undoable command
+  const command: UpdateOperationCommand = {
+    type: 'update-operation',
+    operationId: id,
+    patch,
+  };
+
+  // Generate label if not provided
+  const commandLabel =
+    label ||
+    (patch.name
+      ? `Rename Operation to "${patch.name}"`
+      : Object.keys(patch).length === 1
+        ? `Update ${Object.keys(patch)[0]}`
+        : 'Update Operation');
+
+  dispatch(command, commandLabel);
 }
 
 /**
@@ -462,32 +468,6 @@ export function updateOperationById(
  */
 export function renameOperation(id: OperationId, newName: string): void {
   updateOperationById(id, { name: newName });
-}
-
-/**
- * @deprecated Use updateOperationById() instead
- */
-export function updateOperation(
-  idOrName: string,
-  patch: Partial<OperationDef>,
-  expectedKind?: OperationDef['kind']
-): void {
-  // Try to find by ID first, then fall back to finding by name for backward compatibility
-  const state = get(appState);
-  const defs = state.operations?.defs;
-
-  if (defs?.[idOrName]) {
-    // Found by ID
-    updateOperationById(idOrName, patch, expectedKind);
-  } else {
-    // Try to find by name (legacy support)
-    const entry = Object.entries(defs || {}).find(([, def]) => def.name === idOrName);
-    if (entry) {
-      updateOperationById(entry[0], patch, expectedKind);
-    } else {
-      console.warn(`⚠️ Operations: Cannot find operation "${idOrName}" by ID or name`);
-    }
-  }
 }
 
 /**
@@ -499,87 +479,6 @@ export function deleteOperationsById(ids: OperationId[]): void {
     operationIds: ids,
   };
   dispatch(command);
-}
-
-/**
- * LEGACY: Delete multiple operations by their IDs without command pattern (no undo/redo)
- * @deprecated Use deleteOperationsById() instead for proper undo/redo support
- */
-export function deleteOperationsByIdLegacy(ids: OperationId[]): void {
-  const isLogging = get(loggingState).operationsLog;
-  const idsToDelete = new Set(ids);
-
-  if (isLogging) {
-    console.log(`🗑️ Operations (LEGACY): Deleting operations by ID`, ids);
-  }
-
-  appState.update(s => {
-    if (!s.operations) {
-      if (isLogging) {
-        console.warn(`⚠️ Operations: Cannot delete operations - operations state not initialized`);
-      }
-      return s;
-    }
-
-    let deletedAny = false;
-
-    // 1. Remove operation definitions
-    for (const id of ids) {
-      if (!s.operations.defs[id]) {
-        if (isLogging) {
-          console.warn(`⚠️ Operations: Cannot delete id="${id}" - not found`);
-        }
-        continue;
-      }
-
-      delete s.operations.defs[id];
-      deletedAny = true;
-
-      if (isLogging) {
-        console.log(`✅ Operations: Deleted id="${id}"`);
-      }
-    }
-
-    // 2. Remove from order array
-    if (deletedAny && s.operations.order) {
-      s.operations.order = s.operations.order.filter(id => !idsToDelete.has(id));
-    }
-
-    // 3. Remove references from remaining operations' sources
-    if (deletedAny) {
-      for (const op of Object.values(s.operations.defs)) {
-        if (op.sources) {
-          op.sources = op.sources.filter(source => {
-            if (source.type === 'operation' || source.type === 'previousOperation') {
-              return !idsToDelete.has(source.operationId);
-            }
-            return true;
-          });
-        }
-        // Also clean up pipeline operation references
-        if (op.kind === 'pipeline') {
-          op.operations = op.operations.filter(opId => !idsToDelete.has(opId));
-        }
-      }
-    }
-
-    // 4. Remove from any pipelines
-    if (deletedAny && s.operations.pipelines) {
-      for (const pipelineName of Object.keys(s.operations.pipelines)) {
-        const pipeline = s.operations.pipelines[pipelineName];
-        if (pipeline) {
-          s.operations.pipelines[pipelineName] = pipeline.filter(id => !idsToDelete.has(id));
-        }
-      }
-    }
-
-    if (deletedAny) {
-      s.operations._version = (s.operations._version ?? 0) + 1;
-      s._rev = (s._rev ?? 0) + 1;
-    }
-
-    return s;
-  });
 }
 
 /**

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tauri::State;
-
 use crate::artifacts::{Artifact, AudioArtifact};
 use crate::cook::{CookScheduler, CookTask, CookTaskPriority, TaskStatus};
 use crate::error::Error;
@@ -10,8 +9,10 @@ use crate::graph::OpId;
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
 use crate::playback::op_playback::AudioSpec;
+use crate::render_ops::generated_operation_defs::{FrontendOperationsState, FrontendOperationDef};
 use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 
 // ============================================================================
 // FRONTEND OPERATION TYPES (matching src/lib/state/operation.ts)
@@ -21,13 +22,15 @@ use serde::{Deserialize, Serialize};
 pub type OperationId = String;
 
 /// Render policy for operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum RenderPolicy {
     Auto,
     Manual,
     Frozen,
 }
+
 
 /// Source types for operations (matches TypeScript OperationSource)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,90 +72,6 @@ pub enum OperationSource {
     },
 }
 
-/// Base operation fields common to all operation types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BaseOperationFields {
-    pub id: OperationId,
-    pub name: String,
-    #[serde(rename = "renderPolicy")]
-    pub render_policy: Option<RenderPolicy>,
-}
-
-/// Operation definition enum matching frontend types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-pub enum FrontendOperationDef {
-    #[serde(rename = "merge")]
-    Merge {
-        id: OperationId,
-        name: String,
-        #[serde(rename = "renderPolicy")]
-        render_policy: Option<RenderPolicy>,
-        sources: Vec<OperationSource>,
-        #[serde(rename = "outputPath")]
-        output_path: String,
-        format: String,
-    },
-    #[serde(rename = "sample")]
-    Sample {
-        id: OperationId,
-        name: String,
-        #[serde(rename = "renderPolicy")]
-        render_policy: Option<RenderPolicy>,
-        sources: Vec<OperationSource>,
-    },
-    #[serde(rename = "pipeline")]
-    Pipeline {
-        id: OperationId,
-        name: String,
-        #[serde(rename = "renderPolicy")]
-        render_policy: Option<RenderPolicy>,
-        operations: Vec<OperationId>,
-        sources: Vec<OperationSource>,
-    },
-}
-
-impl FrontendOperationDef {
-    pub fn id(&self) -> &OperationId {
-        match self {
-            FrontendOperationDef::Merge { id, .. } => id,
-            FrontendOperationDef::Sample { id, .. } => id,
-            FrontendOperationDef::Pipeline { id, .. } => id,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        match self {
-            FrontendOperationDef::Merge { name, .. } => name,
-            FrontendOperationDef::Sample { name, .. } => name,
-            FrontendOperationDef::Pipeline { name, .. } => name,
-        }
-    }
-
-    pub fn sources(&self) -> &[OperationSource] {
-        match self {
-            FrontendOperationDef::Merge { sources, .. } => sources,
-            FrontendOperationDef::Sample { sources, .. } => sources,
-            FrontendOperationDef::Pipeline { sources, .. } => sources,
-        }
-    }
-
-    pub fn kind(&self) -> &str {
-        match self {
-            FrontendOperationDef::Merge { .. } => "merge",
-            FrontendOperationDef::Sample { .. } => "sample",
-            FrontendOperationDef::Pipeline { .. } => "pipeline",
-        }
-    }
-}
-
-/// Operations state from frontend (matches TypeScript OperationsState)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FrontendOperationsState {
-    pub defs: HashMap<OperationId, FrontendOperationDef>,
-    #[serde(default)]
-    pub order: Vec<OperationId>,
-}
 
 // ============================================================================
 // TEST SCHEDULER
@@ -1164,7 +1083,7 @@ pub async fn test_render_single_operation(
                 .filter(|s| !s.trim().is_empty()) // Ensure non-empty path
                 .unwrap_or("./output");
 
-            let bit_rate = params
+            let bit_rate  = params
                 .parameters
                 .get("bit_rate")
                 .map(|v| v.as_u64().map(|v| v as u32).unwrap_or(320).clamp(64, 2048));
@@ -1508,7 +1427,7 @@ fn resolve_operation_source(
                 let mut all_artifacts = Vec::new();
                 for dep_source in dep_sources {
                     let artifacts = resolve_operation_source(
-                        dep_source,
+                        &dep_source,
                         ctx,
                         base_artifacts_dir,
                         op_map,
@@ -1760,16 +1679,14 @@ pub async fn render_all_auto_operations(
         );
         for (idx, op_id) in render_order.iter().enumerate() {
             if let Some(op) = params.operations_state.defs.get(op_id) {
-                let policy = op.render_policy_str();
                 log_info!(
                     logger,
                     LogSystem::Combine,
                     &format!(
-                        "  {}. {} '{}' (policy: {})",
+                        "  {}. {} '{}' (policy: )",
                         idx + 1,
                         op.kind(),
                         op.name(),
-                        policy
                     )
                 );
             }
@@ -1797,14 +1714,15 @@ pub async fn render_all_auto_operations(
             }
         };
 
-        let policy = op.render_policy_str();
-        
+        let policy = op.render_policy();
+
+
         // Check if we should render this operation based on policy
         let should_render = match policy {
-            "auto" => true,
-            "manual" => force_render,
-            "frozen" => false,
-            _ => true, // Default to auto behavior
+            Some(RenderPolicy::Auto) => true,
+            Some(RenderPolicy::Manual) => force_render,
+            Some(RenderPolicy::Frozen) => false,
+            _ => false, // Default to auto behavior
         };
 
         if !should_render {
@@ -1815,7 +1733,12 @@ pub async fn render_all_auto_operations(
                     &format!(
                         "⏭️ Skipping '{}' (policy: {})",
                         op.name(),
-                        policy
+                        match policy {
+                            Some(RenderPolicy::Auto) => "auto",
+                            Some(RenderPolicy::Manual) => "manual",
+                            Some(RenderPolicy::Frozen) => "frozen",
+                            None => "auto (default)",
+                        }
                     )
                 );
             }
@@ -1824,7 +1747,13 @@ pub async fn render_all_auto_operations(
                 operation_id: op_id.clone(),
                 operation_name: op.name().to_string(),
                 success: true, // Skipped is not a failure
-                error: Some(format!("Skipped due to render policy: {}", policy)),
+                error: Some(format!("Skipped due to render policy: {}",       
+                match policy {
+                            Some(RenderPolicy::Auto) => "auto",
+                            Some(RenderPolicy::Manual) => "manual",
+                            Some(RenderPolicy::Frozen) => "frozen",
+                            None => "auto (default)",
+                        })),
                 duration_ms: 0,
             });
             continue;
@@ -2018,7 +1947,6 @@ async fn render_single_operation_internal(
             name,
             sources,
             output_path,
-            format,
             ..
         } => {
             if let Ok(logger) = logging_service.lock() {
@@ -2072,7 +2000,7 @@ async fn render_single_operation_internal(
 
             let op_id = op_map.insert(());
             let work_dir = base_artifacts_dir.join(format!("auto_merge_{:?}", op_id));
-            
+    
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
                 return Err(Error::Io(std::io::Error::other(format!(
                     "Failed to create work directory: {}",
@@ -2085,7 +2013,6 @@ async fn render_single_operation_internal(
                 work_dir,
                 inputs,
                 parameters: serde_json::json!({
-                    "output_format": format,
                     "output_path": output_path,
                 }),
                 progress_callback: None,
@@ -2099,7 +2026,6 @@ async fn render_single_operation_internal(
             })?;
             Ok(format!("Merge '{}' completed with {} inputs", name, input_artifacts.len()))
         }
-
         FrontendOperationDef::Sample {
             id,
             name,
@@ -2142,7 +2068,6 @@ async fn render_single_operation_internal(
 
             Ok(format!("Sample '{}' processed {} artifacts", name, processed_count))
         }
-
         FrontendOperationDef::Pipeline {
             id,
             name,
@@ -2171,23 +2096,24 @@ async fn render_single_operation_internal(
                 operations
             ))
         }
+            FrontendOperationDef::Export { id, name, render_policy, sources, output_path, params } => todo!(),
     }
 }
 
 // Helper trait to get render policy as string
-impl FrontendOperationDef {
-    fn render_policy_str(&self) -> &str {
-        match self {
-            FrontendOperationDef::Merge { render_policy, .. }
-            | FrontendOperationDef::Sample { render_policy, .. }
-            | FrontendOperationDef::Pipeline { render_policy, .. } => {
-                match render_policy {
-                    Some(RenderPolicy::Auto) => "auto",
-                    Some(RenderPolicy::Manual) => "manual",
-                    Some(RenderPolicy::Frozen) => "frozen",
-                    None => "auto", // Default
-                }
-            }
-        }
-    }
-}
+// impl FrontendOperationDef {
+//     fn render_policy_str(&self) -> &str {
+//         match self {
+//             FrontendOperationDef::Merge { render_policy, .. }
+//             | FrontendOperationDef::Sample { render_policy, .. }
+//             | FrontendOperationDef::Pipeline { render_policy, .. } => {
+//                 match render_policy {
+//                     Some(RenderPolicy::Auto) => "auto",
+//                     Some(RenderPolicy::Manual) => "manual",
+//                     Some(RenderPolicy::Frozen) => "frozen",
+//                     None => "auto", // Default
+//                 }
+//             }
+//         }
+//     }
+// }

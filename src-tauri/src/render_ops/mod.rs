@@ -1,3 +1,4 @@
+pub mod generated_operation_defs;
 pub mod merge_render;
 pub mod render_graph_tests;
 pub mod sample_render;

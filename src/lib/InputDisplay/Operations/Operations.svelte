@@ -1,6 +1,10 @@
 <script lang="ts">
   import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
-  import { deleteOperationsById, OperationInfoDictionary } from '$lib/state/operation';
+  import {
+    deleteOperationsById,
+    OperationInfoDictionary,
+    updateOperationById,
+  } from '$lib/state/operation';
   import type { OperationDef, OperationId } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
   import OperationParamsForm from '$lib/components/schema/OperationParamsForm.svelte';
@@ -167,8 +171,29 @@
     }
   }
 
-  // Handle params change from the schema-driven form
+  // Handle individual parameter change from the schema-driven form
+  // This dispatches an undoable command for each parameter change
+  function handleParamChange(event: CustomEvent<{ key: string; value: unknown }>) {
+    if (!selectedOperationId || !selectedOperation) return;
+
+    const { key, value } = event.detail;
+
+    // Update the operation with the new parameter value via undo/redo system
+    const currentParams = selectedOperation.params || {};
+    const newParams = { ...currentParams, [key]: value };
+
+    updateOperationById(
+      selectedOperationId,
+      { params: newParams },
+      selectedOperation.kind,
+      `Update ${key}`
+    );
+  }
+
+  // Handle full params update from the schema-driven form
+  // This is called when the form emits the full params object
   function handleParamsChange(event: CustomEvent<Record<string, unknown>>) {
+    // Update local state for immediate UI feedback
     operationParams = event.detail;
   }
 
@@ -258,6 +283,7 @@
               <OperationParamsForm
                 {operationKind}
                 params={operationParams}
+                on:change={handleParamChange}
                 on:paramsChange={handleParamsChange}
               />
             {:else}

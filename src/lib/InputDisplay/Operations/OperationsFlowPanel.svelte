@@ -18,9 +18,6 @@
   // @ts-ignore - panelHeight is used for tracking/debugging resize events
 
   // Log panel height whenever it changes
-  $: if (panelHeight > 0) {
-    console.log('📏 OperationsFlowPanel height changed:', panelHeight);
-  }
 
   $: selectedOperationId = $appState.uiSettings?.selectedOperationId || null;
 
