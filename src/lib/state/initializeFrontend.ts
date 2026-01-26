@@ -5,6 +5,7 @@ import { initializeOperationsSubscription } from './operation';
 import { initializeStatusPublishers } from './status-publishers';
 import { undo, redo, canUndo, canRedo } from './undo';
 import { opPlaybackService } from './opPlaybackService';
+import { initializeAutoRenderSubscription } from './autoRender';
 
 /**
  * Initialize all frontend systems and services
@@ -20,6 +21,8 @@ export function initializeFrontend(): () => void {
   initializeGroupsSubscription();
   initializeOperationsSubscription();
 
+  // Initialize render of ops with auto render policy after rev is bumped
+  initializeAutoRenderSubscription();
   // Initialize automatic status publishers (buffering, etc.)
   initializeStatusPublishers();
 

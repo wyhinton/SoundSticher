@@ -175,7 +175,7 @@
 
 <div class="debug-panel">
   <!-- Compact button row -->
-  <div class="button-row">
+  <div class="button-row flex-wrap">
     <button
       class="test-btn"
       onclick={handleTestOperation}
