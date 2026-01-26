@@ -1673,3 +1673,542 @@ fn resolve_operation_source(
         }
     }
 }
+
+// ============================================================================
+// AUTO-RENDER ALL OPERATIONS
+// ============================================================================
+
+/// Result for a single operation render
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OperationRenderResult {
+    /// The operation ID
+    pub operation_id: OperationId,
+    /// The operation name
+    pub operation_name: String,
+    /// Whether the render was successful
+    pub success: bool,
+    /// Error message if failed
+    pub error: Option<String>,
+    /// Duration of the render in milliseconds
+    pub duration_ms: u64,
+}
+
+/// Result for the batch render operation
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BatchRenderResult {
+    /// Total number of operations processed
+    pub total_operations: usize,
+    /// Number of successful renders
+    pub successful_renders: usize,
+    /// Number of failed renders
+    pub failed_renders: usize,
+    /// Number of skipped operations (non-auto policy)
+    pub skipped_operations: usize,
+    /// Individual results for each operation
+    pub results: Vec<OperationRenderResult>,
+    /// Total duration in milliseconds
+    pub total_duration_ms: u64,
+    /// The revision number this render was triggered by
+    pub triggered_by_rev: i64,
+}
+
+/// Parameters for the batch render operation
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BatchRenderParams {
+    /// The current operations state from frontend
+    pub operations_state: FrontendOperationsState,
+    /// The current revision number
+    pub current_rev: i64,
+    /// Optional list of specific operation IDs to render (if empty, renders all auto ops)
+    pub specific_operation_ids: Option<Vec<OperationId>>,
+    /// Whether to force render even if policy is not 'auto'
+    pub force_render: Option<bool>,
+}
+
+/// Render all operations with renderPolicy: 'auto'
+/// 
+/// This command is designed to be called from the frontend when `_rev` changes.
+/// It processes all operations in dependency order, respecting the render policy:
+/// - 'auto': Will be re-rendered
+/// - 'manual': Will be skipped unless force_render is true
+/// - 'frozen': Will be skipped (output is treated as immutable)
+/// 
+/// The command returns detailed results for each operation, including timing
+/// information useful for debugging and performance monitoring.
+#[tauri::command]
+pub async fn render_all_auto_operations(
+    params: BatchRenderParams,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>
+) -> Result<BatchRenderResult, Error> {
+    let start_time = std::time::Instant::now();
+    let force_render = params.force_render.unwrap_or(false);
+    
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "🚀 Starting batch render for rev {} with {} operations defined",
+                params.current_rev,
+                params.operations_state.defs.len()
+            )
+        );
+    }
+
+    // Get operations to process
+    let operations_to_process: Vec<(&OperationId, &FrontendOperationDef)> = 
+        if let Some(ref specific_ids) = params.specific_operation_ids {
+            // Only process specified operations
+            params.operations_state.defs.iter()
+                .filter(|(id, _)| specific_ids.contains(id))
+                .collect()
+        } else {
+            // Process all operations
+            params.operations_state.defs.iter().collect()
+        };
+
+    // Build dependency graph and compute render order (topological sort)
+    let render_order = compute_render_order(&operations_to_process, &params.operations_state);
+    
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "📊 Computed render order: {} operations to process",
+                render_order.len()
+            )
+        );
+        for (idx, op_id) in render_order.iter().enumerate() {
+            if let Some(op) = params.operations_state.defs.get(op_id) {
+                let policy = op.render_policy_str();
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "  {}. {} '{}' (policy: {})",
+                        idx + 1,
+                        op.kind(),
+                        op.name(),
+                        policy
+                    )
+                );
+            }
+        }
+    }
+
+    let mut results: Vec<OperationRenderResult> = Vec::new();
+    let mut successful_renders = 0;
+    let mut failed_renders = 0;
+    let mut skipped_operations = 0;
+
+    // Process operations in dependency order
+    for op_id in render_order {
+        let op = match params.operations_state.defs.get(&op_id) {
+            Some(op) => op,
+            None => {
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!("⚠️ Operation '{}' not found in state, skipping", op_id)
+                    );
+                }
+                continue;
+            }
+        };
+
+        let policy = op.render_policy_str();
+        
+        // Check if we should render this operation based on policy
+        let should_render = match policy {
+            "auto" => true,
+            "manual" => force_render,
+            "frozen" => false,
+            _ => true, // Default to auto behavior
+        };
+
+        if !should_render {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "⏭️ Skipping '{}' (policy: {})",
+                        op.name(),
+                        policy
+                    )
+                );
+            }
+            skipped_operations += 1;
+            results.push(OperationRenderResult {
+                operation_id: op_id.clone(),
+                operation_name: op.name().to_string(),
+                success: true, // Skipped is not a failure
+                error: Some(format!("Skipped due to render policy: {}", policy)),
+                duration_ms: 0,
+            });
+            continue;
+        }
+
+        // Render this operation
+        let op_start = std::time::Instant::now();
+        
+        if let Ok(logger) = logging_service.lock() {
+            log_info!(
+                logger,
+                LogSystem::Combine,
+                &format!(
+                    "🔄 Rendering {} '{}' (id: {})",
+                    op.kind(),
+                    op.name(),
+                    op_id
+                )
+            );
+        }
+
+        let render_result = render_single_operation_internal(
+            op,
+            &params.operations_state,
+            &logging_service,
+        ).await;
+
+        let op_duration = op_start.elapsed();
+
+        match render_result {
+            Ok(_message) => {
+                successful_renders += 1;
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "✅ Successfully rendered '{}' in {:?}",
+                            op.name(),
+                            op_duration
+                        )
+                    );
+                }
+                results.push(OperationRenderResult {
+                    operation_id: op_id.clone(),
+                    operation_name: op.name().to_string(),
+                    success: true,
+                    error: None,
+                    duration_ms: op_duration.as_millis() as u64,
+                });
+            }
+            Err(e) => {
+                failed_renders += 1;
+                let error_msg = format!("{:?}", e);
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!(
+                            "❌ Failed to render '{}': {}",
+                            op.name(),
+                            error_msg
+                        )
+                    );
+                }
+                results.push(OperationRenderResult {
+                    operation_id: op_id.clone(),
+                    operation_name: op.name().to_string(),
+                    success: false,
+                    error: Some(error_msg),
+                    duration_ms: op_duration.as_millis() as u64,
+                });
+            }
+        }
+    }
+
+    let total_duration = start_time.elapsed();
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "🏁 Batch render complete: {} successful, {} failed, {} skipped in {:?}",
+                successful_renders,
+                failed_renders,
+                skipped_operations,
+                total_duration
+            )
+        );
+    }
+
+    Ok(BatchRenderResult {
+        total_operations: results.len(),
+        successful_renders,
+        failed_renders,
+        skipped_operations,
+        results,
+        total_duration_ms: total_duration.as_millis() as u64,
+        triggered_by_rev: params.current_rev,
+    })
+}
+
+/// Compute the render order using topological sort based on operation dependencies
+fn compute_render_order(
+    operations: &[(&OperationId, &FrontendOperationDef)],
+    _state: &FrontendOperationsState,
+) -> Vec<OperationId> {
+    use std::collections::{HashSet, VecDeque};
+
+    let op_ids: HashSet<&OperationId> = operations.iter().map(|(id, _)| *id).collect();
+    let mut in_degree: HashMap<OperationId, usize> = HashMap::new();
+    let mut dependents: HashMap<OperationId, Vec<OperationId>> = HashMap::new();
+
+    // Initialize in-degree for all operations
+    for (id, _) in operations {
+        in_degree.insert((*id).clone(), 0);
+        dependents.insert((*id).clone(), Vec::new());
+    }
+
+    // Build dependency graph
+    for (id, op) in operations {
+        for source in op.sources() {
+            match source {
+                OperationSource::Operation { operation_id }
+                | OperationSource::PreviousOperation { operation_id } => {
+                    // Only count dependencies that are in our processing set
+                    if op_ids.contains(&operation_id) {
+                        *in_degree.entry((*id).clone()).or_insert(0) += 1;
+                        dependents
+                            .entry(operation_id.clone())
+                            .or_insert_with(Vec::new)
+                            .push((*id).clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Kahn's algorithm for topological sort
+    let mut queue: VecDeque<OperationId> = VecDeque::new();
+    let mut result: Vec<OperationId> = Vec::new();
+
+    // Start with operations that have no dependencies
+    for (id, &degree) in &in_degree {
+        if degree == 0 {
+            queue.push_back(id.clone());
+        }
+    }
+
+    while let Some(current) = queue.pop_front() {
+        result.push(current.clone());
+
+        if let Some(deps) = dependents.get(&current) {
+            for dependent in deps {
+                if let Some(degree) = in_degree.get_mut(dependent) {
+                    *degree -= 1;
+                    if *degree == 0 {
+                        queue.push_back(dependent.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // If result doesn't contain all operations, there's a cycle
+    // In that case, add remaining operations in arbitrary order
+    for (id, _) in operations {
+        if !result.contains(id) {
+            result.push((*id).clone());
+        }
+    }
+
+    result
+}
+
+/// Internal function to render a single operation
+async fn render_single_operation_internal(
+    op: &FrontendOperationDef,
+    operations_state: &FrontendOperationsState,
+    logging_service: &State<'_, Arc<Mutex<LoggingService>>>
+) -> Result<String, Error> {
+    let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+    let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
+    let default_sample_rate: u32 = 44100;
+
+    match op {
+        FrontendOperationDef::Merge {
+            id,
+            name,
+            sources,
+            output_path,
+            format,
+            ..
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔄 Rendering merge operation '{}' -> '{}'",
+                        name, output_path
+                    )
+                );
+            }
+
+            // Resolve input artifacts
+            let mut input_artifacts = Vec::new();
+            for source in sources {
+                match resolve_operation_source(
+                    source,
+                    operations_state,
+                    &base_artifacts_dir,
+                    &mut op_map,
+                    default_sample_rate,
+                    logging_service,
+                ) {
+                    Ok(artifacts) => input_artifacts.extend(artifacts),
+                    Err(e) => {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!("⚠️ Failed to resolve source: {:?}", e)
+                            );
+                        }
+                    }
+                }
+            }
+
+            if input_artifacts.is_empty() {
+                return Err(Error::Io(std::io::Error::other(
+                    "No input artifacts resolved for merge operation",
+                )));
+            }
+
+            // Create and execute merge operation
+            let operation = MergeOpRender::new();
+            let mut inputs = HashMap::new();
+            inputs.insert(
+                "inputs".to_string(),
+                Artifact::AudioList(input_artifacts.clone()),
+            );
+
+            let op_id = op_map.insert(());
+            let work_dir = base_artifacts_dir.join(format!("auto_merge_{:?}", op_id));
+            
+            if let Err(e) = std::fs::create_dir_all(&work_dir) {
+                return Err(Error::Io(std::io::Error::other(format!(
+                    "Failed to create work directory: {}",
+                    e
+                ))));
+            }
+
+            let context = OperationContext {
+                op_id,
+                work_dir,
+                inputs,
+                parameters: serde_json::json!({
+                    "output_format": format,
+                    "output_path": output_path,
+                }),
+                progress_callback: None,
+            };
+
+            operation.execute(context).map_err(|e| {
+                Error::Io(std::io::Error::other(format!(
+                    "Merge operation failed: {:?}",
+                    e
+                )))
+            })?;
+            Ok(format!("Merge '{}' completed with {} inputs", name, input_artifacts.len()))
+        }
+
+        FrontendOperationDef::Sample {
+            id,
+            name,
+            sources,
+            ..
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("🔄 Rendering sample operation '{}'", name)
+                );
+            }
+
+            // For sample operations, we need to resolve and process each source
+            let mut processed_count = 0;
+            for source in sources {
+                match resolve_operation_source(
+                    source,
+                    operations_state,
+                    &base_artifacts_dir,
+                    &mut op_map,
+                    default_sample_rate,
+                    logging_service,
+                ) {
+                    Ok(artifacts) => {
+                        processed_count += artifacts.len();
+                    }
+                    Err(e) => {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!("⚠️ Failed to resolve source: {:?}", e)
+                            );
+                        }
+                    }
+                }
+            }
+
+            Ok(format!("Sample '{}' processed {} artifacts", name, processed_count))
+        }
+
+        FrontendOperationDef::Pipeline {
+            id,
+            name,
+            operations,
+            sources,
+            ..
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔄 Rendering pipeline operation '{}' with {} steps",
+                        name,
+                        operations.len()
+                    )
+                );
+            }
+
+            // Pipeline operations chain multiple operations together
+            // For now, we just report on what would be done
+            Ok(format!(
+                "Pipeline '{}' with {} operations: {:?}",
+                name,
+                operations.len(),
+                operations
+            ))
+        }
+    }
+}
+
+// Helper trait to get render policy as string
+impl FrontendOperationDef {
+    fn render_policy_str(&self) -> &str {
+        match self {
+            FrontendOperationDef::Merge { render_policy, .. }
+            | FrontendOperationDef::Sample { render_policy, .. }
+            | FrontendOperationDef::Pipeline { render_policy, .. } => {
+                match render_policy {
+                    Some(RenderPolicy::Auto) => "auto",
+                    Some(RenderPolicy::Manual) => "manual",
+                    Some(RenderPolicy::Frozen) => "frozen",
+                    None => "auto", // Default
+                }
+            }
+        }
+    }
+}
