@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
 import { appState, type AppState } from './state.svelte';
 import { loggingState } from './logging';
-import type { OperationId, OperationDef, OperationSource } from './operation';
+import type { OperationId, OperationDef, OperationSource, RenderPolicy } from './operation';
 
 // ============================================================================
 // SERIALIZABLE COMMAND TYPES
@@ -21,6 +21,7 @@ export type Command =
   | RemoveOperationSourceCommand
   | ReorderOperationSourcesCommand
   | RemoveOperationSourcesFromCurrentOpCommand
+  | SetRenderPolicyCommand
   | CommandBatch;
 
 // Individual command types
@@ -119,6 +120,14 @@ export interface RemoveOperationSourcesFromCurrentOpCommand {
   }>;
 }
 
+export interface SetRenderPolicyCommand {
+  type: 'set-render-policy';
+  operationId: OperationId;
+  policy: RenderPolicy;
+  // Captured data for undo
+  previousPolicy?: RenderPolicy;
+}
+
 export interface CommandBatch {
   type: 'batch';
   label?: string;
@@ -179,6 +188,9 @@ export function applyCommand(state: AppState, cmd: Command): Command {
 
     case 'remove-operation-sources-from-current-op':
       return applyRemoveOperationSourcesFromCurrentOp(state, cmd);
+
+    case 'set-render-policy':
+      return applySetRenderPolicy(state, cmd);
 
     case 'batch':
       return applyCommandBatch(state, cmd);
@@ -308,6 +320,13 @@ export function invertCommand(cmd: Command): Command {
           commands: addBackCommands,
         };
       }
+
+    case 'set-render-policy':
+      return {
+        type: 'set-render-policy',
+        operationId: cmd.operationId,
+        policy: cmd.previousPolicy!,
+      };
 
     case 'batch':
       // Invert batch by inverting each command in reverse order
@@ -699,6 +718,33 @@ function applyRemoveOperationSourcesFromCurrentOp(
   };
 }
 
+function applySetRenderPolicy(
+  state: AppState,
+  cmd: SetRenderPolicyCommand
+): SetRenderPolicyCommand {
+  const operation = state.operations?.defs[cmd.operationId];
+  if (!operation) {
+    throw new Error(`Operation ${cmd.operationId} not found`);
+  }
+
+  // Capture previous policy for undo
+  const previousPolicy = operation.renderPolicy || 'auto';
+
+  // Update the render policy
+  operation.renderPolicy = cmd.policy;
+
+  // Update versions
+  if (state.operations) {
+    state.operations._version = (state.operations._version ?? 0) + 1;
+  }
+  state._rev = (state._rev ?? 0) + 1;
+
+  return {
+    ...cmd,
+    previousPolicy,
+  };
+}
+
 function applyCommandBatch(state: AppState, cmd: CommandBatch): CommandBatch {
   const executedCommands: Command[] = [];
 
@@ -1011,6 +1057,8 @@ function getCommandLabel(command: Command): string {
       return 'Reorder Sources';
     case 'remove-operation-sources-from-current-op':
       return `Remove ${command.operationIdsToRemove.length} Source(s) from Current Operation`;
+    case 'set-render-policy':
+      return 'Set Render Policy';
     case 'batch':
       return command.label || `Batch (${command.commands.length} commands)`;
     default:
@@ -1155,6 +1203,29 @@ export function removeOperationSourcesFromCurrentOpCommand(operationIds: Operati
     operationIdsToRemove: operationIds,
   };
   dispatch(command, `Remove ${operationIds.length} Source(s) from Current Operation`);
+}
+
+/**
+ * Create and dispatch a command to set render policy for an operation
+ */
+export function setRenderPolicyCommand(
+  operationId: OperationId,
+  policy: RenderPolicy,
+  label?: string
+): void {
+  const command: SetRenderPolicyCommand = {
+    type: 'set-render-policy',
+    operationId,
+    policy,
+  };
+
+  const policyLabels: Record<RenderPolicy, string> = {
+    auto: 'Enable Auto-Render',
+    frozen: 'Freeze Operation',
+    manual: 'Set Manual Render',
+  };
+
+  dispatch(command, label || policyLabels[policy]);
 }
 
 // Legacy compatibility - will be phased out

@@ -111,7 +111,7 @@ export interface PerformanceState {
   stop_timeline_audio: PerformanceMetric[];
   test_async: PerformanceMetric[];
   test_operation: PerformanceMetric[];
-  test_operation_with_params: PerformanceMetric[];
+  test_render_single_operation: PerformanceMetric[];
   test_scheduler: PerformanceMetric[];
   toggle_audio_file_active: PerformanceMetric[];
   update_inputs: PerformanceMetric[];
@@ -161,7 +161,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   stop_timeline_audio: [],
   test_async: [],
   test_operation: [],
-  test_operation_with_params: [],
+  test_render_single_operation: [],
   test_scheduler: [],
   toggle_audio_file_active: [],
   update_inputs: [],

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invokeWithPerf } from '$lib/state/performance';
-  import type { OperationDef, OperationId } from '$lib/state/operation';
+  import type { OperationDef, OperationId, OperationsState } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
+  import { get } from 'svelte/store';
 
   // Props
   export let selectedOperation: OperationDef | null = null;
@@ -32,28 +33,6 @@
     }
   }
 
-  async function handleTestOperation() {
-    if (!selectedOperationId || !selectedOperation) return;
-
-    isTestingOperation = true;
-    testResult = null;
-
-    try {
-      const result = await invokeWithPerf<string>('test_operation', {
-        operationName: selectedOperation.kind,
-      });
-
-      console.log('Operation test result:', result);
-      testResult = { type: 'success', message: result };
-    } catch (error) {
-      console.log(error);
-      console.error('Error testing operation:', error);
-      testResult = { type: 'error', message: JSON.stringify(error) };
-    } finally {
-      isTestingOperation = false;
-    }
-  }
-
   async function handleTestWithParams() {
     if (!selectedOperationId || !selectedOperation) return;
 
@@ -67,11 +46,33 @@
 
     try {
       const operationType = getOperationType(selectedOperation);
+      const currentState = get(appState);
 
-      const result = await invokeWithPerf<string>('test_operation_with_params', {
+      // Get the full operations state to send to backend
+      const operationsState = currentState.operations ?? { defs: {}, order: [] };
+
+      // Convert operations defs to a serializable format
+      const serializedOperations = {
+        defs: operationsState.defs,
+        order: operationsState.order ?? [],
+      };
+
+      console.log('Testing operation with full context:', {
+        operationType,
+        targetOperationId: selectedOperationId,
+        operationsCount: Object.keys(serializedOperations.defs).length,
+        operationParams,
+      });
+
+      const result = await invokeWithPerf<string>('test_render_single_operation', {
         operationName: operationType,
         params: {
-          parameters: operationParams,
+          parameters: {
+            ...operationParams,
+            // Include the full operations context for the backend to resolve dependencies
+            __operations_context: serializedOperations,
+            __target_operation_id: selectedOperationId,
+          },
           operation_type: operationType,
         },
       });
@@ -81,11 +82,23 @@
     } catch (error) {
       console.log(error);
       console.error('Error testing operation with params:', error);
-      paramTestResult = { type: 'error', message: JSON.stringify(error) };
+      paramTestResult = { type: 'error', message: String(error) };
     } finally {
       isTestingWithParams = false;
     }
   }
+
+  /**
+   * @deprecated This function is no longer used.
+   * Instead, we pass the full operations state to the backend via __operations_context,
+   * allowing the backend to resolve all dependencies and sources directly.
+   *
+   * The backend will:
+   * 1. Parse the operations context from __operations_context
+   * 2. Find the target operation from __target_operation_id
+   * 3. Recursively resolve all sources (files, groups, other operations)
+   * 4. Execute the operation with its full dependency graph
+   */
 
   async function handleTestScheduler() {
     isTestingScheduler = true;

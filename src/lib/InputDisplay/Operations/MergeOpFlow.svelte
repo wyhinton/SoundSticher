@@ -10,6 +10,7 @@
   import OperationNode from './OperationNode.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
   import { onMount } from 'svelte';
+  import OpSettingsTools from './OpSettingsTools.svelte';
 
   export let operation: MergeOp;
   export let operationId: OperationId;
@@ -229,6 +230,9 @@
         }
       }}
     />
+
+    <!-- Operation settings tools overlay -->
+    <OpSettingsTools {operationId} {operationName} />
   </div>
 </div>
 

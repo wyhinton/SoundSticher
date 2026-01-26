@@ -133,7 +133,7 @@ pub struct OperationRegistry {
 
 **Supported Operations:**
 
-- `MergeOperation`: Combines multiple audio files with crossfading
+- `MergeOpRender`: Combines multiple audio files with crossfading
 - `NormalizeOperation`: Applies volume normalization
 - `ExportOperation`: Converts to different audio formats
 - _Extensible_: New operations can be easily added

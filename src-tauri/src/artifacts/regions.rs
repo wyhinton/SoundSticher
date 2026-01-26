@@ -335,6 +335,7 @@ impl RegionsArtifact {
                     }
                     meta
                 },
+                data: None,
             };
 
             exported.push(region_audio);
