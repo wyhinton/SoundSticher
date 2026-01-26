@@ -7,17 +7,12 @@
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import { onDestroy, onMount } from 'svelte';
   import Footer from './StatusFooter.svelte';
-  import { initializeStateSynchronization } from './state/stateSynchronization';
-  import { initWaveformService } from './state/waveformCache';
-  import { initializeGroupsSubscription } from './state/groups';
-  import { initializeOperationsSubscription } from './state/operation';
-  import { initializeStatusPublishers } from './state/status-publishers';
+  import { initializeFrontend } from './state/initializeFrontend';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { opPlaybackService } from './state/opPlaybackService';
-  import { undo, redo, canUndo, canRedo } from './state/undo';
   import { TIMELINE_RESIZE } from './config/timelineConfig';
   import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
 
@@ -31,8 +26,8 @@
   // let unlisten: UnlistenFn;
   let contextMenuWrapper: ContextMenuWrapper;
   let timelineComponent: any;
-  let cleanupWaveformService: (() => void) | null = null;
   let operationsPanelHeight: number = 0;
+  let cleanupFrontend: (() => void) | null = null;
 
   // Reactive timeline height from appState
   $: timelineHeight = TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
@@ -55,71 +50,9 @@
   //   unlisten();
   // }
 
-  const handleKeyPress = (ev: KeyboardEvent) => {
-    // Handle spacebar for play/pause
-    if (ev.code === 'Space' && !ev.shiftKey && !ev.ctrlKey && !ev.metaKey) {
-      // Only handle spacebar if not focused on an input element
-      if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      ev.preventDefault(); // Prevent default scrolling
-      // Use the operation playback service
-      opPlaybackService.togglePlayPause().catch(err => {
-        console.error('Error toggling playback:', err);
-      });
-      return;
-    }
-
-    // Handle undo/redo shortcuts
-    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey) {
-      if (ev.key === 'z' && !ev.shiftKey) {
-        // Ctrl+Z or Cmd+Z for undo
-        ev.preventDefault();
-        if (canUndo()) {
-          undo();
-          console.log('🔄 Undo triggered via keyboard shortcut');
-        }
-        return;
-      }
-
-      if (ev.key === 'y' || (ev.key === 'z' && ev.shiftKey)) {
-        // Ctrl+Y or Ctrl+Shift+Z or Cmd+Y or Cmd+Shift+Z for redo
-        ev.preventDefault();
-        if (canRedo()) {
-          redo();
-          console.log('🔄 Redo triggered via keyboard shortcut');
-        }
-        return;
-      }
-    }
-  };
-
   onMount(() => {
-    // Initialize state synchronization
-    initializeStateSynchronization();
-
-    // Initialize subscriptions to avoid circular dependency issues
-    initializeGroupsSubscription();
-    initializeOperationsSubscription();
-
-    // Initialize automatic status publishers (buffering, etc.)
-    initializeStatusPublishers();
-
-    // document.addEventListener('dragover', event => {
-    //   event.preventDefault();
-    // });
-    // Initialize waveform service (handles loading waveforms when operation changes)
-    cleanupWaveformService = initWaveformService();
-
-    window.addEventListener('keydown', handleKeyPress);
-    // exportState.update(s => {
-    //   s.message = undefined;
-    //   s.progress = undefined;
-    //   s.error = undefined;
-    //   return s;
-    // });
-    // updateInputs(get(appState).sections); // Legacy code - no longer needed
+    // Initialize all frontend systems (state, subscriptions, services, keyboard shortcuts)
+    cleanupFrontend = initializeFrontend();
   });
 
   // Sync timeline selection with context menu
@@ -136,8 +69,7 @@
   }
 
   onDestroy(() => {
-    window.removeEventListener('keydown', handleKeyPress);
-    cleanupWaveformService?.();
+    cleanupFrontend?.();
   });
 </script>
 

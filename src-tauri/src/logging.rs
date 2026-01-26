@@ -52,31 +52,35 @@ pub struct FileLocation {
 /// Configuration for which systems should log
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LoggingConfig {
-    pub encoder_enabled: bool,
     pub combine_enabled: bool,
+    pub cook_enabled: bool,
+    pub graph_enabled: bool,
+    pub console_output: bool,   // Whether to also print to console
+    pub duration_enabled: bool, // Add duration logging
+    pub encoder_enabled: bool,
+    pub event_emits_enabled: bool,
+    pub operation_enabled: bool, // Add operation logging
     pub playback_enabled: bool,
     pub sorting_enabled: bool,
+    pub timeline_enabled: bool, // Add timeline logging
     pub waveform_enabled: bool,
-    pub duration_enabled: bool,  // Add duration logging
-    pub timeline_enabled: bool,  // Add timeline logging
-    pub operation_enabled: bool, // Add operation logging
-    pub console_output: bool,    // Whether to also print to console
-    pub event_emits_enabled: bool,
 }
 
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
-            encoder_enabled: false,
             combine_enabled: false,
+            cook_enabled: false,
+            graph_enabled: false,
+            console_output: true,
+            duration_enabled: false, // Default off for duration
+            encoder_enabled: false,
+            event_emits_enabled: false,
+            operation_enabled: false, // Default off for operations
             playback_enabled: false,
             sorting_enabled: false,
+            timeline_enabled: false, // Default off for timeline
             waveform_enabled: false,
-            duration_enabled: false,  // Default off for duration
-            timeline_enabled: false,  // Default off for timeline
-            operation_enabled: false, // Default off for operations
-            console_output: true,
-            event_emits_enabled: false,
         }
     }
 }
@@ -140,8 +144,8 @@ impl LoggingService {
             LogSystem::Encoder => config.encoder_enabled,
             LogSystem::Combine => config.combine_enabled,
             LogSystem::Playback => config.playback_enabled,
-            LogSystem::Cook => false,  // Future system, default to off
-            LogSystem::Graph => false, // Future system, default to off
+            LogSystem::Cook => config.cook_enabled,
+            LogSystem::Graph => config.graph_enabled,
             LogSystem::Sorting => config.sorting_enabled,
             LogSystem::Waveform => config.waveform_enabled,
             LogSystem::Duration => config.duration_enabled, // Add duration check

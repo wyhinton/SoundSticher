@@ -34,6 +34,7 @@
   // Operation parameters with validation - now schema-driven
   let operationParams: Record<string, unknown> = {};
   let paramErrors: Record<string, string> = {};
+  let isOperationInfoExpanded = true;
 
   // Legacy parameter schemas - kept for backwards compatibility during migration
   // These will be removed once all operations use the JSON Schema system
@@ -251,12 +252,25 @@
       </div>
 
       <div class="operation-info">
-        <div class="info-section">
-          <span class="info-label">Source:</span>
-          <span class="info-value"
-            >{JSON.stringify(formatOperationSource(selectedOperation.sources))}</span
-          >
-        </div>
+        <button
+          class="info-header"
+          onclick={() => (isOperationInfoExpanded = !isOperationInfoExpanded)}
+          title="Toggle operation details"
+        >
+          <span class="info-toggle">{isOperationInfoExpanded ? '▼' : '▶'}</span>
+          <span class="info-title">Details</span>
+        </button>
+
+        {#if isOperationInfoExpanded}
+          <div class="info-content">
+            <div class="info-section">
+              <span class="info-label">Source:</span>
+              <span class="info-value"
+                >{JSON.stringify(formatOperationSource(selectedOperation.sources))}</span
+              >
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Editable Parameters Section -->
@@ -510,6 +524,46 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .info-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    cursor: pointer;
+    color: #a6adc8;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: color 0.2s;
+  }
+
+  .info-header:hover {
+    color: #cdd6f4;
+  }
+
+  .info-toggle {
+    display: inline-block;
+    width: 12px;
+    text-align: center;
+    font-size: 10px;
+    transition: transform 0.2s;
+  }
+
+  .info-title {
+    flex: 1;
+  }
+
+  .info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 12px;
+    border-left: 1px solid #45475a;
   }
 
   .info-section {

@@ -133,8 +133,10 @@ export function initializeAutoRenderSubscription(): void {
   appState.subscribe(state => {
     const currentRev = state._rev ?? 0;
     const currentState = get(autoRenderState);
+    console.log(`%cHERE LINE :136 %c`, 'color: yellow; font-weight: bold', '');
 
     if (currentRev !== lastKnownRev && currentState.enabled) {
+      console.log(isLogging);
       if (isLogging) {
         console.log(`🔄 Auto-render: Rev changed from ${lastKnownRev} to ${currentRev}`);
       }
