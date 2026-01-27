@@ -5,7 +5,7 @@
     dispatch,
     type AddOperationCommand,
     type DeleteMultipleOperationsCommand,
-  } from '$lib/state/undo';
+  } from '$lib/state/undo/undo';
   import MergeOpFlow from './MergeOpFlow.svelte';
   import { dropzone } from '$lib/attachments/droppable';
   import { SvelteFlowProvider } from '@xyflow/svelte';

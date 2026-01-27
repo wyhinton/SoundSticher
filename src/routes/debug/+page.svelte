@@ -47,7 +47,7 @@
     getUndoStack,
     getRedoStack,
     clearUndoRedoHistory,
-  } from '$lib/state/undo';
+  } from '$lib/state/undo/undo';
 
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {

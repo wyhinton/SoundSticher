@@ -43,7 +43,10 @@
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
-  import { removeOperationSourcesFromCurrentOpCommand, type OperationId } from '$lib/state/undo';
+  import {
+    removeOperationSourcesFromCurrentOpCommand,
+    type OperationId,
+  } from '$lib/state/undo/undo';
   import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
 
   const dispatch = createEventDispatcher();

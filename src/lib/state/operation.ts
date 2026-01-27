@@ -7,7 +7,7 @@ import {
   type DeleteOperationCommand,
   type DeleteMultipleOperationsCommand,
   type UpdateOperationCommand,
-} from './undo';
+} from './undo/undo';
 
 // ============================================================================
 // TYPES & INTERFACES

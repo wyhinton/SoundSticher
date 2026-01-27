@@ -3,7 +3,7 @@ import { initWaveformService } from './waveformCache';
 import { initializeGroupsSubscription } from './groups';
 import { initializeOperationsSubscription } from './operation';
 import { initializeStatusPublishers } from './status-publishers';
-import { undo, redo, canUndo, canRedo } from './undo';
+import { undo, redo, canUndo, canRedo } from './undo/undo';
 import { opPlaybackService } from './opPlaybackService';
 import { initializeAutoRenderSubscription } from './autoRender';
 
