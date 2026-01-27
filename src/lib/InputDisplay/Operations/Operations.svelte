@@ -2,7 +2,6 @@
   import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
   import {
     deleteOperationsById,
-    OperationInfoDictionary,
     updateOperationById,
   } from '$lib/state/operation';
   import type { OperationDef, OperationId } from '$lib/state/operation';
@@ -15,6 +14,7 @@
     isValidOperationKind,
     createDefaultParams,
     validateParams,
+    operationMeta,
   } from '$lib/types';
 
   // Legacy parameter config interface for backwards compatibility
@@ -58,7 +58,9 @@
       ? $appState.operations.defs[selectedOperationId]
       : null;
 
-  $: operationInfo = selectedOperation ? OperationInfoDictionary[selectedOperation.kind] : null;
+  $: operationInfo = selectedOperation && isValidOperationKind(selectedOperation.kind)
+    ? operationMeta[selectedOperation.kind as OperationKind]
+    : null;
 
   // Check if operation uses the new JSON Schema system
   $: operationKind = selectedOperation?.kind as OperationKind | undefined;

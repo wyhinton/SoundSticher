@@ -1,16 +1,17 @@
 <script lang="ts">
   import { draggable } from '$lib/attachments/draggable';
   import { dragStore } from '$lib/state/dragStore';
-  import type { OperationInfo, OperationId } from '$lib/state/operation';
+  import type { OperationId } from '$lib/state/operation';
   import { setSelectedOperationId, addOpAsSourceById, appState } from '$lib/state/state.svelte';
   import ContextMenu from '$lib/components/ContextMenu/ContextMenu.svelte';
   import type { ContextMenuItem, ContextMenuPosition } from '$lib/components/ContextMenu/types';
   import { get } from 'svelte/store';
+  import type { OperationMeta } from '$lib/types';
 
   export let operationId: OperationId;
   export let operationName: string;
   export let isSelected: boolean = false;
-  export let opInfo: OperationInfo | undefined;
+  export let opInfo: OperationMeta | undefined;
   export let showDebugInfo: boolean = false;
   export let debugInfo: { x: number; y: number; zoom: number } = { x: 0, y: 0, zoom: 1 };
 

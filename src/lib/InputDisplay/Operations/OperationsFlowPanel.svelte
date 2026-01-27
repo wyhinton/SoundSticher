@@ -63,6 +63,7 @@
     const command: AddOperationCommand = {
       type: 'add-operation',
       operation: {
+        renderPolicy: 'auto',
         name: operationName,
         kind: 'merge',
         sources: [],

@@ -172,6 +172,44 @@
     return toggleStates[key] !== false;
   }
 
+  function getValuePreview(key: string): { text: string; type: string } {
+    const value = data[key];
+
+    if (value === null) {
+      return { text: 'null', type: 'null' };
+    }
+
+    if (value === undefined) {
+      return { text: 'undefined', type: 'undefined' };
+    }
+
+    if (Array.isArray(value)) {
+      return { text: `[${value.length}]`, type: 'array' };
+    }
+
+    if (typeof value === 'object') {
+      const keys = Object.keys(value);
+      return { text: `{${keys.length}}`, type: 'object' };
+    }
+
+    if (typeof value === 'string') {
+      return {
+        text: value.length > 20 ? `"${value.slice(0, 20)}..."` : `"${value}"`,
+        type: 'string',
+      };
+    }
+
+    if (typeof value === 'number') {
+      return { text: String(value), type: 'number' };
+    }
+
+    if (typeof value === 'boolean') {
+      return { text: String(value), type: 'boolean' };
+    }
+
+    return { text: String(value), type: 'unknown' };
+  }
+
   function toggleAll() {
     const allVisible = topLevelKeys.every(key => isPropertyVisible(key));
     const newState = !allVisible; // If all are visible, hide all; otherwise show all
@@ -261,6 +299,7 @@
       </div>
       <div class="toggle-row">
         {#each topLevelKeys as key}
+          {@const preview = getValuePreview(key)}
           <label class="toggle-item" class:visible={isPropertyVisible(key)}>
             <input
               type="checkbox"
@@ -268,6 +307,7 @@
               on:click={e => toggleProperty(key, e)}
             />
             <span class="toggle-text">{key}</span>
+            <span class="toggle-value value-{preview.type}">{preview.text}</span>
           </label>
         {/each}
       </div>
@@ -466,6 +506,52 @@
     font-weight: 500;
   }
 
+  .toggle-value {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.6rem;
+    margin-left: 4px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-weight: 600;
+  }
+
+  .value-string {
+    color: #98c379;
+    background-color: rgba(152, 195, 121, 0.1);
+  }
+
+  .value-number {
+    color: #d19a66;
+    background-color: rgba(209, 154, 102, 0.1);
+  }
+
+  .value-boolean {
+    color: #c678dd;
+    background-color: rgba(198, 120, 221, 0.1);
+  }
+
+  .value-null,
+  .value-undefined {
+    color: #e06c75;
+    background-color: rgba(224, 108, 117, 0.1);
+    font-style: italic;
+  }
+
+  .value-array {
+    color: #61afef;
+    background-color: rgba(97, 175, 239, 0.1);
+  }
+
+  .value-object {
+    color: #56b6c2;
+    background-color: rgba(86, 182, 194, 0.1);
+  }
+
+  .value-unknown {
+    color: #abb2bf;
+    background-color: rgba(171, 178, 191, 0.1);
+  }
+
   /* Code display */
   pre {
     background-color: rgba(0, 0, 0, 0.3) !important;
@@ -552,6 +638,11 @@
     .toggle-item input[type='checkbox'] {
       width: 10px;
       height: 10px;
+    }
+
+    .toggle-value {
+      font-size: 0.55rem;
+      padding: 0px 3px;
     }
 
     pre {

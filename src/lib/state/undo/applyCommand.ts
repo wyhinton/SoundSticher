@@ -100,6 +100,48 @@ function applyDeleteOperation(
     pipelineName: string;
     originalPipeline: OperationId[];
   }> = [];
+  const cascadeDeletedOperations: Array<{
+    operationId: OperationId;
+    operation: OperationDef;
+    index: number;
+  }> = [];
+
+  // Track operations that should be cascade deleted
+  const cascadeDeleteOperationIds: Set<OperationId> = new Set();
+
+  // Before deleting, find operations in the deleted operation's sources
+  // that are ONLY used by this operation
+  if (operation.sources) {
+    for (const source of operation.sources) {
+      if (source.type === 'operation' || source.type === 'previousOperation') {
+        const sourceOpId = source.operationId;
+
+        // Count how many operations reference this source operation
+        let referenceCount = 0;
+        for (const [opId, op] of Object.entries(state.operations.defs)) {
+          if (opId === cmd.operationId) continue; // Skip the operation being deleted
+
+          if (op.sources) {
+            const hasReference = op.sources.some(
+              s =>
+                (s.type === 'operation' || s.type === 'previousOperation') &&
+                s.operationId === sourceOpId
+            );
+            if (hasReference) referenceCount++;
+          }
+
+          if (op.kind === 'pipeline' && op.operations.includes(sourceOpId)) {
+            referenceCount++;
+          }
+        }
+
+        // If no other operations reference this source, mark it for cascade deletion
+        if (referenceCount === 0) {
+          cascadeDeleteOperationIds.add(sourceOpId);
+        }
+      }
+    }
+  }
 
   // Remove from definitions
   delete state.operations.defs[cmd.operationId];
@@ -161,6 +203,33 @@ function applyDeleteOperation(
     }
   }
 
+  // Cascade delete orphaned operations and capture them for undo
+  for (const cascadeOpId of cascadeDeleteOperationIds) {
+    const cascadeOp = state.operations.defs[cascadeOpId];
+    if (cascadeOp) {
+      const cascadeIndex = state.operations.order?.indexOf(cascadeOpId) ?? -1;
+
+      // Capture the operation before deleting it
+      cascadeDeletedOperations.push({
+        operationId: cascadeOpId,
+        operation: { ...cascadeOp }, // Deep copy to preserve the operation
+        index: cascadeIndex,
+      });
+
+      // Recursively delete this operation (which may cascade further)
+      const cascadeCmd: DeleteOperationCommand = {
+        type: 'delete-operation',
+        operationId: cascadeOpId,
+      };
+      const cascadeResult = applyDeleteOperation(state, cascadeCmd);
+
+      // Also capture any nested cascade deletions
+      if (cascadeResult.cascadeDeletedOperations) {
+        cascadeDeletedOperations.push(...cascadeResult.cascadeDeletedOperations);
+      }
+    }
+  }
+
   // Update versions
   state.operations._version = (state.operations._version ?? 0) + 1;
   state._rev = (state._rev ?? 0) + 1;
@@ -171,6 +240,8 @@ function applyDeleteOperation(
     deletedIndex,
     modifiedOperations,
     deletedPipelineReferences,
+    cascadeDeletedOperations:
+      cascadeDeletedOperations.length > 0 ? cascadeDeletedOperations : undefined,
   };
 }
 

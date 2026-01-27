@@ -2,11 +2,11 @@
   import {
     deleteAllOperations,
     deleteOperationsById,
-    OperationInfoDictionary,
     type OperationsState,
     type OperationId,
   } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
+  import { operationMeta, isValidOperationKind, type OperationKind } from '$lib/types';
 
   export let onClose: () => void;
 
@@ -80,8 +80,10 @@
     const byCategory: Record<string, number> = {};
 
     defs.forEach(def => {
-      const category = OperationInfoDictionary[def.kind].category;
-      byCategory[category] = (byCategory[category] || 0) + 1;
+      if (isValidOperationKind(def.kind)) {
+        const category = operationMeta[def.kind as OperationKind].category;
+        byCategory[category] = (byCategory[category] || 0) + 1;
+      }
     });
 
     return {
@@ -169,24 +171,26 @@
     {:else}
       <div class="list-container">
         {#each operationsList as [id, def]}
-          {@const info = OperationInfoDictionary[def.kind]}
-          <div class="operation-item">
-            <span class="op-icon">{info.icon}</span>
-            <div class="op-info">
-              <span class="op-name">{def.name}</span>
-              <span class="op-kind">{info.label}</span>
-              <span class="op-id" title={id}>{id.substring(0, 12)}...</span>
+          {#if isValidOperationKind(def.kind)}
+            {@const info = operationMeta[def.kind as OperationKind]}
+            <div class="operation-item">
+              <span class="op-icon">{info.icon}</span>
+              <div class="op-info">
+                <span class="op-name">{def.name}</span>
+                <span class="op-kind">{info.label}</span>
+                <span class="op-id" title={id}>{id.substring(0, 12)}...</span>
+              </div>
+              <span class="op-category category-{info.category}">{info.category}</span>
+              <button
+                class="btn-delete"
+                onclick={() => deleteOperationsById([id])}
+                title="Delete operation"
+                aria-label="Delete operation {def.name}"
+              >
+                <i class="fa fa-times"></i>
+              </button>
             </div>
-            <span class="op-category category-{info.category}">{info.category}</span>
-            <button
-              class="btn-delete"
-              onclick={() => deleteOperationsById([id])}
-              title="Delete operation"
-              aria-label="Delete operation {def.name}"
-            >
-              <i class="fa fa-times"></i>
-            </button>
-          </div>
+          {/if}
         {/each}
       </div>
     {/if}

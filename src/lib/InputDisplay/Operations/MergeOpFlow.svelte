@@ -4,13 +4,14 @@
   import '@xyflow/svelte/dist/style.css';
 
   import type { MergeOp, OperationSource, OperationId } from '$lib/state/operation';
-  import { OperationInfoDictionary } from '$lib/state/operation';
+  import { operationMeta, type OperationKind } from '$lib/types';
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
   import { onMount } from 'svelte';
   import OpSettingsTools from './OpSettingsTools.svelte';
+  import { appState } from '$lib/state/state.svelte';
 
   export let operation: MergeOp;
   export let operationId: OperationId;
@@ -24,7 +25,8 @@
       fitView({ padding: 1 });
     }
   }
-  $: opInfo = OperationInfoDictionary[operation.kind];
+
+  $: opInfo = operationMeta[operation.kind as OperationKind];
 
   // Create a reactive key that includes sources data to ensure re-rendering
   $: mergeOpSources = JSON.stringify(operation.sources || []);

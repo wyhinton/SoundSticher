@@ -129,9 +129,14 @@ export function generateOperationId(): OperationId {
 }
 
 // ============================================================================
-// OPERATION INFO DICTIONARY (for UI)
+// OPERATION INFO DICTIONARY (DEPRECATED - Use operationMeta from $lib/types)
 // ============================================================================
+// This section is kept for backwards compatibility during migration.
+// New code should use: import { operationMeta } from '$lib/types';
 
+/**
+ * @deprecated Use operationMeta from $lib/types instead
+ */
 export interface OperationInfo {
   icon: string;
   label: string;
@@ -140,6 +145,10 @@ export interface OperationInfo {
   params: string[];
 }
 
+/**
+ * @deprecated Use operationMeta from $lib/types instead
+ * This will be removed in a future version once all code is migrated to the schema system.
+ */
 export const OperationInfoDictionary: Record<OperationDef['kind'], OperationInfo> = {
   merge: {
     icon: '➕',
