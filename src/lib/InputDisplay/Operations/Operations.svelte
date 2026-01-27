@@ -1,9 +1,6 @@
 <script lang="ts">
   import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
-  import {
-    deleteOperationsById,
-    updateOperationById,
-  } from '$lib/state/operation';
+  import { deleteOperationsById, updateOperationById } from '$lib/state/operation';
   import type { OperationDef, OperationId } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
   import OperationParamsForm from '$lib/components/schema/OperationParamsForm.svelte';
@@ -58,9 +55,10 @@
       ? $appState.operations.defs[selectedOperationId]
       : null;
 
-  $: operationInfo = selectedOperation && isValidOperationKind(selectedOperation.kind)
-    ? operationMeta[selectedOperation.kind as OperationKind]
-    : null;
+  $: operationInfo =
+    selectedOperation && isValidOperationKind(selectedOperation.kind)
+      ? operationMeta[selectedOperation.kind as OperationKind]
+      : null;
 
   // Check if operation uses the new JSON Schema system
   $: operationKind = selectedOperation?.kind as OperationKind | undefined;
