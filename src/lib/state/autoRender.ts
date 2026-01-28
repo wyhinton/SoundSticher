@@ -15,6 +15,8 @@ import { get, derived, writable } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import { appState, type AppState } from './state.svelte';
 import { loggingState } from './logging';
+import { invokeWithPerf } from './performance';
+import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
 
 // ============================================================================
 // TYPES
@@ -335,8 +337,67 @@ async function executeRenderWithOptions(
       });
     }
 
-    // Invoke the backend command
-    const result = await invoke<BatchRenderResult>('render_all_auto_operations', { params });
+    // Create a typed event channel to receive progress updates from the backend
+    type AutoRenderStartedEvent = { event: 'started'; data: { total_operations: number } };
+    type AutoRenderProgressEvent = {
+      event: 'progress';
+      data: {
+        operation_index: number;
+        total_operations: number;
+        operation_id: string;
+        operation_name: string;
+        success: boolean;
+      };
+    };
+    type AutoRenderFinishedEvent = { event: 'finished'; data: { result: BatchRenderResult } };
+    type AutoRenderEvent =
+      | AutoRenderStartedEvent
+      | AutoRenderProgressEvent
+      | AutoRenderFinishedEvent;
+
+    const onEvent = createTypedEventChannelWithLoggingAndStatusMessages<AutoRenderEvent>(
+      'AutoRender',
+      {
+        source: 'auto-render',
+        startedMessage: data => `Rendering ${data.total_operations} operations...`,
+        progressMessage: data =>
+          `Rendering: ${data.operation_name} (${data.operation_index}/${data.total_operations})`,
+        finishedMessage: data =>
+          `Rendered ${data.result.successful_renders}/${data.result.total_operations} ops in ${data.result.total_duration_ms}ms`,
+        getProgress: (data: any) => {
+          if (typeof data.operation_index === 'number' && data.total_operations) {
+            return data.operation_index / data.total_operations;
+          }
+          return undefined;
+        },
+        autoClearSuccess: 2000,
+      },
+      {
+        onStarted: data => {
+          if (isLogging) console.log('📡 AutoRender Started', data);
+          autoRenderState.update(s => ({ ...s, status: 'rendering' }));
+        },
+        onProgress: data => {
+          if (isLogging) console.log('📡 AutoRender Progress', data);
+        },
+        onFinished: data => {
+          if (isLogging) console.log('📡 AutoRender Finished', data);
+          autoRenderState.update(s => ({ ...s, status: 'idle' }));
+        },
+      }
+    );
+
+    // Invoke the backend command and pass the onEvent channel so the backend can send progress
+    const invokeResult = await invokeWithPerf<BatchRenderResult>('render_all_auto_operations', {
+      params,
+      onEvent,
+    });
+
+    if (!invokeResult.ok) {
+      throw new Error(invokeResult.error?.message ?? 'render_all_auto_operations failed');
+    }
+
+    const result = invokeResult.value;
 
     if (isLogging) {
       console.log('✅ Auto-render: Render completed', {

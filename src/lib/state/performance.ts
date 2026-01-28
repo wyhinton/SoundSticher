@@ -1,19 +1,10 @@
 // src/lib/stores/appState.ts
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { persisted } from 'svelte-persisted-store';
-import { get, writable } from 'svelte/store';
-import {
-  appState,
-  getAllFiles,
-  type CombineAudioResult,
-  type Section,
-  type SectionSend,
-  bumpRevision,
-  callSiteTrackingEnabled,
-} from './state.svelte';
-import type { CombineAudioEvent, ExportAudioEvent } from './events';
-import { exportState, type ExportSettings, type ExportState } from './export';
-import { createTypedEventChannel } from '$lib/utils/channelMaker';
+import { get } from 'svelte/store';
+import { type Section, callSiteTrackingEnabled } from './state.svelte';
+import type { ExportAudioEvent } from './events';
+import { exportState, type ExportSettings } from './export';
 
 export interface PerformanceMetric {
   time: number;
@@ -103,6 +94,7 @@ export interface PerformanceState {
   pause_timeline_audio: PerformanceMetric[];
   play_sample_preview: PerformanceMetric[];
   play_timeline_audio: PerformanceMetric[];
+  render_all_auto_operations: PerformanceMetric[];
   set_audio_file_active: PerformanceMetric[];
   set_audio_files_active_batch: PerformanceMetric[];
   set_timeline_loop_enabled: PerformanceMetric[];
@@ -153,6 +145,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   pause_timeline_audio: [],
   play_sample_preview: [],
   play_timeline_audio: [],
+  render_all_auto_operations: [],
   set_audio_file_active: [],
   set_audio_files_active_batch: [],
   set_timeline_loop_enabled: [],
