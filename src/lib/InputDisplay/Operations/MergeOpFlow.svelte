@@ -13,6 +13,7 @@
   import OpSettingsTools from './OpSettingsTools.svelte';
   import { appState } from '$lib/state/state.svelte';
   import { createOperationRenderStore } from '$lib/state/autoRender';
+  import OpFooter from './OpFooter.svelte';
 
   export let operation: MergeOp;
   export let operationId: OperationId;
@@ -462,70 +463,7 @@
   </div>
 
   <!-- Footer Render Status Overlay -->
-  {#if $operationRenderState}
-    <div class="footer-render-overlay">
-      <div class="footer-content">
-        <div class="footer-section">
-          <span class="footer-label">Status:</span>
-          <span
-            class="footer-badge"
-            class:rendering={$operationRenderState.status === 'rendering'}
-            class:success={$operationRenderState.status === 'success'}
-            class:error={$operationRenderState.status === 'error'}
-            class:skipped={$operationRenderState.status === 'skipped'}
-            class:pending={$operationRenderState.status === 'pending'}
-          >
-            {#if $operationRenderState.status === 'rendering'}
-              ⏳ Rendering
-            {:else if $operationRenderState.status === 'success'}
-              ✅ Success
-            {:else if $operationRenderState.status === 'error'}
-              ❌ Error
-            {:else if $operationRenderState.status === 'skipped'}
-              ⏭️ Skipped
-            {:else}
-              ⏸️ Pending
-            {/if}
-          </span>
-        </div>
-
-        <div class="footer-divider"></div>
-
-        <div class="footer-section">
-          <span class="footer-label">Progress:</span>
-          <span class="footer-value"
-            >{$operationRenderState.index} / {$operationRenderState.totalOperations}</span
-          >
-        </div>
-
-        {#if $operationRenderState.duration_ms !== undefined}
-          <div class="footer-divider"></div>
-          <div class="footer-section">
-            <span class="footer-label">Duration:</span>
-            <span class="footer-value">{$operationRenderState.duration_ms}ms</span>
-          </div>
-        {/if}
-
-        {#if $operationRenderState.error}
-          <div class="footer-divider"></div>
-          <div class="footer-section footer-error">
-            <span class="footer-label">Error:</span>
-            <span class="footer-value error-text">{$operationRenderState.error}</span>
-          </div>
-        {/if}
-
-        {#if $operationRenderState.startedAt && $operationRenderState.status === 'rendering'}
-          <div class="footer-divider"></div>
-          <div class="footer-section">
-            <span class="footer-label">Started:</span>
-            <span class="footer-value"
-              >{new Date($operationRenderState.startedAt).toLocaleTimeString()}</span
-            >
-          </div>
-        {/if}
-      </div>
-    </div>
-  {/if}
+  <OpFooter {operationId} />
 </div>
 
 <style>
