@@ -154,7 +154,7 @@
             {#if operationRows.length === 1}
               <!-- Single row: horizontal splitpanes -->
               <Splitpanes theme="modern-theme">
-                {#each operationRows[0] as mergeOp (mergeOp.revisionKey)}
+                {#each operationRows[0] as mergeOp (mergeOp.id)}
                   <Pane minSize={10}>
                     <SvelteFlowProvider>
                       <MergeOpFlow
@@ -162,6 +162,7 @@
                         operationId={mergeOp.id}
                         operationName={mergeOp.name}
                         isSelected={selectedOperationId === mergeOp.id}
+                        rev={mergeOp.revisionKey}
                         {panelHeight}
                       />
                     </SvelteFlowProvider>

@@ -18,6 +18,8 @@
   export let operationName: string;
   export let isSelected: boolean = false;
   export let panelHeight: number;
+  export let rev: string;
+
   const { fitView } = useSvelteFlow();
 
   $: {
@@ -26,6 +28,11 @@
     }
   }
 
+  $: {
+    if (rev) {
+      fitView({ padding: 1 });
+    }
+  }
   $: opInfo = operationMeta[operation.kind as OperationKind];
 
   // Create a reactive key that includes sources data to ensure re-rendering
