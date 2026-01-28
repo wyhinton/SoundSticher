@@ -284,7 +284,7 @@ function applyAddOperation(state: AppState, cmd: AddOperationCommand): AddOperat
   }
 
   // Track if this is the first operation being added
-  const isFirstOperation = Object.keys(state.operations.defs).length === 0;
+  const isOnlyOperation = Object.keys(state.operations.defs).length === 0;
 
   // Generate ID if not provided
   const operationId = cmd.operationId ?? generateOperationId();
@@ -308,9 +308,8 @@ function applyAddOperation(state: AppState, cmd: AddOperationCommand): AddOperat
   } else {
     state.operations.order.push(operationId);
   }
-
   // If this is the first operation, automatically select it
-  if (isFirstOperation && state.uiSettings?.selectedOperationId) {
+  if (isOnlyOperation && state.uiSettings?.selectedOperationId !== undefined) {
     state.uiSettings.selectedOperationId = operationId;
   }
 

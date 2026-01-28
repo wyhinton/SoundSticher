@@ -1,6 +1,5 @@
 <script lang="ts">
   import { draggable } from '$lib/attachments/draggable';
-  import { dragStore } from '$lib/state/dragStore';
   import type { OperationId } from '$lib/state/operation';
   import { setSelectedOperationId, addOpAsSourceById, appState } from '$lib/state/state.svelte';
   import ContextMenu from '$lib/components/ContextMenu/ContextMenu.svelte';
