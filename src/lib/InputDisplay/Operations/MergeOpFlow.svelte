@@ -10,8 +10,6 @@
   import OperationNode from './OperationNode.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
   import { onMount } from 'svelte';
-  import OpSettingsTools from './OpSettingsTools.svelte';
-  import { appState } from '$lib/state/state.svelte';
   import { createOperationRenderStore } from '$lib/state/autoRender';
   import OpFooter from './OpFooter.svelte';
 
@@ -149,7 +147,6 @@
   }
 
   function getSourceLabel(source: OperationSource): string {
-    console.log(source);
     switch (source.type) {
       case 'group':
         return `Group: ${source.groupRef}`;
@@ -236,6 +233,26 @@
   {/if}
 
   <div class="flow-content">
+    <OpFlowHeader
+      {operationId}
+      {operationName}
+      {isSelected}
+      {opInfo}
+      bind:showDebugInfo
+      bind:debugInfo
+      on:toggleDebug={({ detail }) => {
+        showDebugInfo = detail.showDebugInfo;
+        if (showDebugInfo) {
+          updateDebugInfo();
+          debugUpdateInterval = setInterval(updateDebugInfo, 100);
+        } else {
+          if (debugUpdateInterval) {
+            clearInterval(debugUpdateInterval);
+            debugUpdateInterval = null;
+          }
+        }
+      }}
+    />
     <SvelteFlow
       bind:this={flowInstance}
       nodes={flowData.nodes}
@@ -257,29 +274,8 @@
     </SvelteFlow>
 
     <!-- Operation flow header component -->
-    <OpFlowHeader
-      {operationId}
-      {operationName}
-      {isSelected}
-      {opInfo}
-      bind:showDebugInfo
-      bind:debugInfo
-      on:toggleDebug={({ detail }) => {
-        showDebugInfo = detail.showDebugInfo;
-        if (showDebugInfo) {
-          updateDebugInfo();
-          debugUpdateInterval = setInterval(updateDebugInfo, 100);
-        } else {
-          if (debugUpdateInterval) {
-            clearInterval(debugUpdateInterval);
-            debugUpdateInterval = null;
-          }
-        }
-      }}
-    />
 
     <!-- Operation settings tools overlay -->
-    <OpSettingsTools {operationId} {operationName} />
 
     <!-- Render Info Footer Overlay -->
     {#if $operationRenderState}
@@ -468,7 +464,6 @@
 
 <style>
   .merge-op-flow {
-    background: var(--panel-bg, #1e1e2e);
     overflow: hidden;
     /* min-width: 480px; */
     height: 100%;
@@ -485,14 +480,6 @@
 
   /* Override SvelteFlow styles for this specific instance */
   :global(.merge-op-flow .svelte-flow) {
-    background: #000000 !important;
-  }
-
-  :global(.merge-op-flow .svelte-flow__background) {
-    background: #000000 !important;
-  }
-
-  :global(.merge-op-flow .svelte-flow__viewport) {
     background: #000000 !important;
   }
 

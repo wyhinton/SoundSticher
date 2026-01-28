@@ -68,9 +68,6 @@
 
 <style>
   .op-settings-tools {
-    position: absolute;
-    top: 4px;
-    right: 4px;
     display: flex;
     align-items: center;
     gap: 0px;
@@ -121,9 +118,8 @@
   }
 
   .tool-icon {
-    font-size: 1.25rem;
+    font-size: 1rem;
     line-height: 1;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
     transition:
       filter 0.2s ease,
       opacity 0.2s ease;
