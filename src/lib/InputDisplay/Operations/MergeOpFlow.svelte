@@ -37,6 +37,7 @@
       fitView({ padding: 1 });
     }
   }
+
   $: opInfo = operationMeta[operation.kind as OperationKind];
 
   // Create a reactive key that includes sources data to ensure re-rendering
