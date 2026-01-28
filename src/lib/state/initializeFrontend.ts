@@ -1,4 +1,3 @@
-import { initializeStateSynchronization } from './stateSynchronization';
 import { initWaveformService } from './waveformCache';
 import { initializeGroupsSubscription } from './groups';
 import { initializeOperationsSubscription } from './operation';
@@ -14,9 +13,6 @@ import { initializeAutoRenderSubscription } from './autoRender';
  * @returns Cleanup function to call on application destroy
  */
 export function initializeFrontend(): () => void {
-  // Initialize state synchronization
-  initializeStateSynchronization();
-
   // Initialize subscriptions to avoid circular dependency issues
   initializeGroupsSubscription();
   initializeOperationsSubscription();

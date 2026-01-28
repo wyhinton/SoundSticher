@@ -3,13 +3,7 @@
   import { get } from 'svelte/store';
   import ContextMenu from './ContextMenu.svelte';
   import { contextMenuState, contextMenuManager } from './contextMenuStore';
-  import {
-    timelineSegmentProvider,
-    fileTableRowProvider,
-    sourcesTableProvider,
-    exportPanelProvider,
-    generalProvider,
-  } from './providers';
+  import { sourcesTableProvider, exportPanelProvider, generalProvider } from './providers';
   import { appState } from '../../state/state.svelte';
   import { debugState } from '../../state/debug.svelte';
 
@@ -19,8 +13,6 @@
 
   // Register providers in order of priority (first match wins)
   onMount(() => {
-    contextMenuManager.registerProvider('timeline-segment', timelineSegmentProvider);
-    contextMenuManager.registerProvider('file-table-row', fileTableRowProvider);
     contextMenuManager.registerProvider('sources-table', sourcesTableProvider);
     contextMenuManager.registerProvider('export-panel', exportPanelProvider);
     contextMenuManager.registerProvider('general', generalProvider); // Fallback

@@ -248,7 +248,8 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: loadedState.uiSettings?.showFullSvgPath || false,
       svgPathDisplayMode: loadedState.uiSettings?.svgPathDisplayMode || 'trim',
       callSiteTrackingEnabled: loadedState.uiSettings?.callSiteTrackingEnabled || false,
-      timelineHeight: loadedState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT,
+      timelineHeight:
+        loadedState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT,
       theme: {
         panelHeaderBackgroundColor:
           loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
@@ -802,16 +803,8 @@ export function setSvgPathDisplayMode(mode: 'full' | 'trim' | 'hide') {
   });
 }
 
-// ============================================================================
-// OPERATION-RELATED FUNCTIONS REMOVED
-// Operations no longer have sections property - these functions are deprecated
-// ============================================================================
-
 // All operation-section related functions have been removed since operations
 // no longer have a sections property. Operations now use sources instead.
-
-// Removed addSourceToCurrentOperation() - operations no longer have sections
-// Removed deleteSectionFromCurrentOperation() - operations no longer have sections
 
 /**
  * Current operation sources - gets the sources array from the currently selected MergeOp
@@ -860,16 +853,6 @@ export const currentOperationFileList = derived(appState, $appState => {
 
   return fileIds;
 });
-
-// Right now in here for when we have a given mergeOp selected, what we want to do is display the list of filenames that are the sources for all of the sampleOps which are referenced in that mergeOp. Don't worry about the metadata columns right now, but we want to display just the file names we can get via #
-/**
- * DEPRECATED: Operations no longer have sections
- * This is kept temporarily for compatibility until UI is updated
- */
-export function getOperationSections(operationName: string): Section[] {
-  console.warn('getOperationSections is deprecated - operations no longer have sections');
-  return [];
-}
 
 /**
  * Get the sources array from the currently selected MergeOp
