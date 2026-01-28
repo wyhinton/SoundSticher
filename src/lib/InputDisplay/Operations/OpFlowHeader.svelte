@@ -188,12 +188,11 @@
 <style>
   .flow-header {
     position: absolute;
-    top: 4px;
-    left: 4px;
+    top: -1px;
+    left: -1px;
     background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(4px);
     padding: 2px 2px;
-    border-radius: 6px;
     display: flex;
     align-items: center;
     gap: 2px;
