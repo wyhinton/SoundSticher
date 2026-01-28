@@ -1,15 +1,12 @@
 <script lang="ts">
   import { appState } from '$lib/state/state.svelte';
   import { type MergeOp, type OperationDef } from '$lib/state/operation';
-  import {
-    dispatch,
-    type AddOperationCommand,
-    type DeleteMultipleOperationsCommand,
-  } from '$lib/state/undo';
+  import { dispatch, type DeleteMultipleOperationsCommand } from '$lib/state/undo/undo';
   import MergeOpFlow from './MergeOpFlow.svelte';
   import { dropzone } from '$lib/attachments/droppable';
   import { SvelteFlowProvider } from '@xyflow/svelte';
   import { Pane, Splitpanes } from 'svelte-splitpanes';
+  import AddOpsPane from './AddOpsPane.svelte';
 
   // Panel visibility
   export let isExpanded = true;
@@ -18,10 +15,6 @@
   // @ts-ignore - panelHeight is used for tracking/debugging resize events
 
   // Log panel height whenever it changes
-  $: if (panelHeight > 0) {
-    console.log('📏 OperationsFlowPanel height changed:', panelHeight);
-  }
-
   $: selectedOperationId = $appState.uiSettings?.selectedOperationId || null;
 
   // Get MergeOp operations with revision tracking
@@ -56,27 +49,6 @@
     }
     return rows;
   })();
-
-  // Add merge operation
-  function addMergeOpRender() {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const operationName = `merge_${timestamp}`;
-
-    // Use the undo system to add the operation
-    const command: AddOperationCommand = {
-      type: 'add-operation',
-      operation: {
-        name: operationName,
-        kind: 'merge',
-        sources: [],
-        outputPath: `output/combined_${timestamp}.wav`,
-        gapSeconds: 0,
-        format: 'wav',
-      } as Omit<OperationDef, 'id'>,
-    };
-
-    dispatch(command, `Add Merge Operation: ${operationName}`);
-  }
 
   // Delete all operations using undo system
   function handleDeleteAllOperations() {
@@ -156,7 +128,7 @@
             {#if operationRows.length === 1}
               <!-- Single row: horizontal splitpanes -->
               <Splitpanes theme="modern-theme">
-                {#each operationRows[0] as mergeOp (mergeOp.revisionKey)}
+                {#each operationRows[0] as mergeOp (mergeOp.id)}
                   <Pane minSize={10}>
                     <SvelteFlowProvider>
                       <MergeOpFlow
@@ -164,6 +136,7 @@
                         operationId={mergeOp.id}
                         operationName={mergeOp.name}
                         isSelected={selectedOperationId === mergeOp.id}
+                        rev={mergeOp.revisionKey}
                         {panelHeight}
                       />
                     </SvelteFlowProvider>
@@ -199,7 +172,7 @@
           <div class="empty-state">
             <i class="fa fa-project-diagram fa-3x"></i>
             <p>No merge operations defined</p>
-            <button class="btn btn-sm btn-primary" onclick={addMergeOpRender}>
+            <button class="btn btn-sm btn-primary">
               <i class="fa fa-plus"></i> Add Merge Operation
             </button>
           </div>
@@ -207,75 +180,7 @@
       </Pane>
 
       <Pane minSize={10} maxSize={10}>
-        <div class="operation-creation-panel">
-          <div
-            class="creation-header"
-            style="--header-bg: {$appState.uiSettings?.theme?.panelHeaderBackgroundColor}"
-          >
-            <h4>Add Operations</h4>
-          </div>
-          <div class="operation-buttons">
-            <button
-              class="operation-add-btn"
-              onclick={addMergeOpRender}
-              title="Add merge operation"
-            >
-              <span class="operation-icon">🔗</span>
-              <span class="operation-label">Merge</span>
-              <i class="fa fa-plus"></i>
-            </button>
-
-            <button
-              class="operation-add-btn"
-              onclick={() => console.log('Split operation - coming soon')}
-              title="Add split operation"
-            >
-              <span class="operation-icon">✂️</span>
-              <span class="operation-label">Split</span>
-              <i class="fa fa-plus"></i>
-            </button>
-
-            <button
-              class="operation-add-btn"
-              onclick={() => console.log('FX Rack operation - coming soon')}
-              title="Add FX rack operation"
-            >
-              <span class="operation-icon">🎛️</span>
-              <span class="operation-label">FX Rack</span>
-              <i class="fa fa-plus"></i>
-            </button>
-
-            <button
-              class="operation-add-btn"
-              onclick={() => console.log('Stems operation - coming soon')}
-              title="Add stems operation"
-            >
-              <span class="operation-icon">🎵</span>
-              <span class="operation-label">Stems</span>
-              <i class="fa fa-plus"></i>
-            </button>
-
-            <button
-              class="operation-add-btn"
-              onclick={() => console.log('Audio Wrangle operation - coming soon')}
-              title="Add audio wrangle operation"
-            >
-              <span class="operation-icon">🔧</span>
-              <span class="operation-label">Audio Wrangle</span>
-              <i class="fa fa-plus"></i>
-            </button>
-
-            <button
-              class="operation-add-btn"
-              onclick={() => console.log('Layer operation - coming soon')}
-              title="Add layer operation"
-            >
-              <span class="operation-icon">📚</span>
-              <span class="operation-label">Layer</span>
-              <i class="fa fa-plus"></i>
-            </button>
-          </div>
-        </div>
+        <AddOpsPane />
       </Pane>
     </Splitpanes>
   {/if}
@@ -372,73 +277,6 @@
   .merge-flows-container {
     height: 100%;
     width: 100%;
-  }
-
-  .operation-creation-panel {
-    background: var(--panel-bg, #1e1e2e);
-    border-left: 1px solid var(--border-color, #313244);
-    display: flex;
-    flex-direction: column;
-  }
-
-  .creation-header {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color, #313244);
-    background: var(--header-bg, #181825);
-  }
-
-  .creation-header h4 {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--text-primary, #cdd6f4);
-  }
-
-  .operation-buttons {
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .operation-add-btn {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 10px;
-    background: var(--panel-bg, #1e1e2e);
-    border: 1px solid var(--border-color, #313244);
-    border-radius: 6px;
-    color: var(--text-primary, #cdd6f4);
-    cursor: pointer;
-    transition: all 0.2s;
-    font-size: 0.75rem;
-    min-height: 36px;
-  }
-
-  .operation-add-btn:hover {
-    background: var(--hover-bg, #313244);
-    border-color: #3b82f6;
-    transform: translateY(-1px);
-  }
-
-  .operation-add-btn:active {
-    transform: translateY(0);
-  }
-
-  .operation-icon {
-    font-size: 1rem;
-  }
-
-  .operation-label {
-    flex: 1;
-    text-align: left;
-    margin-left: 8px;
-    font-weight: 500;
-  }
-
-  .operation-add-btn .fa-plus {
-    color: #22c55e;
-    font-size: 0.7rem;
   }
 
   .empty-state {

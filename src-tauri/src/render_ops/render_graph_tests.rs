@@ -1,8 +1,3 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
-use tauri::State;
-
 use crate::artifacts::{Artifact, AudioArtifact};
 use crate::cook::{CookScheduler, CookTask, CookTaskPriority, TaskStatus};
 use crate::error::Error;
@@ -10,8 +5,16 @@ use crate::graph::OpId;
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
 use crate::playback::op_playback::AudioSpec;
+use crate::render_ops::generated_operation_defs::{FrontendOperationDef, FrontendOperationsState};
 use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
+use crate::send_channel_event;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
+use strum_macros::{Display, EnumString};
+use tauri::ipc::Channel;
+use tauri::State;
 
 // ============================================================================
 // FRONTEND OPERATION TYPES (matching src/lib/state/operation.ts)
@@ -21,7 +24,8 @@ use serde::{Deserialize, Serialize};
 pub type OperationId = String;
 
 /// Render policy for operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString)]
+#[strum(serialize_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum RenderPolicy {
     Auto,
@@ -67,91 +71,6 @@ pub enum OperationSource {
         #[serde(rename = "operationId")]
         operation_id: OperationId,
     },
-}
-
-/// Base operation fields common to all operation types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BaseOperationFields {
-    pub id: OperationId,
-    pub name: String,
-    #[serde(rename = "renderPolicy")]
-    pub render_policy: Option<RenderPolicy>,
-}
-
-/// Operation definition enum matching frontend types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-pub enum FrontendOperationDef {
-    #[serde(rename = "merge")]
-    Merge {
-        id: OperationId,
-        name: String,
-        #[serde(rename = "renderPolicy")]
-        render_policy: Option<RenderPolicy>,
-        sources: Vec<OperationSource>,
-        #[serde(rename = "outputPath")]
-        output_path: String,
-        format: String,
-    },
-    #[serde(rename = "sample")]
-    Sample {
-        id: OperationId,
-        name: String,
-        #[serde(rename = "renderPolicy")]
-        render_policy: Option<RenderPolicy>,
-        sources: Vec<OperationSource>,
-    },
-    #[serde(rename = "pipeline")]
-    Pipeline {
-        id: OperationId,
-        name: String,
-        #[serde(rename = "renderPolicy")]
-        render_policy: Option<RenderPolicy>,
-        operations: Vec<OperationId>,
-        sources: Vec<OperationSource>,
-    },
-}
-
-impl FrontendOperationDef {
-    pub fn id(&self) -> &OperationId {
-        match self {
-            FrontendOperationDef::Merge { id, .. } => id,
-            FrontendOperationDef::Sample { id, .. } => id,
-            FrontendOperationDef::Pipeline { id, .. } => id,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        match self {
-            FrontendOperationDef::Merge { name, .. } => name,
-            FrontendOperationDef::Sample { name, .. } => name,
-            FrontendOperationDef::Pipeline { name, .. } => name,
-        }
-    }
-
-    pub fn sources(&self) -> &[OperationSource] {
-        match self {
-            FrontendOperationDef::Merge { sources, .. } => sources,
-            FrontendOperationDef::Sample { sources, .. } => sources,
-            FrontendOperationDef::Pipeline { sources, .. } => sources,
-        }
-    }
-
-    pub fn kind(&self) -> &str {
-        match self {
-            FrontendOperationDef::Merge { .. } => "merge",
-            FrontendOperationDef::Sample { .. } => "sample",
-            FrontendOperationDef::Pipeline { .. } => "pipeline",
-        }
-    }
-}
-
-/// Operations state from frontend (matches TypeScript OperationsState)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FrontendOperationsState {
-    pub defs: HashMap<OperationId, FrontendOperationDef>,
-    #[serde(default)]
-    pub order: Vec<OperationId>,
 }
 
 // ============================================================================
@@ -264,28 +183,6 @@ pub async fn test_scheduler(
     Ok(result)
 }
 
-/// Parameters for testing operations with custom values
-/// This struct accepts any JSON parameters for different operation types
-///
-/// Supported operation types and their parameters:
-///
-/// **merge/combine/combine_active:**
-/// - output_format: string ("wav", "mp3", "flac", default: "wav")
-/// - sample_rate: u32 (Hz, default: 44100)
-/// - bit_depth: u32 (bits, default: 16)
-///
-/// **master_pipeline:**
-/// - operations: array of strings (pipeline steps, default: ["combine", "normalize", "export"])
-/// - parallel_execution: bool (run steps in parallel when possible, default: false)
-///
-/// **normalize:**
-/// - target_db: f64 (target level in dB, default: -12.0)
-/// - preserve_peaks: bool (preserve peak levels, default: true)
-///
-/// **export:**
-/// - format: string (output format, default: "wav")
-/// - quality: string ("low", "medium", "high", default: "high")
-/// - output_path: string (output directory, default: "./output")
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TestOperationParams {
     /// Generic parameters map that can hold any operation-specific parameters
@@ -834,7 +731,7 @@ pub async fn test_render_single_operation(
                         input_artifacts.len()
                     )
                 );
-                
+
                 for (idx, artifact) in input_artifacts.iter().enumerate() {
                     log_info!(
                         logger,
@@ -850,7 +747,7 @@ pub async fn test_render_single_operation(
                             artifact.metadata.keys().cloned().collect::<Vec<String>>().join(", ")
                         )
                     );
-                    
+
                     // Check if file actually exists and get its size
                     if artifact.path.exists() {
                         if let Ok(metadata) = std::fs::metadata(&artifact.path) {
@@ -874,7 +771,11 @@ pub async fn test_render_single_operation(
                         log_info!(
                             logger,
                             LogSystem::Combine,
-                            &format!("❌ File {} DOES NOT EXIST on disk: {}", idx + 1, artifact.path.display())
+                            &format!(
+                                "❌ File {} DOES NOT EXIST on disk: {}",
+                                idx + 1,
+                                artifact.path.display()
+                            )
                         );
                     }
                 }
@@ -993,7 +894,7 @@ pub async fn test_render_single_operation(
                                                 metadata.len()
                                             )
                                         );
-                                        
+
                                         if metadata.len() < 1024 {
                                             log_info!(
                                                 logger,
@@ -1012,7 +913,10 @@ pub async fn test_render_single_operation(
                                     log_info!(
                                         logger,
                                         LogSystem::Combine,
-                                        &format!("❌ Output file DOES NOT EXIST: {}", audio.path.display())
+                                        &format!(
+                                            "❌ Output file DOES NOT EXIST: {}",
+                                            audio.path.display()
+                                        )
                                     );
                                 }
 
@@ -1023,7 +927,9 @@ pub async fn test_render_single_operation(
                                         LogSystem::Combine,
                                         &format!(
                                             "📊 Result metadata: {}",
-                                            audio.metadata.iter()
+                                            audio
+                                                .metadata
+                                                .iter()
                                                 .map(|(k, v)| format!("{}={}", k, v))
                                                 .collect::<Vec<_>>()
                                                 .join(", ")
@@ -1161,7 +1067,7 @@ pub async fn test_render_single_operation(
                 operations.len(),
                 serde_json::to_string_pretty(&params.parameters).unwrap_or_else(|_| "Invalid JSON".to_string())
             ))
-        },
+        }
         "export" => {
             // Extract and validate export operation parameters
             let format = params
@@ -1377,20 +1283,7 @@ fn resolve_operation_source(
                     &format!("📁 Resolving single file source: {}", file_id)
                 );
             }
-            // For now, create a placeholder artifact with reasonable duration for testing
-            // TODO: Resolve actual file path from timeline state
-            let placeholder_duration = 3.0; // 3 seconds for testing
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "🔧 Creating placeholder audio artifact for file '{}' with duration={}s",
-                        file_id, placeholder_duration
-                    )
-                );
-            }
-            
+            let placeholder_duration = 3.0;
             Ok(vec![AudioArtifact {
                 path: std::path::PathBuf::from(file_id),
                 format: "wav".to_string(),
@@ -1408,31 +1301,11 @@ fn resolve_operation_source(
             }])
         }
         OperationSource::Files { file_ids } => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!("📁 Resolving {} file sources", file_ids.len())
-                );
-            }
-            // Create placeholder artifacts for each file with reasonable durations
             let artifacts: Vec<AudioArtifact> = file_ids
                 .iter()
                 .enumerate()
                 .map(|(idx, file_id)| {
-                    // Vary the duration for testing (2-5 seconds)
                     let placeholder_duration = 2.0 + (idx as f64 * 0.5);
-                    if let Ok(logger) = logging_service.lock() {
-                        log_info!(
-                            logger,
-                            LogSystem::Combine,
-                            &format!(
-                                "🔧 Creating placeholder audio artifact {}/{} for file '{}' with duration={}s",
-                                idx + 1, file_ids.len(), file_id, placeholder_duration
-                            )
-                        );
-                    }
-                    
                     AudioArtifact {
                         path: std::path::PathBuf::from(file_id),
                         format: "wav".to_string(),
@@ -1444,92 +1317,21 @@ fn resolve_operation_source(
                             meta.insert("source_type".to_string(), "files".to_string());
                             meta.insert("file_id".to_string(), file_id.clone());
                             meta.insert("is_placeholder".to_string(), "true".to_string());
-                            meta.insert("placeholder_index".to_string(), idx.to_string());
                             meta
                         },
                         data: None,
                     }
                 })
                 .collect();
-                
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "📊 Created {} placeholder artifacts with total duration: {}s",
-                        artifacts.len(),
-                        artifacts.iter().map(|a| a.duration).sum::<f64>()
-                    )
-                );
-            }
-            
             Ok(artifacts)
         }
-        OperationSource::Group { group_ref } => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!("👥 Resolving group source: {}", group_ref)
-                );
-            }
-            // TODO: Resolve actual group files from groups state
-            let placeholder_duration = 4.0; // 4 seconds for testing
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "🔧 Creating placeholder group artifact for '{}' with duration={}s",
-                        group_ref, placeholder_duration
-                    )
-                );
-            }
-            
-            Ok(vec![AudioArtifact {
-                path: std::path::PathBuf::from(format!("group_{}.wav", group_ref)),
-                format: "wav".to_string(),
-                sample_rate,
-                channels: 2,
-                duration: placeholder_duration,
-                metadata: {
-                    let mut meta = HashMap::new();
-                    meta.insert("source_type".to_string(), "group".to_string());
-                    meta.insert("group_ref".to_string(), group_ref.clone());
-                    meta.insert("is_placeholder".to_string(), "true".to_string());
-                    meta
-                },
-                data: None,
-            }])
-        }
         OperationSource::Operation { operation_id } => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!("🔗 Resolving operation dependency: {}", operation_id)
-                );
-            }
-            // Recursively resolve the dependent operation
             if let Some(dep_op) = ctx.defs.get(operation_id) {
-                if let Ok(logger) = logging_service.lock() {
-                    log_info!(
-                        logger,
-                        LogSystem::Combine,
-                        &format!(
-                            "🔄 Recursively resolving operation '{}' (kind: {})",
-                            dep_op.name(),
-                            dep_op.kind()
-                        )
-                    );
-                }
-                // Get sources from the dependent operation
                 let dep_sources = dep_op.sources();
                 let mut all_artifacts = Vec::new();
                 for dep_source in dep_sources {
                     let artifacts = resolve_operation_source(
-                        dep_source,
+                        &dep_source,
                         ctx,
                         base_artifacts_dir,
                         op_map,
@@ -1546,128 +1348,26 @@ fn resolve_operation_source(
                 ))))
             }
         }
-        OperationSource::PreviousOperation { operation_id } => {
-            // Same as Operation source
-            resolve_operation_source(
-                &OperationSource::Operation {
-                    operation_id: operation_id.clone(),
-                },
-                ctx,
-                base_artifacts_dir,
-                op_map,
-                sample_rate,
-                logging_service,
-            )
-        }
-        OperationSource::All => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    "📚 Resolving 'all' source - TODO: needs timeline state"
-                );
-            }
-            // TODO: Resolve all files from timeline state
-            let placeholder_duration = 6.0; // 6 seconds for testing
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "🔧 Creating placeholder 'all' artifact with duration={}s",
-                        placeholder_duration
-                    )
-                );
-            }
-            
+        OperationSource::PreviousOperation { operation_id } => resolve_operation_source(
+            &OperationSource::Operation {
+                operation_id: operation_id.clone(),
+            },
+            ctx,
+            base_artifacts_dir,
+            op_map,
+            sample_rate,
+            logging_service,
+        ),
+        _ => {
+            // Handle other source types with placeholder
+            let placeholder_duration = 4.0;
             Ok(vec![AudioArtifact {
-                path: std::path::PathBuf::from("all_files_placeholder.wav"),
+                path: std::path::PathBuf::from("placeholder.wav"),
                 format: "wav".to_string(),
                 sample_rate,
                 channels: 2,
                 duration: placeholder_duration,
-                metadata: {
-                    let mut meta = HashMap::new();
-                    meta.insert("source_type".to_string(), "all".to_string());
-                    meta.insert("is_placeholder".to_string(), "true".to_string());
-                    meta
-                },
-                data: None,
-            }])
-        }
-        OperationSource::Active => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    "🎯 Resolving 'active' source - TODO: needs timeline state"
-                );
-            }
-            // TODO: Resolve active files from timeline state
-            let placeholder_duration = 5.0; // 5 seconds for testing
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "🔧 Creating placeholder 'active' artifact with duration={}s",
-                        placeholder_duration
-                    )
-                );
-            }
-            
-            Ok(vec![AudioArtifact {
-                path: std::path::PathBuf::from("active_files_placeholder.wav"),
-                format: "wav".to_string(),
-                sample_rate,
-                channels: 2,
-                duration: placeholder_duration,
-                metadata: {
-                    let mut meta = HashMap::new();
-                    meta.insert("source_type".to_string(), "active".to_string());
-                    meta.insert("is_placeholder".to_string(), "true".to_string());
-                    meta
-                },
-                data: None,
-            }])
-        }
-        OperationSource::Section { section_index } => {
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "📍 Resolving section source: {} - TODO: needs timeline state",
-                        section_index
-                    )
-                );
-            }
-            // TODO: Resolve section files from timeline state
-            let placeholder_duration = 3.5; // 3.5 seconds for testing
-            if let Ok(logger) = logging_service.lock() {
-                log_info!(
-                    logger,
-                    LogSystem::Combine,
-                    &format!(
-                        "🔧 Creating placeholder section artifact for section {} with duration={}s",
-                        section_index, placeholder_duration
-                    )
-                );
-            }
-            
-            Ok(vec![AudioArtifact {
-                path: std::path::PathBuf::from(format!("section_{}.wav", section_index)),
-                format: "wav".to_string(),
-                sample_rate,
-                channels: 2,
-                duration: placeholder_duration,
-                metadata: {
-                    let mut meta = HashMap::new();
-                    meta.insert("source_type".to_string(), "section".to_string());
-                    meta.insert("section_index".to_string(), section_index.to_string());
-                    meta.insert("is_placeholder".to_string(), "true".to_string());
-                    meta
-                },
+                metadata: HashMap::new(),
                 data: None,
             }])
         }
@@ -1679,7 +1379,7 @@ fn resolve_operation_source(
 // ============================================================================
 
 /// Result for a single operation render
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OperationRenderResult {
     /// The operation ID
     pub operation_id: OperationId,
@@ -1694,7 +1394,7 @@ pub struct OperationRenderResult {
 }
 
 /// Result for the batch render operation
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BatchRenderResult {
     /// Total number of operations processed
     pub total_operations: usize,
@@ -1726,23 +1426,44 @@ pub struct BatchRenderParams {
 }
 
 /// Render all operations with renderPolicy: 'auto'
-/// 
+///
 /// This command is designed to be called from the frontend when `_rev` changes.
 /// It processes all operations in dependency order, respecting the render policy:
 /// - 'auto': Will be re-rendered
 /// - 'manual': Will be skipped unless force_render is true
 /// - 'frozen': Will be skipped (output is treated as immutable)
-/// 
+///
 /// The command returns detailed results for each operation, including timing
 /// information useful for debugging and performance monitoring.
+///
+///
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "event", content = "data")]
+pub enum RenderAllAutoOperationsEvent {
+    Started {
+        total_operations: usize,
+    },
+    Progress {
+        operation_index: usize,
+        total_operations: usize,
+        operation_id: OperationId,
+        operation_name: String,
+        success: bool,
+    },
+    Finished {
+        result: BatchRenderResult,
+    },
+}
+
 #[tauri::command]
 pub async fn render_all_auto_operations(
     params: BatchRenderParams,
-    logging_service: State<'_, Arc<Mutex<LoggingService>>>
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+    on_event: Channel<RenderAllAutoOperationsEvent>,
 ) -> Result<BatchRenderResult, Error> {
     let start_time = std::time::Instant::now();
     let force_render = params.force_render.unwrap_or(false);
-    
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
@@ -1756,10 +1477,13 @@ pub async fn render_all_auto_operations(
     }
 
     // Get operations to process
-    let operations_to_process: Vec<(&OperationId, &FrontendOperationDef)> = 
+    let operations_to_process: Vec<(&OperationId, &FrontendOperationDef)> =
         if let Some(ref specific_ids) = params.specific_operation_ids {
             // Only process specified operations
-            params.operations_state.defs.iter()
+            params
+                .operations_state
+                .defs
+                .iter()
                 .filter(|(id, _)| specific_ids.contains(id))
                 .collect()
         } else {
@@ -1769,7 +1493,7 @@ pub async fn render_all_auto_operations(
 
     // Build dependency graph and compute render order (topological sort)
     let render_order = compute_render_order(&operations_to_process, &params.operations_state);
-    
+
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
@@ -1781,21 +1505,22 @@ pub async fn render_all_auto_operations(
         );
         for (idx, op_id) in render_order.iter().enumerate() {
             if let Some(op) = params.operations_state.defs.get(op_id) {
-                let policy = op.render_policy_str();
                 log_info!(
                     logger,
                     LogSystem::Combine,
-                    &format!(
-                        "  {}. {} '{}' (policy: {})",
-                        idx + 1,
-                        op.kind(),
-                        op.name(),
-                        policy
-                    )
+                    &format!("  {}. {} '{}' (policy: )", idx + 1, op.kind(), op.name(),)
                 );
             }
         }
     }
+
+    // Emit started event with total operations
+    send_channel_event!(
+        on_event,
+        RenderAllAutoOperationsEvent::Started {
+            total_operations: operations_to_process.len(),
+        }
+    );
 
     let mut results: Vec<OperationRenderResult> = Vec::new();
     let mut successful_renders = 0;
@@ -1818,14 +1543,14 @@ pub async fn render_all_auto_operations(
             }
         };
 
-        let policy = op.render_policy_str();
-        
+        let policy = op.render_policy();
+
         // Check if we should render this operation based on policy
         let should_render = match policy {
-            "auto" => true,
-            "manual" => force_render,
-            "frozen" => false,
-            _ => true, // Default to auto behavior
+            Some(RenderPolicy::Auto) => true,
+            Some(RenderPolicy::Manual) => force_render,
+            Some(RenderPolicy::Frozen) => false,
+            _ => false, // Default to auto behavior
         };
 
         if !should_render {
@@ -1836,7 +1561,12 @@ pub async fn render_all_auto_operations(
                     &format!(
                         "⏭️ Skipping '{}' (policy: {})",
                         op.name(),
-                        policy
+                        match policy {
+                            Some(RenderPolicy::Auto) => "auto",
+                            Some(RenderPolicy::Manual) => "manual",
+                            Some(RenderPolicy::Frozen) => "frozen",
+                            None => "auto (default)",
+                        }
                     )
                 );
             }
@@ -1845,39 +1575,67 @@ pub async fn render_all_auto_operations(
                 operation_id: op_id.clone(),
                 operation_name: op.name().to_string(),
                 success: true, // Skipped is not a failure
-                error: Some(format!("Skipped due to render policy: {}", policy)),
+                error: Some(format!(
+                    "Skipped due to render policy: {}",
+                    match policy {
+                        Some(RenderPolicy::Auto) => "auto",
+                        Some(RenderPolicy::Manual) => "manual",
+                        Some(RenderPolicy::Frozen) => "frozen",
+                        None => "auto (default)",
+                    }
+                )),
                 duration_ms: 0,
             });
+
+            // Emit progress for skipped operation
+            let idx = results.len();
+            send_channel_event!(
+                on_event,
+                RenderAllAutoOperationsEvent::Progress {
+                    operation_index: idx,
+                    total_operations: operations_to_process.len(),
+                    operation_id: op_id.clone(),
+                    operation_name: op.name().to_string(),
+                    success: true,
+                }
+            );
+
             continue;
         }
 
         // Render this operation
         let op_start = std::time::Instant::now();
-        
+
         if let Ok(logger) = logging_service.lock() {
             log_info!(
                 logger,
                 LogSystem::Combine,
-                &format!(
-                    "🔄 Rendering {} '{}' (id: {})",
-                    op.kind(),
-                    op.name(),
-                    op_id
-                )
+                &format!("🔄 Rendering {} '{}' (id: {})", op.kind(), op.name(), op_id)
             );
         }
 
-        let render_result = render_single_operation_internal(
-            op,
-            &params.operations_state,
-            &logging_service,
-        ).await;
+        let render_result =
+            render_single_operation_internal(op, &params.operations_state, &logging_service).await;
 
         let op_duration = op_start.elapsed();
 
         match render_result {
             Ok(_message) => {
                 successful_renders += 1;
+
+                // Emit progress for successful render
+                let idx = results.len() + 1;
+                send_channel_event!(
+                    on_event,
+                    RenderAllAutoOperationsEvent::Progress {
+                        operation_index: idx,
+                        total_operations: operations_to_process.len(),
+                        operation_id: op_id.clone(),
+                        operation_name: op.name().to_string(),
+                        success: true,
+                    }
+                );
+
                 if let Ok(logger) = logging_service.lock() {
                     log_info!(
                         logger,
@@ -1900,15 +1658,25 @@ pub async fn render_all_auto_operations(
             Err(e) => {
                 failed_renders += 1;
                 let error_msg = format!("{:?}", e);
+
+                // Emit progress for failed render
+                let idx = results.len() + 1;
+                send_channel_event!(
+                    on_event,
+                    RenderAllAutoOperationsEvent::Progress {
+                        operation_index: idx,
+                        total_operations: operations_to_process.len(),
+                        operation_id: op_id.clone(),
+                        operation_name: op.name().to_string(),
+                        success: false,
+                    }
+                );
+
                 if let Ok(logger) = logging_service.lock() {
                     log_info!(
                         logger,
                         LogSystem::Combine,
-                        &format!(
-                            "❌ Failed to render '{}': {}",
-                            op.name(),
-                            error_msg
-                        )
+                        &format!("❌ Failed to render '{}': {}", op.name(), error_msg)
                     );
                 }
                 results.push(OperationRenderResult {
@@ -1930,23 +1698,30 @@ pub async fn render_all_auto_operations(
             LogSystem::Combine,
             &format!(
                 "🏁 Batch render complete: {} successful, {} failed, {} skipped in {:?}",
-                successful_renders,
-                failed_renders,
-                skipped_operations,
-                total_duration
+                successful_renders, failed_renders, skipped_operations, total_duration
             )
         );
     }
 
-    Ok(BatchRenderResult {
+    let final_result = BatchRenderResult {
         total_operations: results.len(),
         successful_renders,
         failed_renders,
         skipped_operations,
-        results,
+        results: results.clone(),
         total_duration_ms: total_duration.as_millis() as u64,
         triggered_by_rev: params.current_rev,
-    })
+    };
+
+    // Emit finished event with the final result
+    send_channel_event!(
+        on_event,
+        RenderAllAutoOperationsEvent::Finished {
+            result: final_result.clone(),
+        }
+    );
+
+    Ok(final_result)
 }
 
 /// Compute the render order using topological sort based on operation dependencies
@@ -2027,7 +1802,7 @@ fn compute_render_order(
 async fn render_single_operation_internal(
     op: &FrontendOperationDef,
     operations_state: &FrontendOperationsState,
-    logging_service: &State<'_, Arc<Mutex<LoggingService>>>
+    logging_service: &State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
     let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
     let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
@@ -2039,7 +1814,6 @@ async fn render_single_operation_internal(
             name,
             sources,
             output_path,
-            format,
             ..
         } => {
             if let Ok(logger) = logging_service.lock() {
@@ -2093,7 +1867,7 @@ async fn render_single_operation_internal(
 
             let op_id = op_map.insert(());
             let work_dir = base_artifacts_dir.join(format!("auto_merge_{:?}", op_id));
-            
+
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
                 return Err(Error::Io(std::io::Error::other(format!(
                     "Failed to create work directory: {}",
@@ -2106,7 +1880,6 @@ async fn render_single_operation_internal(
                 work_dir,
                 inputs,
                 parameters: serde_json::json!({
-                    "output_format": format,
                     "output_path": output_path,
                 }),
                 progress_callback: None,
@@ -2118,14 +1891,14 @@ async fn render_single_operation_internal(
                     e
                 )))
             })?;
-            Ok(format!("Merge '{}' completed with {} inputs", name, input_artifacts.len()))
+            Ok(format!(
+                "Merge '{}' completed with {} inputs",
+                name,
+                input_artifacts.len()
+            ))
         }
-
         FrontendOperationDef::Sample {
-            id,
-            name,
-            sources,
-            ..
+            id, name, sources, ..
         } => {
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -2161,9 +1934,11 @@ async fn render_single_operation_internal(
                 }
             }
 
-            Ok(format!("Sample '{}' processed {} artifacts", name, processed_count))
+            Ok(format!(
+                "Sample '{}' processed {} artifacts",
+                name, processed_count
+            ))
         }
-
         FrontendOperationDef::Pipeline {
             id,
             name,
@@ -2192,23 +1967,504 @@ async fn render_single_operation_internal(
                 operations
             ))
         }
+        FrontendOperationDef::Export {
+            id,
+            name,
+            render_policy,
+            sources,
+            output_path,
+            params,
+        } => todo!(),
     }
 }
 
-// Helper trait to get render policy as string
-impl FrontendOperationDef {
-    fn render_policy_str(&self) -> &str {
-        match self {
-            FrontendOperationDef::Merge { render_policy, .. }
-            | FrontendOperationDef::Sample { render_policy, .. }
-            | FrontendOperationDef::Pipeline { render_policy, .. } => {
-                match render_policy {
-                    Some(RenderPolicy::Auto) => "auto",
-                    Some(RenderPolicy::Manual) => "manual",
-                    Some(RenderPolicy::Frozen) => "frozen",
-                    None => "auto", // Default
+/// Blocking version of render_single_operation_internal for use in threads
+fn render_single_operation_blocking(
+    op: &FrontendOperationDef,
+    operations_state: &FrontendOperationsState,
+    logging_service: &Arc<Mutex<LoggingService>>,
+) -> Result<String, Error> {
+    let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+    let mut op_map: slotmap::SlotMap<OpId, ()> = slotmap::SlotMap::new();
+    let default_sample_rate: u32 = 44100;
+
+    match op {
+        FrontendOperationDef::Merge {
+            id,
+            name,
+            sources,
+            output_path,
+            ..
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔄 Rendering merge operation '{}' -> '{}'",
+                        name, output_path
+                    )
+                );
+            }
+
+            // Resolve input artifacts
+            let mut input_artifacts = Vec::new();
+            for source in sources {
+                // Create a State-like wrapper for the blocking function
+                let logging_state = logging_service;
+                match resolve_operation_source_blocking(
+                    source,
+                    operations_state,
+                    &base_artifacts_dir,
+                    &mut op_map,
+                    default_sample_rate,
+                    logging_state,
+                ) {
+                    Ok(artifacts) => input_artifacts.extend(artifacts),
+                    Err(e) => {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!("⚠️ Failed to resolve source: {:?}", e)
+                            );
+                        }
+                    }
                 }
+            }
+
+            if input_artifacts.is_empty() {
+                return Err(Error::Io(std::io::Error::other(
+                    "No input artifacts resolved for merge operation",
+                )));
+            }
+
+            // Create and execute merge operation
+            let operation = MergeOpRender::new();
+            let mut inputs = HashMap::new();
+            inputs.insert(
+                "inputs".to_string(),
+                Artifact::AudioList(input_artifacts.clone()),
+            );
+
+            let op_id = op_map.insert(());
+            let work_dir = base_artifacts_dir.join(format!("auto_merge_{:?}", op_id));
+
+            if let Err(e) = std::fs::create_dir_all(&work_dir) {
+                return Err(Error::Io(std::io::Error::other(format!(
+                    "Failed to create work directory: {}",
+                    e
+                ))));
+            }
+
+            let context = OperationContext {
+                op_id,
+                work_dir,
+                inputs,
+                parameters: serde_json::json!({
+                    "output_path": output_path,
+                }),
+                progress_callback: None,
+            };
+
+            operation.execute(context).map_err(|e| {
+                Error::Io(std::io::Error::other(format!(
+                    "Merge operation failed: {:?}",
+                    e
+                )))
+            })?;
+            Ok(format!(
+                "Merge '{}' completed with {} inputs",
+                name,
+                input_artifacts.len()
+            ))
+        }
+        FrontendOperationDef::Sample {
+            id, name, sources, ..
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("🔄 Rendering sample operation '{}'", name)
+                );
+            }
+
+            // For sample operations, we need to resolve and process each source
+            let mut processed_count = 0;
+            for source in sources {
+                match resolve_operation_source_blocking(
+                    source,
+                    operations_state,
+                    &base_artifacts_dir,
+                    &mut op_map,
+                    default_sample_rate,
+                    logging_service,
+                ) {
+                    Ok(artifacts) => {
+                        processed_count += artifacts.len();
+                    }
+                    Err(e) => {
+                        if let Ok(logger) = logging_service.lock() {
+                            log_info!(
+                                logger,
+                                LogSystem::Combine,
+                                &format!("⚠️ Failed to resolve source: {:?}", e)
+                            );
+                        }
+                    }
+                }
+            }
+
+            Ok(format!(
+                "Sample '{}' processed {} artifacts",
+                name, processed_count
+            ))
+        }
+        FrontendOperationDef::Pipeline {
+            id,
+            name,
+            operations,
+            sources,
+            ..
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔄 Rendering pipeline operation '{}' with {} steps",
+                        name,
+                        operations.len()
+                    )
+                );
+            }
+
+            // Pipeline operations chain multiple operations together
+            // For now, we just report on what would be done
+            Ok(format!(
+                "Pipeline '{}' with {} operations: {:?}",
+                name,
+                operations.len(),
+                operations
+            ))
+        }
+        FrontendOperationDef::Export {
+            id,
+            name,
+            render_policy,
+            sources,
+            output_path,
+            params,
+        } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔄 Rendering export operation '{}' -> '{}'",
+                        name, output_path
+                    )
+                );
+            }
+            Ok(format!("Export '{}' (not yet implemented)", name))
+        }
+    }
+}
+
+/// Blocking version of resolve_operation_source
+fn resolve_operation_source_blocking(
+    source: &OperationSource,
+    ctx: &FrontendOperationsState,
+    base_artifacts_dir: &std::path::Path,
+    op_map: &mut slotmap::SlotMap<OpId, ()>,
+    sample_rate: u32,
+    logging_service: &Arc<Mutex<LoggingService>>,
+) -> Result<Vec<AudioArtifact>, Error> {
+    match source {
+        OperationSource::File { file_id } => {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!("📁 Resolving single file source: {}", file_id)
+                );
+            }
+            let placeholder_duration = 3.0;
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from(file_id),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: {
+                    let mut meta = HashMap::new();
+                    meta.insert("source_type".to_string(), "file".to_string());
+                    meta.insert("file_id".to_string(), file_id.clone());
+                    meta.insert("is_placeholder".to_string(), "true".to_string());
+                    meta
+                },
+                data: None,
+            }])
+        }
+        OperationSource::Files { file_ids } => {
+            let artifacts: Vec<AudioArtifact> = file_ids
+                .iter()
+                .enumerate()
+                .map(|(idx, file_id)| {
+                    let placeholder_duration = 2.0 + (idx as f64 * 0.5);
+                    AudioArtifact {
+                        path: std::path::PathBuf::from(file_id),
+                        format: "wav".to_string(),
+                        sample_rate,
+                        channels: 2,
+                        duration: placeholder_duration,
+                        metadata: {
+                            let mut meta = HashMap::new();
+                            meta.insert("source_type".to_string(), "files".to_string());
+                            meta.insert("file_id".to_string(), file_id.clone());
+                            meta.insert("is_placeholder".to_string(), "true".to_string());
+                            meta
+                        },
+                        data: None,
+                    }
+                })
+                .collect();
+            Ok(artifacts)
+        }
+        OperationSource::Operation { operation_id } => {
+            if let Some(dep_op) = ctx.defs.get(operation_id) {
+                let dep_sources = dep_op.sources();
+                let mut all_artifacts = Vec::new();
+                for dep_source in dep_sources {
+                    let artifacts = resolve_operation_source_blocking(
+                        &dep_source,
+                        ctx,
+                        base_artifacts_dir,
+                        op_map,
+                        sample_rate,
+                        logging_service,
+                    )?;
+                    all_artifacts.extend(artifacts);
+                }
+                Ok(all_artifacts)
+            } else {
+                Err(Error::Io(std::io::Error::other(format!(
+                    "Dependent operation '{}' not found in context",
+                    operation_id
+                ))))
+            }
+        }
+        OperationSource::PreviousOperation { operation_id } => resolve_operation_source_blocking(
+            &OperationSource::Operation {
+                operation_id: operation_id.clone(),
+            },
+            ctx,
+            base_artifacts_dir,
+            op_map,
+            sample_rate,
+            logging_service,
+        ),
+        _ => {
+            // Handle other source types with placeholder
+            let placeholder_duration = 4.0;
+            Ok(vec![AudioArtifact {
+                path: std::path::PathBuf::from("placeholder.wav"),
+                format: "wav".to_string(),
+                sample_rate,
+                channels: 2,
+                duration: placeholder_duration,
+                metadata: HashMap::new(),
+                data: None,
+            }])
+        }
+    }
+}
+
+/// Blocking function that performs the heavy batch render computation
+fn render_all_auto_operations_blocking(
+    params: BatchRenderParams,
+    logging_service: Arc<Mutex<LoggingService>>,
+) -> Result<BatchRenderResult, Error> {
+    let start_time = std::time::Instant::now();
+    let force_render = params.force_render.unwrap_or(false);
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "🚀 Starting batch render for rev {} with {} operations defined",
+                params.current_rev,
+                params.operations_state.defs.len()
+            )
+        );
+    }
+
+    // Get operations to process
+    let operations_to_process: Vec<(OperationId, FrontendOperationDef)> =
+        if let Some(ref specific_ids) = params.specific_operation_ids {
+            params
+                .operations_state
+                .defs
+                .iter()
+                .filter(|(id, _)| specific_ids.contains(id))
+                .map(|(id, op)| (id.clone(), op.clone()))
+                .collect()
+        } else {
+            params
+                .operations_state
+                .defs
+                .iter()
+                .map(|(id, op)| (id.clone(), op.clone()))
+                .collect()
+        };
+
+    // Build dependency graph and compute render order
+    let operations_refs: Vec<(&OperationId, &FrontendOperationDef)> = operations_to_process
+        .iter()
+        .map(|(id, op)| (id, op))
+        .collect();
+    let render_order = compute_render_order(&operations_refs, &params.operations_state);
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "📊 Computed render order: {} operations to process",
+                render_order.len()
+            )
+        );
+    }
+
+    let mut results: Vec<OperationRenderResult> = Vec::new();
+    let mut successful_renders = 0;
+    let mut failed_renders = 0;
+    let mut skipped_operations = 0;
+
+    // Process operations in dependency order
+    for op_id in render_order {
+        let op = match params.operations_state.defs.get(&op_id) {
+            Some(op) => op,
+            None => {
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!("⚠️ Operation '{}' not found in state, skipping", op_id)
+                    );
+                }
+                continue;
+            }
+        };
+
+        let policy = op.render_policy();
+
+        // Check if we should render this operation based on policy
+        let should_render = match policy {
+            Some(RenderPolicy::Auto) => true,
+            Some(RenderPolicy::Manual) => force_render,
+            Some(RenderPolicy::Frozen) => false,
+            _ => false,
+        };
+
+        if !should_render {
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "⏭️ Skipping '{}' (policy: {})",
+                        op.name(),
+                        match policy {
+                            Some(RenderPolicy::Auto) => "auto",
+                            Some(RenderPolicy::Manual) => "manual",
+                            Some(RenderPolicy::Frozen) => "frozen",
+                            None => "auto (default)",
+                        }
+                    )
+                );
+            }
+            skipped_operations += 1;
+            results.push(OperationRenderResult {
+                operation_id: op_id.clone(),
+                operation_name: op.name().to_string(),
+                success: true,
+                error: Some(format!(
+                    "Skipped due to render policy: {}",
+                    match policy {
+                        Some(RenderPolicy::Auto) => "auto",
+                        Some(RenderPolicy::Manual) => "manual",
+                        Some(RenderPolicy::Frozen) => "frozen",
+                        None => "auto (default)",
+                    }
+                )),
+                duration_ms: 0,
+            });
+        }
+
+        // Render this operation
+        let op_start = std::time::Instant::now();
+
+        if let Ok(logger) = logging_service.lock() {
+            log_info!(
+                logger,
+                LogSystem::Combine,
+                &format!("🔄 Rendering {} '{}' (id: {})", op.kind(), op.name(), op_id)
+            );
+        }
+
+        let render_result =
+            render_single_operation_blocking(op, &params.operations_state, &logging_service);
+
+        let op_duration = op_start.elapsed();
+
+        match render_result {
+            Ok(_message) => {
+                successful_renders += 1;
+            }
+            Err(e) => {
+                failed_renders += 1;
+                let error_msg = format!("{:?}", e);
+                if let Ok(logger) = logging_service.lock() {
+                    log_info!(
+                        logger,
+                        LogSystem::Combine,
+                        &format!("❌ Failed to render '{}': {}", op.name(), error_msg)
+                    );
+                }
+                results.push(OperationRenderResult {
+                    operation_id: op_id.clone(),
+                    operation_name: op.name().to_string(),
+                    success: false,
+                    error: Some(error_msg),
+                    duration_ms: op_duration.as_millis() as u64,
+                });
             }
         }
     }
+
+    let total_duration = start_time.elapsed();
+
+    if let Ok(logger) = logging_service.lock() {
+        log_info!(
+            logger,
+            LogSystem::Combine,
+            &format!(
+                "🏁 Batch render complete: {} successful, {} failed, {} skipped in {:?}",
+                successful_renders, failed_renders, skipped_operations, total_duration
+            )
+        );
+    }
+
+    Ok(BatchRenderResult {
+        total_operations: results.len(),
+        successful_renders,
+        failed_renders,
+        skipped_operations,
+        results,
+        total_duration_ms: total_duration.as_millis() as u64,
+        triggered_by_rev: params.current_rev,
+    })
 }

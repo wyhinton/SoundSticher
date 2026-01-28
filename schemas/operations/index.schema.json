@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "index.schema.json",
+  "title": "OperationSchemas",
+  "description": "Index of all operation schemas",
+  "definitions": {
+    "operationKinds": {
+      "type": "string",
+      "enum": ["merge", "sample", "pipeline", "normalize", "export", "split"]
+    }
+  },
+  "schemas": {
+    "merge": "./merge.schema.json",
+    "sample": "./sample.schema.json",
+    "pipeline": "./pipeline.schema.json",
+    "normalize": "./normalize.schema.json",
+    "export": "./export.schema.json",
+    "split": "./split.schema.json"
+  },
+  "common": {
+    "baseOperation": "./baseOperation.schema.json",
+    "operationSource": "./operationSource.schema.json"
+  }
+}

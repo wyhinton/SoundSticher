@@ -5,30 +5,27 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface LoggingState {
-  groupsLog: boolean;
-  selectionLog: boolean;
+  combineLog: boolean;
+  cookLog: boolean;
+  d3timelinemanagerLog: boolean;
   dragdropLog: boolean;
   dragStoreLog: boolean;
-  operationsLog: boolean;
-  waveformLog: boolean;
-  opPlaybackLog: boolean;
-  timelineLog: boolean;
-  listenersLog: boolean;
-  d3timelinemanagerLog: boolean;
-  // Backend logging system toggles
-  encoderLog: boolean;
-  combineLog: boolean;
-  playbackLog: boolean;
-  sortingLog: boolean;
-  waveformBackendLog: boolean;
-  timelineBackendLog: boolean;
-  operationLog: boolean;
-  eventEmitsLog: boolean;
   durationLog: boolean;
-  // Add future logging categories here
-  // performanceLog?: boolean;
-  // audioLog?: boolean;
-  // uiLog?: boolean;
+  encoderLog: boolean;
+  eventEmitsLog: boolean;
+  graphLog: boolean;
+  groupsLog: boolean;
+  listenersLog: boolean;
+  operationLog: boolean;
+  operationsLog: boolean;
+  opPlaybackLog: boolean;
+  playbackLog: boolean;
+  selectionLog: boolean;
+  sortingLog: boolean;
+  timelineBackendLog: boolean;
+  timelineLog: boolean;
+  waveformBackendLog: boolean;
+  waveformLog: boolean;
 }
 
 export interface FileLocation {
@@ -57,25 +54,27 @@ export interface BackendLogMessage {
 }
 
 export const loggingState = persisted<LoggingState>('loggingState', {
-  groupsLog: false,
-  selectionLog: false,
+  cookLog: false,
+  combineLog: false,
+  d3timelinemanagerLog: false,
   dragdropLog: false,
   dragStoreLog: false,
-  operationsLog: false,
-  waveformLog: false,
-  opPlaybackLog: false,
-  timelineLog: false,
-  listenersLog: false,
-  d3timelinemanagerLog: false,
-  encoderLog: false,
-  combineLog: false,
-  playbackLog: false,
-  sortingLog: false,
-  waveformBackendLog: false,
-  timelineBackendLog: false,
-  operationLog: false,
-  eventEmitsLog: false,
   durationLog: false,
+  encoderLog: false,
+  eventEmitsLog: false,
+  graphLog: false,
+  groupsLog: false,
+  listenersLog: false,
+  operationLog: false,
+  operationsLog: false,
+  opPlaybackLog: false,
+  playbackLog: false,
+  selectionLog: false,
+  sortingLog: false,
+  timelineBackendLog: false,
+  timelineLog: false,
+  waveformBackendLog: false,
+  waveformLog: false,
 });
 
 // Store for backend log messages
@@ -184,16 +183,18 @@ export const initializeBackendLogListener = () => {
 export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) => {
   try {
     const backendConfig = {
-      encoder_enabled: config.encoderLog ?? false,
       combine_enabled: config.combineLog ?? false,
+      console_output: true,
+      cook_enabled: config.cookLog ?? false,
+      duration_enabled: config.durationLog ?? false,
+      encoder_enabled: config.encoderLog ?? false,
+      event_emits_enabled: config.eventEmitsLog ?? false,
+      graph_enabled: config.graphLog ?? false,
+      operation_enabled: config.operationLog ?? false,
       playback_enabled: config.playbackLog ?? false,
       sorting_enabled: config.sortingLog ?? false,
-      waveform_enabled: config.waveformBackendLog ?? false,
-      console_output: true,
       timeline_enabled: config.timelineBackendLog ?? false,
-      operation_enabled: config.operationLog ?? false,
-      event_emits_enabled: config.eventEmitsLog ?? false,
-      duration_enabled: config.durationLog ?? false,
+      waveform_enabled: config.waveformBackendLog ?? false,
     };
 
     await invoke('update_logging_config', { config: backendConfig });

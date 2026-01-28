@@ -9,12 +9,63 @@
  * - The service will automatically detect _rev changes and trigger renders
  * - Use setAutoRenderEnabled() to enable/disable the feature
  * - Use triggerManualRender() to force a render cycle
+ *
+ * ## Tracking Individual Operation Render Status
+ *
+ * The service maintains detailed per-operation render state that can be used in UI components:
+ *
+ * ### Example: Display render status in an operation component
+ *
+ * ```typescript
+ * import { createOperationRenderStore, type OperationRenderState } from '$lib/state/autoRender';
+ *
+ * export let operationId: string;
+ *
+ * // Create a reactive store for this operation's render state
+ * const renderState = createOperationRenderStore(operationId);
+ *
+ * // Use it in your template:
+ * {#if $renderState}
+ *   {#if $renderState.status === 'rendering'}
+ *     <div>⏳ Rendering... ({$renderState.index}/{$renderState.totalOperations})</div>
+ *   {:else if $renderState.status === 'success'}
+ *     <div>✅ Rendered in {$renderState.duration_ms}ms</div>
+ *   {:else if $renderState.status === 'error'}
+ *     <div>❌ Error: {$renderState.error}</div>
+ *   {:else if $renderState.status === 'skipped'}
+ *     <div>⏭️ Skipped</div>
+ *   {/if}
+ * {/if}
+ * ```
+ *
+ * ### Example: Access global render progress
+ *
+ * ```typescript
+ * import { autoRenderProgress, autoRenderStatus } from '$lib/state/autoRender';
+ *
+ * // Display overall progress
+ * {#if $autoRenderStatus === 'rendering'}
+ *   <div>
+ *     Rendering {$autoRenderProgress.completed}/{$autoRenderProgress.total}
+ *     ({$autoRenderProgress.percentage.toFixed(0)}%)
+ *   </div>
+ * {/if}
+ * ```
+ *
+ * ### Available Operation States:
+ * - `pending`: Operation is queued but hasn't started rendering yet
+ * - `rendering`: Operation is currently being rendered (set when first progress event received)
+ * - `success`: Operation rendered successfully
+ * - `error`: Operation failed to render
+ * - `skipped`: Operation was skipped (e.g., due to renderPolicy: 'manual')
  */
 
 import { get, derived, writable } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
 import { appState, type AppState } from './state.svelte';
 import { loggingState } from './logging';
+import { invokeWithPerf } from './performance';
+import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
 
 // ============================================================================
 // TYPES
@@ -43,6 +94,29 @@ export interface BatchRenderResult {
 /** Status of the auto-render service */
 export type AutoRenderStatus = 'idle' | 'pending' | 'rendering' | 'error';
 
+/** Status of a single operation during rendering */
+export type OperationRenderStatus = 'pending' | 'rendering' | 'success' | 'error' | 'skipped';
+
+/** Detailed status information for a single operation */
+export interface OperationRenderState {
+  /** Current status of this operation */
+  status: OperationRenderStatus;
+  /** Operation name */
+  name: string;
+  /** Index in the render queue */
+  index: number;
+  /** Total operations in the batch */
+  totalOperations: number;
+  /** Error message if failed */
+  error?: string;
+  /** Duration in milliseconds (only set when complete) */
+  duration_ms?: number;
+  /** Timestamp when rendering started */
+  startedAt?: number;
+  /** Timestamp when rendering completed */
+  completedAt?: number;
+}
+
 /** Auto-render state exposed to UI */
 export interface AutoRenderState {
   /** Whether auto-render is enabled */
@@ -57,6 +131,14 @@ export interface AutoRenderState {
   pendingRequests: number;
   /** Last processed revision */
   lastProcessedRev: number;
+  /** Map of operation ID to its current render state */
+  operationStates: Record<string, OperationRenderState>;
+  /** Current operation being rendered (if any) */
+  currentOperationId: string | null;
+  /** Total operations in current batch */
+  totalOperations: number;
+  /** Number of operations completed in current batch */
+  completedOperations: number;
 }
 
 // ============================================================================
@@ -71,12 +153,46 @@ export const autoRenderState = writable<AutoRenderState>({
   lastError: null,
   pendingRequests: 0,
   lastProcessedRev: 0,
+  operationStates: {},
+  currentOperationId: null,
+  totalOperations: 0,
+  completedOperations: 0,
 });
 
 // Derived stores for convenience
 export const autoRenderEnabled = derived(autoRenderState, $state => $state.enabled);
 export const autoRenderStatus = derived(autoRenderState, $state => $state.status);
 export const autoRenderLastResult = derived(autoRenderState, $state => $state.lastResult);
+export const autoRenderOperationStates = derived(autoRenderState, $state => $state.operationStates);
+export const autoRenderCurrentOperation = derived(
+  autoRenderState,
+  $state => $state.currentOperationId
+);
+export const autoRenderProgress = derived(autoRenderState, $state => ({
+  total: $state.totalOperations,
+  completed: $state.completedOperations,
+  percentage:
+    $state.totalOperations > 0 ? ($state.completedOperations / $state.totalOperations) * 100 : 0,
+}));
+
+/**
+ * Get the render state for a specific operation
+ * @param operationId The operation ID to check
+ * @returns The operation's render state, or null if not found
+ */
+export function getOperationRenderState(operationId: string): OperationRenderState | null {
+  const state = get(autoRenderState);
+  return state.operationStates[operationId] ?? null;
+}
+
+/**
+ * Create a derived store for a specific operation's render state
+ * @param operationId The operation ID to track
+ * @returns A derived store that updates when the operation's render state changes
+ */
+export function createOperationRenderStore(operationId: string) {
+  return derived(autoRenderState, $state => $state.operationStates[operationId] ?? null);
+}
 
 // ============================================================================
 // CONFIGURATION
@@ -133,8 +249,10 @@ export function initializeAutoRenderSubscription(): void {
   appState.subscribe(state => {
     const currentRev = state._rev ?? 0;
     const currentState = get(autoRenderState);
+    console.log(`%cHERE LINE :136 %c`, 'color: yellow; font-weight: bold', '');
 
     if (currentRev !== lastKnownRev && currentState.enabled) {
+      console.log(isLogging);
       if (isLogging) {
         console.log(`🔄 Auto-render: Rev changed from ${lastKnownRev} to ${currentRev}`);
       }
@@ -333,8 +451,137 @@ async function executeRenderWithOptions(
       });
     }
 
-    // Invoke the backend command
-    const result = await invoke<BatchRenderResult>('render_all_auto_operations', { params });
+    // Create a typed event channel to receive progress updates from the backend
+    type AutoRenderStartedEvent = { event: 'started'; data: { total_operations: number } };
+    type AutoRenderProgressEvent = {
+      event: 'progress';
+      data: {
+        operation_index: number;
+        total_operations: number;
+        operation_id: string;
+        operation_name: string;
+        success: boolean;
+      };
+    };
+    type AutoRenderFinishedEvent = { event: 'finished'; data: { result: BatchRenderResult } };
+    type AutoRenderEvent =
+      | AutoRenderStartedEvent
+      | AutoRenderProgressEvent
+      | AutoRenderFinishedEvent;
+
+    const onEvent = createTypedEventChannelWithLoggingAndStatusMessages<AutoRenderEvent>(
+      'AutoRender',
+      {
+        source: 'auto-render',
+        startedMessage: data => `Rendering ${data.total_operations} operations...`,
+        progressMessage: data =>
+          `Rendering: ${data.operation_name} (${data.operation_index}/${data.total_operations})`,
+        finishedMessage: data =>
+          `Rendered ${data.result.successful_renders}/${data.result.total_operations} ops in ${data.result.total_duration_ms}ms`,
+        getProgress: (data: any) => {
+          if (typeof data.operation_index === 'number' && data.total_operations) {
+            return data.operation_index / data.total_operations;
+          }
+          return undefined;
+        },
+        autoClearSuccess: 2000,
+      },
+      {
+        onStarted: data => {
+          if (isLogging) console.log('📡 AutoRender Started', data);
+
+          // Reset operation states and set total
+          autoRenderState.update(s => ({
+            ...s,
+            status: 'rendering',
+            totalOperations: data.total_operations,
+            completedOperations: 0,
+            operationStates: {},
+            currentOperationId: null,
+          }));
+        },
+        onProgress: data => {
+          if (isLogging) console.log('📡 AutoRender Progress', data);
+
+          // Update operation-specific state
+          autoRenderState.update(s => {
+            // Check if this is the first time we're seeing this operation (start rendering)
+            const previousState = s.operationStates[data.operation_id];
+            const isNewOperation = !previousState;
+
+            const operationState: OperationRenderState = {
+              status: data.success ? 'success' : 'error',
+              name: data.operation_name,
+              index: data.operation_index,
+              totalOperations: data.total_operations,
+              error: data.success ? undefined : 'Render failed',
+              startedAt: previousState?.startedAt ?? Date.now(),
+              completedAt: Date.now(),
+            };
+
+            // Calculate duration if we have both timestamps
+            if (operationState.startedAt && operationState.completedAt) {
+              operationState.duration_ms = operationState.completedAt - operationState.startedAt;
+            }
+
+            return {
+              ...s,
+              currentOperationId: data.operation_id,
+              completedOperations: data.operation_index,
+              operationStates: {
+                ...s.operationStates,
+                [data.operation_id]: operationState,
+              },
+            };
+          });
+        },
+        onFinished: data => {
+          if (isLogging) console.log('📡 AutoRender Finished', data);
+
+          // Update all operation states with final results
+          autoRenderState.update(s => {
+            const updatedOperationStates = { ...s.operationStates };
+
+            // Update states based on the final result
+            data.result.results.forEach(result => {
+              const existingState = updatedOperationStates[result.operation_id];
+              updatedOperationStates[result.operation_id] = {
+                ...existingState,
+                status: result.success
+                  ? 'success'
+                  : result.error?.includes('Skipped')
+                    ? 'skipped'
+                    : 'error',
+                name: result.operation_name,
+                error: result.error ?? undefined,
+                duration_ms: result.duration_ms,
+                completedAt: existingState?.completedAt ?? Date.now(),
+              } as OperationRenderState;
+            });
+
+            return {
+              ...s,
+              status: 'idle',
+              currentOperationId: null,
+              completedOperations: data.result.total_operations,
+              operationStates: updatedOperationStates,
+            };
+          });
+        },
+      }
+    );
+
+    // Invoke the backend command and pass the onEvent channel so the backend can send progress
+    const invokeResult = await invokeWithPerf<BatchRenderResult>('render_all_auto_operations', {
+      params,
+      onEvent,
+    });
+
+    if (!invokeResult.ok) {
+      throw new Error(invokeResult.error?.message ?? 'render_all_auto_operations failed');
+    }
+
+    const result = invokeResult.value;
 
     if (isLogging) {
       console.log('✅ Auto-render: Render completed', {

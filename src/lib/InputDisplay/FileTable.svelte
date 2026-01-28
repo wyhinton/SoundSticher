@@ -191,9 +191,6 @@
     left: 50%;
     transform: translate(-50%, -50%);
   }
-  .section-table {
-    min-height: 200px;
-  }
 
   th {
     text-align: left;

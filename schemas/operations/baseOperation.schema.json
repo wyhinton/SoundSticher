@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "baseOperation.schema.json",
+  "title": "BaseOperation",
+  "description": "Base fields shared by all operation types",
+  "type": "object",
+  "required": ["id", "name", "kind"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique, immutable identifier for the operation (UUID/nanoid format)",
+      "pattern": "^op_[a-z0-9]+_[a-z0-9]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "User-visible, editable display label",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "kind": {
+      "type": "string",
+      "description": "The type of operation",
+      "enum": ["merge", "sample", "pipeline", "split", "normalize", "export"]
+    },
+    "renderPolicy": {
+      "type": "string",
+      "description": "Controls how this operation reacts to upstream changes",
+      "enum": ["auto", "manual", "frozen"],
+      "default": "auto",
+      "ui": {
+        "control": "select",
+        "label": "Render Policy",
+        "description": "auto: Re-render when inputs change. manual: Only render on request. frozen: Treat output as immutable."
+      }
+    }
+  }
+}

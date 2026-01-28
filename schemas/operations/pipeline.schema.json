@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pipeline.schema.json",
+  "title": "PipelineOp",
+  "description": "Chains multiple operations together in sequence",
+  "type": "object",
+  "allOf": [{ "$ref": "baseOperation.schema.json" }],
+  "required": ["kind", "sources", "operations"],
+  "properties": {
+    "kind": {
+      "const": "pipeline"
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "operationSource.schema.json" },
+      "minItems": 1,
+      "description": "Initial sources for the pipeline"
+    },
+    "operations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Ordered list of operation IDs to execute in sequence",
+      "ui": {
+        "control": "operation-list",
+        "label": "Pipeline Steps"
+      }
+    },
+    "params": {
+      "type": "object",
+      "description": "Pipeline operation parameters",
+      "properties": {
+        "parallel": {
+          "type": "boolean",
+          "description": "Execute independent operations in parallel when possible",
+          "default": false,
+          "ui": {
+            "control": "checkbox",
+            "label": "Parallel Execution",
+            "group": "execution"
+          }
+        },
+        "continue_on_error": {
+          "type": "boolean",
+          "description": "Continue pipeline even if an operation fails",
+          "default": false,
+          "ui": {
+            "control": "checkbox",
+            "label": "Continue on Error",
+            "group": "execution"
+          }
+        },
+        "cache_intermediates": {
+          "type": "boolean",
+          "description": "Cache intermediate results for debugging",
+          "default": false,
+          "ui": {
+            "control": "checkbox",
+            "label": "Cache Intermediates",
+            "group": "execution"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

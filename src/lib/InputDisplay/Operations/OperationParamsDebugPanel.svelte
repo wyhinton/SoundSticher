@@ -33,6 +33,31 @@
     }
   }
 
+  async function handleTestOperation() {
+    if (!selectedOperationId || !selectedOperation) return;
+
+    isTestingOperation = true;
+    testResult = null;
+
+    try {
+      const operationType = getOperationType(selectedOperation);
+      const result = await invokeWithPerf<string>('test_render_single_operation', {
+        operationName: operationType,
+        params: {
+          operation_type: operationType,
+        },
+      });
+
+      console.log('Test operation result:', result);
+      testResult = { type: 'success', message: result };
+    } catch (error) {
+      console.error('Error testing operation:', error);
+      testResult = { type: 'error', message: String(error) };
+    } finally {
+      isTestingOperation = false;
+    }
+  }
+
   async function handleTestWithParams() {
     if (!selectedOperationId || !selectedOperation) return;
 
@@ -150,7 +175,7 @@
 
 <div class="debug-panel">
   <!-- Compact button row -->
-  <div class="button-row">
+  <div class="button-row flex-wrap">
     <button
       class="test-btn"
       onclick={handleTestOperation}

@@ -7,7 +7,6 @@
     toggleCallSiteTrackingEnabled,
   } from '../state/state.svelte';
   import { invokeWithPerf, updateInputs } from '../state/performance';
-  import { audioFileStateManager } from '../state/stateSynchronization';
   import { loggingState } from '../state/logging';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';

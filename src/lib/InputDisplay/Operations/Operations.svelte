@@ -1,39 +1,42 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
   import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
-  import { deleteOperationsById, OperationInfoDictionary } from '$lib/state/operation';
-  import type { OperationDef, MergeOp, PipelineOp, OperationId } from '$lib/state/operation';
+  import { deleteOperationsById, updateOperationById } from '$lib/state/operation';
+  import type { OperationDef, OperationId } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
+  import OperationParamsForm from '$lib/components/schema/OperationParamsForm.svelte';
+
+  // Import schema-driven types and utilities
+  import {
+    type OperationKind,
+    isValidOperationKind,
+    createDefaultParams,
+    validateParams,
+    operationMeta,
+  } from '$lib/types';
+
+  // Legacy parameter config interface for backwards compatibility
+  interface LegacyParamConfig {
+    type: 'number' | 'text' | 'select' | 'boolean' | 'multiselect';
+    label: string;
+    default: unknown;
+    options?: (string | number)[];
+    min?: number;
+    max?: number;
+    step?: number;
+  }
 
   // Use selected operation ID from global state
   $: selectedOperationId = $appState.uiSettings?.selectedOperationId || null;
 
-  // Operation parameters with validation - will be dynamic based on operation type
-  let operationParams: Record<string, any> = {};
+  // Operation parameters with validation - now schema-driven
+  let operationParams: Record<string, unknown> = {};
   let paramErrors: Record<string, string> = {};
+  let isOperationInfoExpanded = true;
 
-  // Parameter schemas for different operation types
-  const parameterSchemas: Record<string, any> = {
-    merge: {
-      sample_rate: {
-        type: 'select',
-        options: [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],
-        default: 44100,
-        label: 'Sample Rate (Hz)',
-      },
-      bit_depth: {
-        type: 'select',
-        options: [8, 16, 24, 32],
-        default: 16,
-        label: 'Bit Depth',
-      },
-      output_format: {
-        type: 'select',
-        options: ['wav', 'mp3', 'flac', 'ogg', 'm4a'],
-        default: 'wav',
-        label: 'Output Format',
-      },
-    },
+  // Legacy parameter schemas - kept for backwards compatibility during migration
+  // These will be removed once all operations use the JSON Schema system
+  const legacyParameterSchemas: Record<string, Record<string, LegacyParamConfig>> = {
+    // Master pipeline uses 'pipeline' in new schema
     master_pipeline: {
       operations: {
         type: 'multiselect',
@@ -44,60 +47,6 @@
       parallel_execution: { type: 'boolean', default: false, label: 'Parallel Execution' },
       batch_size: { type: 'number', min: 1, max: 100, default: 10, label: 'Batch Size', step: 1 },
     },
-    normalize: {
-      target_db: { type: 'number', min: -60, max: 0, default: -12, step: 0.1, label: 'Target dB' },
-      preserve_peaks: { type: 'boolean', default: true, label: 'Preserve Peaks' },
-      target_lufs: {
-        type: 'number',
-        min: -40,
-        max: -6,
-        default: -23,
-        step: 0.1,
-        label: 'Target LUFS (optional)',
-      },
-      true_peak_limit: {
-        type: 'number',
-        min: -6,
-        max: 0,
-        default: -1,
-        step: 0.1,
-        label: 'True Peak Limit (dB)',
-      },
-    },
-    export: {
-      format: {
-        type: 'select',
-        options: ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac'],
-        default: 'wav',
-        label: 'Export Format',
-      },
-      quality: {
-        type: 'select',
-        options: ['low', 'medium', 'high', 'lossless'],
-        default: 'high',
-        label: 'Quality',
-      },
-      output_path: { type: 'text', default: './output', label: 'Output Path' },
-      bit_rate: {
-        type: 'number',
-        min: 64,
-        max: 2048,
-        default: 320,
-        step: 32,
-        label: 'Bit Rate (kbps)',
-      },
-      sample_rate: {
-        type: 'select',
-        options: [8000, 11025, 16000, 22050, 44100, 48000, 88200, 96000],
-        default: 44100,
-        label: 'Sample Rate (Hz)',
-      },
-      normalize_before_export: {
-        type: 'boolean',
-        default: false,
-        label: 'Normalize Before Export',
-      },
-    },
   };
 
   // Derived data about the selected operation
@@ -106,7 +55,14 @@
       ? $appState.operations.defs[selectedOperationId]
       : null;
 
-  $: operationInfo = selectedOperation ? OperationInfoDictionary[selectedOperation.kind] : null;
+  $: operationInfo =
+    selectedOperation && isValidOperationKind(selectedOperation.kind)
+      ? operationMeta[selectedOperation.kind as OperationKind]
+      : null;
+
+  // Check if operation uses the new JSON Schema system
+  $: operationKind = selectedOperation?.kind as OperationKind | undefined;
+  $: usesSchemaSystem = operationKind ? isValidOperationKind(operationKind) : false;
 
   // Initialize parameters based on selected operation
   $: if (selectedOperation) {
@@ -116,14 +72,21 @@
   function initializeParameters() {
     if (!selectedOperation) return;
 
-    const operationType = getOperationType(selectedOperation);
+    const kind = selectedOperation.kind;
 
-    const schema = parameterSchemas[operationType];
-    if (schema) {
-      operationParams = {};
-      Object.entries(schema).forEach(([key, config]: [string, any]) => {
-        operationParams[key] = config.default;
-      });
+    // Try schema-driven initialization first
+    if (isValidOperationKind(kind)) {
+      operationParams = createDefaultParams(kind);
+    } else {
+      // Fall back to legacy schemas for backwards compatibility
+      const operationType = getOperationType(selectedOperation);
+      const schema = legacyParameterSchemas[operationType];
+      if (schema) {
+        operationParams = {};
+        Object.entries(schema).forEach(([key, config]: [string, any]) => {
+          operationParams[key] = config.default;
+        });
+      }
     }
     paramErrors = {};
   }
@@ -142,9 +105,25 @@
   function validateParameters(): boolean {
     if (!selectedOperation) return false;
 
-    const operationType = getOperationType(selectedOperation);
+    const kind = selectedOperation.kind;
 
-    const schema = parameterSchemas[operationType];
+    // Use schema-driven validation if available
+    if (isValidOperationKind(kind)) {
+      const errors = validateParams(kind, operationParams);
+      paramErrors = {};
+      errors.forEach(err => {
+        // Extract field name from error message if possible
+        const match = err.match(/^(.+?) /);
+        if (match && match[1]) {
+          paramErrors[match[1].toLowerCase().replace(/ /g, '_')] = err;
+        }
+      });
+      return errors.length === 0;
+    }
+
+    // Fall back to legacy validation
+    const operationType = getOperationType(selectedOperation);
+    const schema = legacyParameterSchemas[operationType];
     if (!schema) return true; // No validation for unknown types
 
     paramErrors = {};
@@ -191,6 +170,32 @@
       operationParams = {};
       paramErrors = {};
     }
+  }
+
+  // Handle individual parameter change from the schema-driven form
+  // This dispatches an undoable command for each parameter change
+  function handleParamChange(event: CustomEvent<{ key: string; value: unknown }>) {
+    if (!selectedOperationId || !selectedOperation) return;
+
+    const { key, value } = event.detail;
+
+    // Update the operation with the new parameter value via undo/redo system
+    const currentParams = selectedOperation.params || {};
+    const newParams = { ...currentParams, [key]: value };
+
+    updateOperationById(
+      selectedOperationId,
+      { params: newParams },
+      selectedOperation.kind,
+      `Update ${key}`
+    );
+  }
+
+  // Handle full params update from the schema-driven form
+  // This is called when the form emits the full params object
+  function handleParamsChange(event: CustomEvent<Record<string, unknown>>) {
+    // Update local state for immediate UI feedback
+    operationParams = event.detail;
   }
 
   function handleDeleteOperation() {
@@ -247,18 +252,34 @@
       </div>
 
       <div class="operation-info">
-        <div class="info-section">
-          <span class="info-label">Source:</span>
-          <span class="info-value"
-            >{JSON.stringify(formatOperationSource(selectedOperation.sources))}</span
-          >
-        </div>
+        <button
+          class="info-header"
+          onclick={() => (isOperationInfoExpanded = !isOperationInfoExpanded)}
+          title="Toggle operation details"
+        >
+          <span class="info-toggle">{isOperationInfoExpanded ? '▼' : '▶'}</span>
+          <span class="info-title">Details</span>
+        </button>
+
+        {#if isOperationInfoExpanded}
+          <div class="info-content">
+            <div class="info-section">
+              <span class="info-label">Source:</span>
+              <span class="info-value"
+                >{JSON.stringify(formatOperationSource(selectedOperation.sources))}</span
+              >
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Editable Parameters Section -->
       <div class="parameters-section">
         <div class="parameters-header">
           <span class="parameters-title">Parameters</span>
+          {#if usesSchemaSystem}
+            <span class="schema-badge" title="Using JSON Schema validation">📋</span>
+          {/if}
           <button
             class="reset-params-btn"
             onclick={resetParameters}
@@ -270,96 +291,117 @@
         </div>
 
         <div class="parameter-grid">
-          {#if selectedOperation}
-            {@const operationType = getOperationType(selectedOperation)}
-            {@const schema = parameterSchemas[operationType]}
-            {#if schema}
-              {#each Object.entries(schema) as [key, config]}
-                <div class="parameter-group">
-                  <label for={key} class="parameter-label">{config.label}</label>
+          {#if selectedOperation && operationKind}
+            {#if usesSchemaSystem}
+              <!-- Schema-driven parameter form -->
+              <OperationParamsForm
+                {operationKind}
+                params={operationParams}
+                on:change={handleParamChange}
+                on:paramsChange={handleParamsChange}
+              />
+            {:else}
+              <!-- Legacy parameter rendering for backwards compatibility -->
+              {@const operationType = getOperationType(selectedOperation)}
+              {@const schema = legacyParameterSchemas[operationType]}
+              {#if schema}
+                {#each Object.entries(schema) as [key, config]}
+                  <div class="parameter-group">
+                    <label for={key} class="parameter-label">{config.label}</label>
 
-                  {#if config.type === 'number'}
-                    <input
-                      id={key}
-                      type="number"
-                      bind:value={operationParams[key]}
-                      min={config.min}
-                      max={config.max}
-                      step={config.step || 1}
-                      class="parameter-input"
-                      class:error={paramErrors[key]}
-                    />
-                  {:else if config.type === 'text'}
-                    <input
-                      id={key}
-                      type="text"
-                      bind:value={operationParams[key]}
-                      class="parameter-input"
-                      class:error={paramErrors[key]}
-                    />
-                  {:else if config.type === 'select'}
-                    <select
-                      id={key}
-                      bind:value={operationParams[key]}
-                      class="parameter-select"
-                      class:error={paramErrors[key]}
-                    >
-                      {#each config.options as option}
-                        <option value={option}>
-                          {typeof option === 'string'
-                            ? option.toUpperCase()
-                            : `${option}${config.label.includes('Rate') ? ' Hz' : config.label.includes('Depth') ? '-bit' : ''}`}
-                        </option>
-                      {/each}
-                    </select>
-                  {:else if config.type === 'boolean'}
-                    <div class="checkbox-group">
-                      <label class="checkbox-label">
-                        <input type="checkbox" bind:checked={operationParams[key]} />
-                        <span class="checkmark"></span>
-                        {config.label}
-                      </label>
-                    </div>
-                  {:else if config.type === 'multiselect'}
-                    <div class="multiselect-group">
-                      {#each config.options as option}
+                    {#if config.type === 'number'}
+                      <input
+                        id={key}
+                        type="number"
+                        bind:value={operationParams[key]}
+                        min={config.min}
+                        max={config.max}
+                        step={config.step || 1}
+                        class="parameter-input"
+                        class:error={paramErrors[key]}
+                      />
+                    {:else if config.type === 'text'}
+                      <input
+                        id={key}
+                        type="text"
+                        bind:value={operationParams[key]}
+                        class="parameter-input"
+                        class:error={paramErrors[key]}
+                      />
+                    {:else if config.type === 'select'}
+                      <select
+                        id={key}
+                        bind:value={operationParams[key]}
+                        class="parameter-select"
+                        class:error={paramErrors[key]}
+                      >
+                        {#each config.options as option}
+                          <option value={option}>
+                            {typeof option === 'string'
+                              ? option.toUpperCase()
+                              : `${option}${config.label.includes('Rate') ? ' Hz' : config.label.includes('Depth') ? '-bit' : ''}`}
+                          </option>
+                        {/each}
+                      </select>
+                    {:else if config.type === 'boolean'}
+                      <div class="checkbox-group">
                         <label class="checkbox-label">
                           <input
                             type="checkbox"
-                            checked={operationParams[key] && operationParams[key].includes(option)}
+                            checked={operationParams[key] === true}
                             onchange={e => {
-                              const target = e.target as HTMLInputElement;
-                              if (!operationParams[key]) operationParams[key] = [];
-                              if (target.checked) {
-                                if (!operationParams[key].includes(option)) {
-                                  operationParams[key] = [...operationParams[key], option];
-                                }
-                              } else {
-                                operationParams[key] = operationParams[key].filter(
-                                  (item: any) => item !== option
-                                );
-                              }
+                              operationParams[key] = (e.target as HTMLInputElement).checked;
                             }}
                           />
                           <span class="checkmark"></span>
-                          {option}
+                          {config.label}
                         </label>
-                      {/each}
-                    </div>
-                  {/if}
+                      </div>
+                    {:else if config.type === 'multiselect'}
+                      <div class="multiselect-group">
+                        {#each config.options || [] as option}
+                          <label class="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={Array.isArray(operationParams[key]) &&
+                                (operationParams[key] as unknown[]).includes(option)}
+                              onchange={e => {
+                                const target = e.target as HTMLInputElement;
+                                let arr = Array.isArray(operationParams[key])
+                                  ? [...(operationParams[key] as unknown[])]
+                                  : [];
+                                if (target.checked) {
+                                  if (!arr.includes(option)) {
+                                    arr = [...arr, option];
+                                  }
+                                } else {
+                                  arr = arr.filter(item => item !== option);
+                                }
+                                operationParams[key] = arr;
+                              }}
+                            />
+                            <span class="checkmark"></span>
+                            {option}
+                          </label>
+                        {/each}
+                      </div>
+                    {/if}
 
-                  {#if paramErrors[key]}
-                    <span class="param-error">{paramErrors[key]}</span>
-                  {/if}
+                    {#if paramErrors[key]}
+                      <span class="param-error">{paramErrors[key]}</span>
+                    {/if}
+                  </div>
+                {/each}
+              {:else}
+                <div class="no-schema">
+                  <p>
+                    No parameter schema available for operation type: <strong
+                      >{operationType}</strong
+                    >
+                  </p>
+                  <p>Parameters can be configured through the debug panel below.</p>
                 </div>
-              {/each}
-            {:else}
-              <div class="no-schema">
-                <p>
-                  No parameter schema available for operation type: <strong>{operationType}</strong>
-                </p>
-                <p>Parameters can be configured through the debug panel below.</p>
-              </div>
+              {/if}
             {/if}
           {/if}
         </div>
@@ -484,6 +526,46 @@
     gap: 8px;
   }
 
+  .info-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+    cursor: pointer;
+    color: #a6adc8;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: color 0.2s;
+  }
+
+  .info-header:hover {
+    color: #cdd6f4;
+  }
+
+  .info-toggle {
+    display: inline-block;
+    width: 12px;
+    text-align: center;
+    font-size: 10px;
+    transition: transform 0.2s;
+  }
+
+  .info-title {
+    flex: 1;
+  }
+
+  .info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 12px;
+    border-left: 1px solid #45475a;
+  }
+
   .info-section {
     display: flex;
     flex-direction: column;
@@ -520,6 +602,7 @@
     align-items: center;
     padding: 8px 0 4px 0;
     border-bottom: 1px solid #45475a;
+    gap: 8px;
   }
 
   .parameters-title {
@@ -528,6 +611,18 @@
     color: #cdd6f4;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex: 1;
+  }
+
+  .schema-badge {
+    font-size: 14px;
+    cursor: help;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+  }
+
+  .schema-badge:hover {
+    opacity: 1;
   }
 
   .reset-params-btn {

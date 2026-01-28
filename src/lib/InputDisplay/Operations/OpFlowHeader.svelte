@@ -1,16 +1,17 @@
 <script lang="ts">
   import { draggable } from '$lib/attachments/draggable';
-  import { dragStore } from '$lib/state/dragStore';
-  import type { OperationInfo, OperationId } from '$lib/state/operation';
+  import type { OperationId } from '$lib/state/operation';
   import { setSelectedOperationId, addOpAsSourceById, appState } from '$lib/state/state.svelte';
   import ContextMenu from '$lib/components/ContextMenu/ContextMenu.svelte';
   import type { ContextMenuItem, ContextMenuPosition } from '$lib/components/ContextMenu/types';
   import { get } from 'svelte/store';
+  import type { OperationMeta } from '$lib/types';
+  import OpSettingsTools from './OpSettingsTools.svelte';
 
   export let operationId: OperationId;
   export let operationName: string;
   export let isSelected: boolean = false;
-  export let opInfo: OperationInfo | undefined;
+  export let opInfo: OperationMeta | undefined;
   export let showDebugInfo: boolean = false;
   export let debugInfo: { x: number; y: number; zoom: number } = { x: 0, y: 0, zoom: 1 };
 
@@ -163,9 +164,13 @@
   role="button"
   aria-label="Operation flow header - Click to select, Right-click for context menu, Press Ctrl+Shift+Space to toggle debug info"
 >
-  <span class="operation-icon">{opInfo?.icon || '🔗'}</span>
-  <span class="operation-name fira font-size-12px">{operationName}</span>
-
+  <div class="d-flex justify-content-between w-100 align-baseline">
+    <div class="d-flex align-items-baseline">
+      <span class="operation-icon">{opInfo?.icon || '🔗'}</span>
+      <span class="operation-name fira font-size-12px">{operationName}</span>
+    </div>
+    <OpSettingsTools {operationId} {operationName} />
+  </div>
   {#if showDebugInfo}
     <div class="debug-info">
       <span class="debug-label">Debug:</span>
@@ -187,20 +192,13 @@
 
 <style>
   .flow-header {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
+    background: rgba(30, 30, 30, 0.95);
     padding: 2px 2px;
-    border-radius: 6px;
     display: flex;
     align-items: center;
     gap: 2px;
-    z-index: 10;
     outline: none;
     cursor: pointer;
-    transition: all 0.2s ease;
   }
 
   .flow-header:hover {
@@ -213,7 +211,7 @@
   }
 
   .flow-header.selected {
-    background: rgba(59, 130, 246, 0.3);
+    background: rgb(54, 157, 249);
     border: 1px solid rgba(59, 130, 246, 0.6);
   }
 
@@ -244,12 +242,11 @@
   }
 
   .operation-icon {
-    font-size: 1rem;
+    font-size: 0.75rem;
   }
 
   .operation-name {
     color: #ffffff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
     white-space: nowrap;
   }
 </style>
