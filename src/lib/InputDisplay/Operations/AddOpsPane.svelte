@@ -52,7 +52,7 @@
       <i class="fa fa-plus"></i>
     </button>
 
-    <button
+    <!-- <button
       class="operation-add-btn"
       on:click={() => console.log('Stems operation - coming soon')}
       title="Add stems operation"
@@ -80,7 +80,7 @@
       <span class="operation-icon">📚</span>
       <span class="operation-label">Layer</span>
       <i class="fa fa-plus"></i>
-    </button>
+    </button> -->
   </div>
 </div>
 

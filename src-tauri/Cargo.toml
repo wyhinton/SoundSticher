@@ -44,6 +44,8 @@ lazy_static = "1.4.0"
 tauri-plugin-mcp-bridge = "0.7"
 strum = "0.26"
 strum_macros = "0.26"
+moka= { version="0.12.13", features= ["sync"] }
+
 
 [dependencies.uuid]
 version = "1.18.1"

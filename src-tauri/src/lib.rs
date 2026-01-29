@@ -12,6 +12,7 @@ use crate::error::Error;
 use crate::graph::OperationGraph;
 use crate::logging::{LogSystem, LoggingConfig, LoggingService};
 use crate::metadata::get_metadata;
+use crate::sample_cache::SampleCacheService;
 use crate::state::AppState;
 use crate::waveform::WaveformService;
 
@@ -33,6 +34,7 @@ mod op_playback_commands;
 mod playback;
 mod playback_ops;
 mod render_ops;
+mod sample_cache;
 mod sample_playback;
 mod sorting;
 mod state;
@@ -319,6 +321,9 @@ pub fn run() {
             // Initialize duration service for proportional waveform width calculation
             app.manage(Arc::new(DurationService::new()));
 
+            // Initialize sample cache service
+            app.manage(Arc::new(SampleCacheService::new()));
+
             // Initialize operation-based playback state
             app.manage(Arc::new(op_playback_commands::OpPlaybackState::new()));
 
@@ -359,6 +364,9 @@ pub fn run() {
             render_ops::render_graph_tests::render_all_auto_operations,
             render_ops::render_graph_tests::test_render_single_operation,
             render_ops::render_graph_tests::test_scheduler,
+            sample_cache::clear_sample_cache,
+            sample_cache::get_sample_cache_stats,
+            sample_cache::invalidate_sample_cache,
             op_playback_commands::op_playback_build_graph,
             op_playback_commands::op_playback_clear_graph,
             op_playback_commands::op_playback_get_progress,

@@ -1,7 +1,8 @@
 // File-based audio source
 
-use crate::playback::{AudioSource, AudioSourceError};
 use std::path::Path;
+
+use crate::playback::source::{AudioSource, AudioSourceError};
 
 /// Audio source that reads from a file
 pub struct FileSource {
