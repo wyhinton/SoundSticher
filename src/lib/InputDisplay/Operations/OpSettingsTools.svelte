@@ -77,28 +77,20 @@
   .tool-button {
     background: transparent;
     border: none;
-    padding: 4px 2px;
-    border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     outline: none;
     transition: all 0.2s ease;
-    backdrop-filter: blur(4px);
   }
 
   .tool-button:hover {
-    background: rgba(0, 0, 0, 0.5);
     transform: translateY(-1px) scale(1.05);
   }
 
   .tool-button:active {
     transform: translateY(0) scale(0.95);
-  }
-
-  .tool-button:focus {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
   }
 
   .tool-button.frozen {

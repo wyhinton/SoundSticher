@@ -193,17 +193,11 @@
 <style>
   .flow-header {
     background: rgba(30, 30, 30, 0.95);
-    padding: 2px 2px;
     display: flex;
     align-items: center;
     gap: 2px;
     outline: none;
     cursor: pointer;
-  }
-
-  .flow-header:hover {
-    background: rgba(0, 0, 0, 0.8);
-    transform: translateY(-1px);
   }
 
   .flow-header:focus {
