@@ -1,9 +1,11 @@
 <script lang="ts">
   import type * as d3 from 'd3';
   import { appState } from '../../state/state.svelte';
+  import { scale } from 'svelte/transition';
 
   export let playHeadX: number;
   export let currentTransform: d3.ZoomTransform;
+  export let contentScaleY: number;
 
   $: playheadCol = $appState.playingCombined ? '#68d391' : 'white';
 </script>
@@ -25,6 +27,7 @@
         L ${playHeadX} 12  
         L ${playHeadX + 6 / currentTransform.k} 0 
         Z`}
+    transform={`scale(1, ${1 / contentScaleY})`}
     fill={playheadCol}
   />
 </g>

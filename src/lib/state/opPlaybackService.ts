@@ -2,7 +2,10 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { writable, derived, get, type Readable, type Writable } from 'svelte/store';
 import { logger } from './logging';
 import { invokeWithPerf } from './performance';
-import { buildGraph as buildGraphInternal, buildGraphFromFiles as buildGraphFromFilesInternal } from './playbackGraphUtils';
+import {
+  buildGraph as buildGraphInternal,
+  buildGraphFromFiles as buildGraphFromFilesInternal,
+} from './playbackGraphUtils';
 
 /**
  * Response after building a graph
@@ -155,6 +158,11 @@ const internalState = writable<OpPlaybackState>({
 export const opPlaybackState: Readable<OpPlaybackState> = derived(internalState, $state => $state);
 
 /**
+ * Sample cache toggle - when false, uses legacy build without cache
+ */
+export const useSampleCache = writable<boolean>(true);
+
+/**
  * Current progress (0.0 to 1.0)
  */
 export const opPlaybackProgress: Readable<number> = derived(
@@ -241,10 +249,10 @@ function cleanupEventListeners(): void {
 export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
   // Ensure progress listener is initialized
   await initProgressListener();
-  
+
   // Use the utility function with state updater
   const result = await buildGraphInternal(request, internalState.update);
-  
+
   return result;
 }
 
@@ -263,7 +271,7 @@ export async function buildGraphFromFiles(
 ): Promise<BuildGraphResponse> {
   // Ensure progress listener is initialized
   await initProgressListener();
-  
+
   // Use the utility function with state updater
   return buildGraphFromFilesInternal(filePaths, internalState.update, options);
 }

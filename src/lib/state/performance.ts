@@ -81,6 +81,7 @@ export interface PerformanceState {
   invalidate_duration: PerformanceMetric[];
   invalidate_waveform: PerformanceMetric[];
   op_playback_build_graph: PerformanceMetric[];
+  op_playback_build_graph_legacy: PerformanceMetric[];
   op_playback_clear_graph: PerformanceMetric[];
   op_playback_get_progress: PerformanceMetric[];
   op_playback_pause: PerformanceMetric[];
@@ -132,6 +133,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   invalidate_duration: [],
   invalidate_waveform: [],
   op_playback_build_graph: [],
+  op_playback_build_graph_legacy: [],
   op_playback_clear_graph: [],
   op_playback_get_progress: [],
   op_playback_pause: [],

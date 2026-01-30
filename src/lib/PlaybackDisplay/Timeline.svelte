@@ -571,8 +571,6 @@
             opacity="0"
           />
 
-          <Playhead {playHeadX} {currentTransform} />
-
           <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
             {#if timelineItems.length > 0}
@@ -608,6 +606,7 @@
               {/each}
             {/if}
           </g>
+          <Playhead {playHeadX} {currentTransform} {contentScaleY} />
         </g>
       </g>
 

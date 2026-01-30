@@ -3,6 +3,7 @@ import { logger } from './logging';
 import { invokeWithPerf } from './performance';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
 import type { BuildGraphRequest, BuildGraphResponse, AddOpRequest } from './opPlaybackService';
+import { useSampleCache } from './opPlaybackService';
 
 /**
  * Typed event definitions for build graph progress
@@ -129,10 +130,13 @@ export async function buildGraph(
       }
     );
 
-    const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', {
-      request,
-      onEvent: onBuildGraphEvent,
-    });
+    const result = await invokeWithPerf<BuildGraphResponse>(
+      get(useSampleCache) ? 'op_playback_build_graph' : 'op_playback_build_graph_legacy',
+      {
+        request,
+        onEvent: onBuildGraphEvent,
+      }
+    );
 
     if (!result.ok) {
       throw new Error(`Failed to build graph: ${result.error.message}`);

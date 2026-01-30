@@ -21,7 +21,7 @@ pub struct AudioBuffer {
     pub channels: u16,
     pub sample_rate: u32,
     pub frames: usize,
-    pub data: Vec<f32>, // interleaved audio data
+    pub data: Arc<Vec<f32>>, // interleaved audio data (shared ownership)
 }
 
 impl AudioBuffer {
@@ -31,7 +31,7 @@ impl AudioBuffer {
             channels,
             sample_rate,
             frames,
-            data,
+            data: Arc::new(data),
         }
     }
 
