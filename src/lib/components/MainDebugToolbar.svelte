@@ -15,6 +15,7 @@
   import { type DurationResponse } from '$lib/state/durationCache';
   import UndoRedoControls from './UndoRedoControls.svelte';
   import TimelineOverlay from './TimelineOverlay.svelte';
+  import { useSampleCache } from '../state/opPlaybackService';
 
   // Visibility state
   let isVisible = false;
@@ -447,164 +448,15 @@ Project: Sound Stitch (Tauri + SvelteKit)
     }
   }
 
-  async function testExecuteCommand() {
-    try {
-      // Test with a simple command that should exist
-      const result = await invoke('plugin:mcp-bridge|execute_command', {
-        command: 'get_app_state',
-      });
-      console.log('🔧 MCP: Command execution result:', result);
-    } catch (error) {
-      console.error('MCP: Failed to execute command:', error);
-    }
-  }
-
-  async function testListDevices() {
-    try {
-      const devices = await invoke('plugin:mcp-bridge|list_devices');
-      console.log('🔧 MCP: Mobile Devices:', devices);
-    } catch (error) {
-      console.error('MCP: Failed to list devices:', error);
-    }
-  }
-
-  async function testWebViewScreenshot() {
-    try {
-      const screenshot = await invoke('plugin:mcp-bridge|webview_screenshot', {
-        format: 'png',
-        maxWidth: 800,
-      });
-      console.log('🔧 MCP: Screenshot captured (base64 length):', screenshot.length);
-      // Optionally display or download the screenshot
-    } catch (error) {
-      console.error('MCP: Failed to take screenshot:', error);
-    }
-  }
-
-  async function testWebViewExecuteJS() {
-    try {
-      const result = await invoke('plugin:mcp-bridge|webview_execute_js', {
-        script: 'document.title',
-      });
-      console.log('🔧 MCP: JS execution result (document.title):', result);
-    } catch (error) {
-      console.error('MCP: Failed to execute JS:', error);
-    }
-  }
-
-  async function testWebViewFindElement() {
-    try {
-      const element = await invoke('plugin:mcp-bridge|webview_find_element', {
-        selector: 'body',
-        strategy: 'css',
-      });
-      console.log('🔧 MCP: Found element:', element);
-    } catch (error) {
-      console.error('MCP: Failed to find element:', error);
-    }
-  }
-
-  async function testReadConsoleLogs() {
-    try {
-      const logs = await invoke('plugin:mcp-bridge|read_logs', {
-        source: 'console',
-        lines: 10,
-      });
-      console.log('🔧 MCP: Console logs:', logs);
-    } catch (error) {
-      console.error('MCP: Failed to read console logs:', error);
-    }
-  }
-
-  // Toggle CSS debug outlines
-  function toggleCssOutlines() {
-    cssOutlineEnabled = !cssOutlineEnabled;
-
-    if (cssOutlineEnabled) {
-      // Add the debug outline styles to the document
-      const style = document.createElement('style');
-      style.id = 'debug-outlines';
-      style.textContent = `
-        * {
-          outline: 4px solid rgba(255,0,0,1) !important;
-        }
-      `;
-      document.head.appendChild(style);
-      console.log('🔧 Debug: CSS outlines enabled');
-    } else {
-      // Remove the debug outline styles
-      const existingStyle = document.getElementById('debug-outlines');
-      if (existingStyle) {
-        existingStyle.remove();
-      }
-      console.log('🔧 Debug: CSS outlines disabled');
-    }
-  }
-  // Record screen GIF using window bounds
-  async function recordScreenGif() {
-    try {
-      // Get window info from Tauri's native API
-      const currentWindow = getCurrentWindow();
-      const position = await currentWindow.outerPosition();
-      const size = await currentWindow.outerSize();
-
-      console.log('🔧 Debug: Window Position:', position);
-      console.log('🔧 Debug: Window Size:', size);
-
-      const off = 0;
-      // Extract window bounds
-      const x = position.x + off;
-      const y = position.y;
-      const width = size.width;
-      const height = size.height;
-      const region = `${x},${y},${width},${height}`;
-
-      console.log('🔧 Debug: Starting GIF recording with region:', region);
+  // Sample cache toggle
+  function toggleSampleCache() {
+    useSampleCache.update(value => {
+      const newValue = !value;
       console.log(
-        `🔧 Debug: Name: ${gifRecordingName}, Delay: ${gifRecordingDelay}s, Duration: ${gifRecordingDuration}s`
+        `🔧 Debug: Sample cache ${newValue ? 'enabled' : 'disabled'} - using ${newValue ? 'op_playback_build_graph' : 'op_playback_build_graph_legacy'}`
       );
-
-      // Use Tauri shell plugin to run the recording script with command-line arguments
-      // Use relative path from src-tauri directory (where the process runs)
-      const result = await invoke('plugin:shell|execute', {
-        program: 'node',
-        args: [
-          '../scripts/record-gif.mjs',
-          `--name=${gifRecordingName}`,
-          `--delay=${gifRecordingDelay}`,
-          `--duration=${gifRecordingDuration}`,
-          `--region=${region}`,
-        ],
-        options: {
-          env: {},
-        },
-      });
-
-      console.log('🔧 Debug: GIF recording script started');
-      console.log('🔧 Debug: Script output:', result);
-
-      // Show success message with region info
-      alert(
-        `🎬 GIF Recording Started!\n\n` +
-          `Name: ${gifRecordingName}\n` +
-          `Region: ${region}\n` +
-          `Window: ${width}x${height} at (${x}, ${y})\n` +
-          `Delay: ${gifRecordingDelay}s\n` +
-          `Duration: ${gifRecordingDuration}s\n\n` +
-          `Recording will start automatically!`
-      );
-    } catch (error) {
-      console.error('Debug: Failed to start GIF recording:', error);
-
-      // Fallback: show instructions
-      alert(
-        `❌ Failed to start recording automatically.\n\n` +
-          `Please run manually:\n` +
-          `1. Open terminal in project root\n` +
-          `2. Run: node scripts/record-gif.mjs\n\n` +
-          `Error: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+      return newValue;
+    });
   }
 </script>
 
@@ -670,6 +522,24 @@ Project: Sound Stitch (Tauri + SvelteKit)
         <button class="btn btn-xs btn-outline-secondary" on:click={forceStateSync}>
           <i class="fa fa-sync"></i>
           Sync
+        </button>
+      </div>
+
+      <div class="button-group">
+        <span class="group-title">Playback</span>
+        <button
+          class="btn btn-xs"
+          class:btn-outline-success={$useSampleCache}
+          class:btn-success={$useSampleCache}
+          class:btn-outline-warning={!$useSampleCache}
+          class:btn-warning={!$useSampleCache}
+          on:click={toggleSampleCache}
+          title={$useSampleCache
+            ? 'Using cached samples (faster) - Click to use legacy mode'
+            : 'Using legacy mode (no cache) - Click to enable cache'}
+        >
+          <i class="fa fa-database"></i>
+          {$useSampleCache ? 'Cache ON' : 'Cache OFF'}
         </button>
       </div>
 

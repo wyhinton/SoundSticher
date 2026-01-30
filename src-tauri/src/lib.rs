@@ -368,6 +368,7 @@ pub fn run() {
             sample_cache::get_sample_cache_stats,
             sample_cache::invalidate_sample_cache,
             op_playback_commands::op_playback_build_graph,
+            op_playback_commands::op_playback_build_graph_legacy,
             op_playback_commands::op_playback_clear_graph,
             op_playback_commands::op_playback_get_progress,
             op_playback_commands::op_playback_pause,

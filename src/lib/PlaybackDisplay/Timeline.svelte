@@ -515,6 +515,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     use:dropzone={{
       accepts: ['sample'],
@@ -528,10 +529,9 @@
     on:keydown={handleKeyDown}
     on:wheel={handleWheel}
     bind:this={container}
-    role="application"
     aria-label="Timeline"
     tabindex="0"
-    class="w-100 h-fill-available"
+    class="w-100 h-fill-available timeline-svg-wrapper"
     style="
     cursor: {isDragging ? 'grabbing' : 'default'};
     "
@@ -571,8 +571,6 @@
             opacity="0"
           />
 
-          <Playhead {playHeadX} {currentTransform} />
-
           <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
             {#if timelineItems.length > 0}
@@ -608,6 +606,7 @@
               {/each}
             {/if}
           </g>
+          <Playhead {playHeadX} {currentTransform} {contentScaleY} />
         </g>
       </g>
 
@@ -661,6 +660,9 @@
 {/if}
 
 <style>
+  .timeline-svg-wrapper:focus-visible {
+    outline: 0px !important;
+  }
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
     overflow: hidden;
