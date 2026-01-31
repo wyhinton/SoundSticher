@@ -27,13 +27,13 @@ pub struct ArtifactStorage {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct StorageMetadata {
-    artifacts: HashMap<String, ArtifactEntry>,
+    artifacts: HashMap<String, ArtifactRecord>,
     total_size: u64,
     last_cleanup: std::time::SystemTime,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ArtifactEntry {
+struct ArtifactRecord {
     id: String,
     file_path: PathBuf,
     size_bytes: u64,
@@ -94,7 +94,7 @@ impl ArtifactStorage {
         std::fs::write(&file_path, &compressed_data)?;
 
         // Update metadata
-        let entry = ArtifactEntry {
+        let entry = ArtifactRecord {
             id: artifact_id.clone(),
             file_path: file_path
                 .strip_prefix(&self.storage_dir)

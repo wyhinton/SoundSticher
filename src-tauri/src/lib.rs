@@ -17,6 +17,7 @@ use crate::state::AppState;
 use crate::waveform::WaveformService;
 
 mod artifacts;
+mod artifact_registry_commands;
 mod audio_manager;
 mod combine;
 mod cook;
@@ -313,6 +314,7 @@ pub fn run() {
                 custom_order: Mutex::new(Vec::new()),
                 current_play_progress: Mutex::new(0.0),
                 seek_start_time: Mutex::new(0.0),
+                artifact_registry: Arc::new(artifacts::ArtifactRegistry::new()),
             }));
 
             // Initialize waveform cache service
@@ -378,6 +380,12 @@ pub fn run() {
             op_playback_commands::op_playback_set_loop,
             op_playback_commands::op_playback_set_volume,
             op_playback_commands::op_playback_stop,
+            // Artifact registry commands
+            artifact_registry_commands::get_artifact_registry_records,
+            artifact_registry_commands::get_artifact_registry_stats,
+            artifact_registry_commands::get_artifacts_by_operation,
+            artifact_registry_commands::clear_artifact_registry,
+            artifact_registry_commands::refresh_artifact_registry_status,
             open_file_in_editor,
             open_in_explorer,
             sample_playback::pause_sample_preview,

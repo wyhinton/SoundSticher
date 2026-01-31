@@ -109,8 +109,21 @@ impl RenderOperation for MergeOpRender {
             .metadata
             .insert("input_count".to_string(), input_artifacts.len().to_string());
 
+        // Register the artifact in the registry with metadata tags
+        let mut artifact_tags = std::collections::HashMap::new();
+        artifact_tags.insert("operation_type".to_string(), "merge".to_string());
+        artifact_tags.insert("merge_strategy".to_string(), "concatenate".to_string());
+        artifact_tags.insert("input_count".to_string(), input_artifacts.len().to_string());
+        artifact_tags.insert("output_format".to_string(), "wav".to_string());
+
+        let artifact = Artifact::Audio(output_audio.clone());
+        if let Ok(Some(artifact_id)) = context.publish_artifact_with_tags(artifact.clone(), artifact_tags) {
+            // Artifact successfully registered - optionally log this
+            // This could be used later for tracking, cleanup, or dependency management
+        }
+
         context.report_progress(1.0);
-        Ok(Artifact::Audio(output_audio))
+        Ok(artifact)
     }
 
     fn category(&self) -> OperationCategory {

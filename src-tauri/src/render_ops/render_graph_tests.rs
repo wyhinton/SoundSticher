@@ -8,6 +8,7 @@ use crate::playback::op_playback::AudioSpec;
 use crate::render_ops::generated_operation_defs::{FrontendOperationDef, FrontendOperationsState};
 use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
 use crate::send_channel_event;
+use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -239,6 +240,7 @@ impl Default for TestOperationParams {
 pub async fn test_render_single_operation(
     operation_name: String,
     params: TestOperationParams,
+    app_state: State<'_, Arc<AppState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
     let start_time = std::time::Instant::now();
@@ -849,6 +851,7 @@ pub async fn test_render_single_operation(
                 inputs,
                 parameters: params.parameters.clone(),
                 progress_callback: None,
+                artifact_registry: Some(app_state.artifact_registry.clone()),
             };
 
             // Execute the merge operation
@@ -1236,6 +1239,7 @@ fn execute_child_operation(
                 inputs: HashMap::new(), // No inputs for load operations
                 parameters,
                 progress_callback: None,
+                artifact_registry: None, // No artifact registry for test helper functions
             };
 
             // Execute the operation
@@ -1459,6 +1463,7 @@ pub enum RenderAllAutoOperationsEvent {
 #[tauri::command]
 pub async fn render_all_auto_operations(
     params: BatchRenderParams,
+    app_state: State<'_, Arc<AppState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<RenderAllAutoOperationsEvent>,
 ) -> Result<BatchRenderResult, Error> {
@@ -1617,7 +1622,7 @@ pub async fn render_all_auto_operations(
         }
 
         let render_result =
-            render_single_operation_internal(op, &params.operations_state, &logging_service).await;
+            render_single_operation_internal(op, &params.operations_state, &app_state, &logging_service).await;
 
         let op_duration = op_start.elapsed();
 
@@ -1804,6 +1809,7 @@ fn compute_render_order(
 async fn render_single_operation_internal(
     op: &FrontendOperationDef,
     operations_state: &FrontendOperationsState,
+    app_state: &State<'_, Arc<AppState>>,
     logging_service: &State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
     let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
@@ -1885,6 +1891,7 @@ async fn render_single_operation_internal(
                     "output_path": output_path,
                 }),
                 progress_callback: None,
+                artifact_registry: Some(app_state.artifact_registry.clone()),
             };
 
             operation.execute(context).map_err(|e| {
@@ -1984,6 +1991,7 @@ async fn render_single_operation_internal(
 fn render_single_operation_blocking(
     op: &FrontendOperationDef,
     operations_state: &FrontendOperationsState,
+    artifact_registry: Option<Arc<crate::artifacts::ArtifactRegistry>>,
     logging_service: &Arc<Mutex<LoggingService>>,
 ) -> Result<String, Error> {
     let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
@@ -2067,6 +2075,7 @@ fn render_single_operation_blocking(
                     "output_path": output_path,
                 }),
                 progress_callback: None,
+                artifact_registry,
             };
 
             operation.execute(context).map_err(|e| {
@@ -2418,7 +2427,7 @@ fn render_all_auto_operations_blocking(
         }
 
         let render_result =
-            render_single_operation_blocking(op, &params.operations_state, &logging_service);
+            render_single_operation_blocking(op, &params.operations_state, None, &logging_service);
 
         let op_duration = op_start.elapsed();
 

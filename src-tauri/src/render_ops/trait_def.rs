@@ -1,8 +1,9 @@
 // Operation trait definition
 
-use crate::artifacts::Artifact;
+use crate::artifacts::{Artifact, ArtifactRegistry, ArtifactId};
 use crate::graph::OpId;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Result of an operation execution
 pub type OperationResult = Result<Artifact, OperationError>;
@@ -45,6 +46,9 @@ pub struct OperationContext {
 
     /// Optional progress callback
     pub progress_callback: Option<Box<dyn Fn(f32) + Send + Sync>>,
+
+    /// Artifact registry for publishing operation outputs
+    pub artifact_registry: Option<Arc<ArtifactRegistry>>,
 }
 
 impl std::fmt::Debug for OperationContext {
@@ -57,6 +61,10 @@ impl std::fmt::Debug for OperationContext {
             .field(
                 "progress_callback",
                 &self.progress_callback.as_ref().map(|_| "<callback>"),
+            )
+            .field(
+                "artifact_registry",
+                &self.artifact_registry.as_ref().map(|_| "<registry>"),
             )
             .finish()
     }
@@ -89,6 +97,43 @@ impl OperationContext {
     pub fn report_progress(&self, progress: f32) {
         if let Some(ref callback) = self.progress_callback {
             callback(progress.clamp(0.0, 1.0));
+        }
+    }
+
+    /// Publish an artifact to the registry
+    pub fn publish_artifact(&self, artifact: Artifact) -> Result<Option<ArtifactId>, OperationError> {
+        if let Some(ref registry) = self.artifact_registry {
+            registry.register_artifact(artifact, self.op_id)
+                .map(Some)
+                .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
+        } else {
+            // If no registry is available, we still succeed but return None
+            Ok(None)
+        }
+    }
+
+    /// Publish an artifact with metadata tags
+    pub fn publish_artifact_with_tags(
+        &self, 
+        artifact: Artifact, 
+        tags: HashMap<String, String>
+    ) -> Result<Option<ArtifactId>, OperationError> {
+        if let Some(ref registry) = self.artifact_registry {
+            registry.register_artifact_with_tags(artifact, self.op_id, tags)
+                .map(Some)
+                .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
+        } else {
+            // If no registry is available, we still succeed but return None
+            Ok(None)
+        }
+    }
+
+    /// Get artifacts published by this operation
+    pub fn get_published_artifacts(&self) -> Vec<(ArtifactId, Artifact)> {
+        if let Some(ref registry) = self.artifact_registry {
+            registry.get_artifacts_by_op(&self.op_id)
+        } else {
+            Vec::new()
         }
     }
 }
