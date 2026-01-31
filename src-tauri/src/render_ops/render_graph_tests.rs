@@ -1442,6 +1442,7 @@ pub struct BatchRenderParams {
 pub enum RenderAllAutoOperationsEvent {
     Started {
         total_operations: usize,
+        operation_ids: Vec<OperationId>,
     },
     Progress {
         operation_index: usize,
@@ -1519,6 +1520,7 @@ pub async fn render_all_auto_operations(
         on_event,
         RenderAllAutoOperationsEvent::Started {
             total_operations: operations_to_process.len(),
+            operation_ids: render_order.clone(),
         }
     );
 

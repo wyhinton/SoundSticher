@@ -452,7 +452,13 @@ async function executeRenderWithOptions(
     }
 
     // Create a typed event channel to receive progress updates from the backend
-    type AutoRenderStartedEvent = { event: 'started'; data: { total_operations: number } };
+    type AutoRenderStartedEvent = {
+      event: 'started';
+      data: {
+        total_operations: number;
+        operation_ids: string[];
+      };
+    };
     type AutoRenderProgressEvent = {
       event: 'progress';
       data: {
@@ -473,7 +479,8 @@ async function executeRenderWithOptions(
       'AutoRender',
       {
         source: 'auto-render',
-        startedMessage: data => `Rendering ${data.total_operations} operations...`,
+        startedMessage: data =>
+          `Rendering ${data.total_operations} operations: [${data.operation_ids.slice(0, 3).join(', ')}${data.operation_ids.length > 3 ? '...' : ''}]`,
         progressMessage: data =>
           `Rendering: ${data.operation_name} (${data.operation_index}/${data.total_operations})`,
         finishedMessage: data =>
@@ -490,13 +497,24 @@ async function executeRenderWithOptions(
         onStarted: data => {
           if (isLogging) console.log('📡 AutoRender Started', data);
 
+          // Create pending states for all operations that will be processed
+          const pendingOperationStates: Record<string, OperationRenderState> = {};
+          data.operation_ids.forEach((operationId, index) => {
+            pendingOperationStates[operationId] = {
+              status: 'pending',
+              name: operationId, // Will be updated when we get the actual name in progress
+              index: index,
+              totalOperations: data.total_operations,
+            };
+          });
+
           // Reset operation states and set total
           autoRenderState.update(s => ({
             ...s,
             status: 'rendering',
             totalOperations: data.total_operations,
             completedOperations: 0,
-            operationStates: {},
+            operationStates: pendingOperationStates,
             currentOperationId: null,
           }));
         },
