@@ -2,7 +2,7 @@
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
   import { appState } from './state/state.svelte';
-  import FileTable from './InputDisplay/FileTable.svelte';
+  import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
   import Plotted from './PlaybackDisplay/Timeline.svelte';
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import { onDestroy, onMount } from 'svelte';
@@ -108,7 +108,7 @@
 
                 <!-- File Table -->
                 <Pane size={50}>
-                  <FileTable />
+                  <InputsOutputsTable operationId={$appState.uiSettings?.selectedOperationId} />
                 </Pane>
               </Splitpanes>
             </Pane>

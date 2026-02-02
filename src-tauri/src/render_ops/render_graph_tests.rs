@@ -1621,8 +1621,13 @@ pub async fn render_all_auto_operations(
             );
         }
 
-        let render_result =
-            render_single_operation_internal(op, &params.operations_state, &app_state, &logging_service).await;
+        let render_result = render_single_operation_internal(
+            op,
+            &params.operations_state,
+            &app_state,
+            &logging_service,
+        )
+        .await;
 
         let op_duration = op_start.elapsed();
 

@@ -1,6 +1,6 @@
 // Cook scheduler for managing operation execution
 
-use crate::artifacts::{Artifact, ArtifactStorage};
+use crate::artifacts::{Artifact, ArtifactStorage, ArtifactRegistry};
 use crate::cook::{CookTask, TaskStatus};
 use crate::graph::{InvalidationManager, OpId, OperationNodeManager};
 use crate::logging::{LogSystem, LoggingService};
@@ -25,6 +25,9 @@ pub struct CookScheduler {
 
     /// Artifact storage for inputs/outputs
     artifact_storage: Arc<ArtifactStorage>,
+
+    /// Global artifact registry
+    artifact_registry: Arc<ArtifactRegistry>,
 
     /// Task queue (priority queue)
     task_queue: Arc<Mutex<BinaryHeap<CookTask>>>,
@@ -110,6 +113,7 @@ impl CookScheduler {
         node_manager: Arc<Mutex<OperationNodeManager>>,
         invalidation_manager: Arc<Mutex<InvalidationManager>>,
         artifact_storage: Arc<ArtifactStorage>,
+        artifact_registry: Arc<ArtifactRegistry>,
         config: SchedulerConfig,
         logger: Arc<LoggingService>,
     ) -> Self {
@@ -122,6 +126,7 @@ impl CookScheduler {
             node_manager,
             invalidation_manager,
             artifact_storage,
+            artifact_registry,
             task_queue: Arc::new(Mutex::new(BinaryHeap::new())),
             executing_tasks: Arc::new(Mutex::new(HashMap::new())),
             completed_tasks: Arc::new(Mutex::new(HashMap::new())),
@@ -480,6 +485,7 @@ impl CookScheduler {
             parameters: task.parameters.clone(),
             work_dir,
             progress_callback: None, // TODO: Implement progress reporting
+            artifact_registry: Some(self.artifact_registry.clone()),
         })
     }
 
@@ -492,6 +498,7 @@ impl CookScheduler {
         let state = self.state.clone();
         let operation_registry = self.operation_registry.clone();
         let invalidation_manager = self.invalidation_manager.clone();
+        let artifact_registry = self.artifact_registry.clone();
         let config = self.config.clone();
         let logger = self.logger.clone();
 
@@ -584,6 +591,7 @@ impl CookScheduler {
                         &operation_registry,
                         &invalidation_manager,
                         &completed_tasks,
+                        &artifact_registry,
                         &config,
                         &logger,
                     );
@@ -694,6 +702,7 @@ impl CookScheduler {
         operation_registry: &Arc<OperationRegistry>,
         invalidation_manager: &Arc<Mutex<InvalidationManager>>,
         completed_tasks: &Arc<Mutex<HashMap<OpId, TaskResult>>>,
+        artifact_registry: &Arc<ArtifactRegistry>,
         config: &SchedulerConfig,
         logger: &Arc<LoggingService>,
     ) -> TaskResult {
@@ -737,6 +746,7 @@ impl CookScheduler {
             invalidation_manager,
             completed_tasks,
             config,
+            artifact_registry,
         ) {
             Ok(ctx) => {
                 logger.debug(
@@ -816,6 +826,7 @@ impl CookScheduler {
         invalidation_manager: &Arc<Mutex<InvalidationManager>>,
         completed_tasks: &Arc<Mutex<HashMap<OpId, TaskResult>>>,
         config: &SchedulerConfig,
+        artifact_registry: &Arc<ArtifactRegistry>,
     ) -> Result<OperationContext, SchedulerError> {
         // Get input artifacts from dependencies
         let mut inputs = HashMap::new();
@@ -853,6 +864,7 @@ impl CookScheduler {
             parameters: task.parameters.clone(),
             work_dir,
             progress_callback: None, // TODO: Implement progress reporting
+            artifact_registry: Some(artifact_registry.clone()),
         })
     }
 }

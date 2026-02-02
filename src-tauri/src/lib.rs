@@ -16,8 +16,9 @@ use crate::sample_cache::SampleCacheService;
 use crate::state::AppState;
 use crate::waveform::WaveformService;
 
-mod artifacts;
 mod artifact_registry_commands;
+mod artifacts;
+mod artifacts_service;
 mod audio_manager;
 mod combine;
 mod cook;
@@ -239,7 +240,7 @@ pub fn run() {
             logging_service.set_app_handle(app.handle().clone());
             let logging_service = Arc::new(Mutex::new(logging_service));
             app.manage(logging_service.clone());
-
+            let shared_artifact_registry = Arc::new(artifacts::ArtifactRegistry::new());
             // Initialize cook scheduler
             {
                 use crate::artifacts::ArtifactStorage;
@@ -282,6 +283,7 @@ pub fn run() {
                         Arc::new(LoggingService::new())
                     }
                 };
+    
 
                 // Create and start scheduler
                 let mut scheduler = CookScheduler::new(
@@ -289,6 +291,7 @@ pub fn run() {
                     node_manager,
                     invalidation_manager,
                     artifact_storage,
+                    shared_artifact_registry.clone(),
                     config,
                     logger,
                 );
@@ -301,7 +304,8 @@ pub fn run() {
                 app.manage(Arc::new(Mutex::new(scheduler)));
             }
 
-            // Initialize app state
+            // Initialize app state with shared artifact registry
+
             app.manage(Arc::new(AppState {
                 current_song: Mutex::new(None),
                 audio_files: Mutex::new(std::collections::BTreeMap::new()),
@@ -314,7 +318,7 @@ pub fn run() {
                 custom_order: Mutex::new(Vec::new()),
                 current_play_progress: Mutex::new(0.0),
                 seek_start_time: Mutex::new(0.0),
-                artifact_registry: Arc::new(artifacts::ArtifactRegistry::new()),
+                artifact_registry: shared_artifact_registry.clone(),
             }));
 
             // Initialize waveform cache service
@@ -386,6 +390,13 @@ pub fn run() {
             artifact_registry_commands::get_artifacts_by_operation,
             artifact_registry_commands::clear_artifact_registry,
             artifact_registry_commands::refresh_artifact_registry_status,
+            // Artifacts service (debug) commands
+            artifacts_service::get_artifact_debug_info,
+            artifacts_service::get_filtered_artifacts,
+            artifacts_service::clear_artifact_registry_debug,
+            artifacts_service::refresh_artifacts_existence,
+            artifacts_service::remove_artifacts_by_operation_debug,
+            artifacts_service::get_artifact_details_debug,
             open_file_in_editor,
             open_in_explorer,
             sample_playback::pause_sample_preview,

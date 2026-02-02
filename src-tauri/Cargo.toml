@@ -46,7 +46,7 @@ strum = "0.26"
 strum_macros = "0.26"
 moka= { version="0.12.13", features= ["sync"] }
 rand = "0.8"
-
+dashmap = "6.1.0"
 
 [dependencies.uuid]
 version = "1.18.1"
