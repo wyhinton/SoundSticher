@@ -94,6 +94,11 @@
       label: 'Event Emits',
       icon: 'fa-broadcast-tower',
     },
+    artifactsLog: {
+      category: 'backend',
+      label: 'Artifacts',
+      icon: 'fa-broadcast-tower',
+    },
   };
 
   // Get frontend and backend systems
