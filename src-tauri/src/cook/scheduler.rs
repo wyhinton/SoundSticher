@@ -481,6 +481,7 @@ impl CookScheduler {
 
         Ok(OperationContext {
             op_id: task.op_id,
+            frontend_op_id: None, // TODO: Pass frontend ID from task if available
             inputs,
             parameters: task.parameters.clone(),
             work_dir,
@@ -860,6 +861,7 @@ impl CookScheduler {
 
         Ok(OperationContext {
             op_id: task.op_id,
+            frontend_op_id: None, // TODO: Pass frontend ID from task if available
             inputs,
             parameters: task.parameters.clone(),
             work_dir,

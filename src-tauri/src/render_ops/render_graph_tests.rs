@@ -9,6 +9,7 @@ use crate::render_ops::generated_operation_defs::{FrontendOperationDef, Frontend
 use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
 use crate::send_channel_event;
 use crate::state::AppState;
+use crate::util::id::id_utils;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -847,6 +848,7 @@ pub async fn test_render_single_operation(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: None, // Test context without frontend ID
                 work_dir,
                 inputs,
                 parameters: params.parameters.clone(),
@@ -1235,6 +1237,7 @@ fn execute_child_operation(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: None, // No frontend ID for test helper functions
                 work_dir,
                 inputs: HashMap::new(), // No inputs for load operations
                 parameters,
@@ -1838,6 +1841,14 @@ async fn render_single_operation_internal(
                         name, output_path
                     )
                 );
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📋 Frontend operation ID (from FrontendOperationDef): '{}'",
+                        id
+                    )
+                );
             }
 
             // Resolve input artifacts
@@ -1879,7 +1890,28 @@ async fn render_single_operation_internal(
             );
 
             let op_id = op_map.insert(());
+            let op_id_string = id_utils::id_to_string(op_id);
             let work_dir = base_artifacts_dir.join(format!("auto_merge_{:?}", op_id));
+
+            // Enhanced logging to debug ID mismatch
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔑 ID COMPARISON:\n  Frontend ID (string): '{}'\n  Backend OpId (SlotMap): {:?}\n  Backend OpId as string: '{}'",
+                        id, op_id, op_id_string
+                    )
+                );
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "⚠️ NOTE: Frontend ID '{}' != Backend OpId string '{}' - these are different ID systems!",
+                        id, op_id_string
+                    )
+                );
+            }
 
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
                 return Err(Error::Io(std::io::Error::other(format!(
@@ -1890,14 +1922,27 @@ async fn render_single_operation_internal(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: Some(id.clone()), // Pass frontend ID for artifact registration
                 work_dir,
                 inputs,
                 parameters: serde_json::json!({
                     "output_path": output_path,
+                    "frontend_op_id": id,  // Pass frontend ID in parameters for artifact registration
                 }),
                 progress_callback: None,
                 artifact_registry: Some(app_state.artifact_registry.clone()),
             };
+
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📦 Creating OperationContext with op_id={:?}, frontend_op_id passed in parameters",
+                        op_id
+                    )
+                );
+            }
 
             operation.execute(context).map_err(|e| {
                 Error::Io(std::io::Error::other(format!(
@@ -2074,6 +2119,7 @@ fn render_single_operation_blocking(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: None, // Blocking version without frontend ID
                 work_dir,
                 inputs,
                 parameters: serde_json::json!({

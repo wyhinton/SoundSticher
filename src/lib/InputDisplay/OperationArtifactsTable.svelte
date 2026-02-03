@@ -9,6 +9,7 @@
   interface ArtifactRecordForFrontend {
     id: string;
     creator_op_id: string;
+    frontend_op_id: string | null; // Frontend operation ID for filtering/display
     created_at: number;
     artifact_type: string;
     size_bytes: number;

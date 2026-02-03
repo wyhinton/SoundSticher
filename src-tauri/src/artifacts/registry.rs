@@ -17,8 +17,13 @@ pub struct ArtifactRecord {
     /// Unique artifact identifier
     pub id: ArtifactId,
 
-    /// ID of the operation that created this artifact
+    /// ID of the operation that created this artifact (backend SlotMap key)
     pub creator_op_id: OpId,
+
+    /// Frontend operation ID string (e.g., "op_mkxk4epg_itm7ep")
+    /// This is the ID used by the frontend to identify operations
+    #[serde(default)]
+    pub frontend_op_id: Option<String>,
 
     /// Timestamp when the artifact was created
     pub created_at: u64,
@@ -45,12 +50,22 @@ impl ArtifactRecord {
         artifact: &Artifact,
         creator_op_id: OpId,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::from_artifact_with_frontend_id(artifact, creator_op_id, None)
+    }
+
+    /// Create a new artifact record with an optional frontend operation ID
+    pub fn from_artifact_with_frontend_id(
+        artifact: &Artifact,
+        creator_op_id: OpId,
+        frontend_op_id: Option<String>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let id = generate_unique_id();
         let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         Ok(Self {
             id,
             creator_op_id,
+            frontend_op_id,
             created_at: now,
             artifact_type: artifact.artifact_type().to_string(),
             size_bytes: artifact.size_bytes()?,
@@ -108,7 +123,17 @@ impl ArtifactRegistry {
         artifact: Artifact,
         creator_op_id: OpId,
     ) -> Result<ArtifactId, Box<dyn std::error::Error>> {
-        let record = ArtifactRecord::from_artifact(&artifact, creator_op_id)?;
+        self.register_artifact_with_frontend_id(artifact, creator_op_id, None)
+    }
+
+    /// Register an artifact with a frontend operation ID
+    pub fn register_artifact_with_frontend_id(
+        &self,
+        artifact: Artifact,
+        creator_op_id: OpId,
+        frontend_op_id: Option<String>,
+    ) -> Result<ArtifactId, Box<dyn std::error::Error>> {
+        let record = ArtifactRecord::from_artifact_with_frontend_id(&artifact, creator_op_id, frontend_op_id)?;
         let artifact_id = record.id.clone();
 
         // Store the artifact and record together
@@ -131,7 +156,18 @@ impl ArtifactRegistry {
         creator_op_id: OpId,
         tags: HashMap<String, String>,
     ) -> Result<ArtifactId, Box<dyn std::error::Error>> {
-        let mut record = ArtifactRecord::from_artifact(&artifact, creator_op_id)?;
+        self.register_artifact_with_tags_and_frontend_id(artifact, creator_op_id, tags, None)
+    }
+
+    /// Register an artifact with tags and frontend operation ID
+    pub fn register_artifact_with_tags_and_frontend_id(
+        &self,
+        artifact: Artifact,
+        creator_op_id: OpId,
+        tags: HashMap<String, String>,
+        frontend_op_id: Option<String>,
+    ) -> Result<ArtifactId, Box<dyn std::error::Error>> {
+        let mut record = ArtifactRecord::from_artifact_with_frontend_id(&artifact, creator_op_id, frontend_op_id)?;
         record.tags = tags;
         let artifact_id = record.id.clone();
 

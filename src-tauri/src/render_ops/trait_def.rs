@@ -32,8 +32,13 @@ pub enum OperationError {
 
 /// Context provided to operations during execution
 pub struct OperationContext {
-    /// The operation's unique identifier
+    /// The operation's unique identifier (backend SlotMap key)
     pub op_id: OpId,
+
+    /// Frontend operation ID string (e.g., "op_mkxk4epg_itm7ep")
+    /// This is the ID used by the frontend to identify operations and should be
+    /// used when registering artifacts so they can be queried by frontend ID.
+    pub frontend_op_id: Option<String>,
 
     /// Input artifacts from dependencies
     pub inputs: HashMap<String, Artifact>,
@@ -55,6 +60,7 @@ impl std::fmt::Debug for OperationContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OperationContext")
             .field("op_id", &self.op_id)
+            .field("frontend_op_id", &self.frontend_op_id)
             .field("inputs", &self.inputs)
             .field("parameters", &self.parameters)
             .field("work_dir", &self.work_dir)
@@ -101,9 +107,14 @@ impl OperationContext {
     }
 
     /// Publish an artifact to the registry
+    /// Uses frontend_op_id if available for proper frontend-backend ID mapping
     pub fn publish_artifact(&self, artifact: Artifact) -> Result<Option<ArtifactId>, OperationError> {
         if let Some(ref registry) = self.artifact_registry {
-            registry.register_artifact(artifact, self.op_id)
+            registry.register_artifact_with_frontend_id(
+                artifact, 
+                self.op_id, 
+                self.frontend_op_id.clone()
+            )
                 .map(Some)
                 .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
         } else {
@@ -113,13 +124,19 @@ impl OperationContext {
     }
 
     /// Publish an artifact with metadata tags
+    /// Uses frontend_op_id if available for proper frontend-backend ID mapping
     pub fn publish_artifact_with_tags(
         &self, 
         artifact: Artifact, 
         tags: HashMap<String, String>
     ) -> Result<Option<ArtifactId>, OperationError> {
         if let Some(ref registry) = self.artifact_registry {
-            registry.register_artifact_with_tags(artifact, self.op_id, tags)
+            registry.register_artifact_with_tags_and_frontend_id(
+                artifact, 
+                self.op_id, 
+                tags, 
+                self.frontend_op_id.clone()
+            )
                 .map(Some)
                 .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
         } else {
