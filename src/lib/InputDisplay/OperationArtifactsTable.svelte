@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatBytes } from '../utils/format';
   import { invoke } from '@tauri-apps/api/core';
+  import FileLink from '../components/FileLink.svelte';
 
   // Props
   export let operationId: string | undefined = undefined;
@@ -54,6 +55,13 @@
     return new Date(timestamp * 1000).toLocaleString();
   }
 
+  // Helper function to get the first file path or null
+  function getFirstFilePath(artifact: ArtifactRecordForFrontend): string | null {
+    return artifact.file_paths && artifact.file_paths.length > 0
+      ? (artifact.file_paths[0] ?? null)
+      : null;
+  }
+
   // Reactive statement to fetch artifacts when operationId changes
   $: if (operationId) {
     fetchArtifacts();
@@ -62,7 +70,7 @@
 
 {#if operationId}
   <div class="artifacts-section">
-    <h6 class="artifacts-title">Operation Artifacts</h6>
+    <h6 class="artifacts-title">Operation Outputs</h6>
     {#if artifactsLoading}
       <div class="artifacts-loading">
         <i class="fas fa-spinner fa-spin"></i> Loading artifacts...
@@ -78,6 +86,7 @@
               <th class="text-center">Type</th>
               <th class="text-center">Size</th>
               <th class="text-center">Exists</th>
+              <th>File</th>
               <th class="text-center">Created</th>
             </tr>
           </thead>
@@ -109,6 +118,9 @@
                     {artifact.exists ? '✓' : '✗'}
                   </span>
                 </td>
+                <td class="file-path-cell">
+                  <FileLink filePath={getFirstFilePath(artifact)} />
+                </td>
                 <td class="text-center artifact-timestamp">
                   {formatTimestamp(artifact.created_at)}
                 </td>
@@ -128,8 +140,6 @@
   }
 
   .artifacts-section {
-    margin-top: 20px;
-    padding: 10px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
   }
 
@@ -158,11 +168,11 @@
     font-style: italic;
   }
 
-  :global(.table) {
+  .table {
     margin-bottom: 0;
   }
 
-  :global(th) {
+  th {
     text-align: left;
     padding-top: 0px !important;
     padding-bottom: 0px !important;
@@ -173,14 +183,15 @@
     border-bottom: 0px !important;
   }
 
-  :global(td) {
+  td {
     background-color: rgb(6, 5, 8) !important;
     border: 1px solid rgb(10, 9, 13) !important;
     color: #e8e8e8 !important;
-    padding-top: 4px !important;
-    padding-bottom: 3px !important;
+    /* padding: 0px 2px 0px 2px; */
+    padding: 2px 4px !important;
     font-size: 11px;
     white-space: nowrap;
+    vertical-align: middle;
   }
 
   .artifact-row {
@@ -239,7 +250,7 @@
     display: inline-block;
     padding: 2px 6px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: 8px;
     font-weight: 600;
   }
 
@@ -259,5 +270,11 @@
     font-family: 'Fira Code', monospace;
     color: #8d8d8d;
     font-size: 10px;
+  }
+
+  .file-path-cell {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>
