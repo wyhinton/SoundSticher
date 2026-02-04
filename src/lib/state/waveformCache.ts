@@ -1006,7 +1006,7 @@ function flattenOperationToTimelineItems(
  * Get flattened timeline items with hierarchy for the root operation
  * This is used when we want to show nested MergeOps as distinct visual groups
  */
-function getHierarchicalTimelineItems(
+export function getHierarchicalTimelineItems(
   operation: OperationDef | undefined,
   operationId: string
 ): TimelineItemWithHierarchy[] {
