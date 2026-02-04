@@ -70,7 +70,7 @@
 
 {#if operationId}
   <div class="artifacts-section">
-    <h6 class="artifacts-title">Operation Outputs</h6>
+    <h6 class="artifacts-title">Operation Outputs <i class="fa fa-arrow-right"></i></h6>
     {#if artifactsLoading}
       <div class="artifacts-loading">
         <i class="fas fa-spinner fa-spin"></i> Loading artifacts...
