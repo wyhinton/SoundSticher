@@ -1,13 +1,16 @@
 import * as d3 from 'd3';
 import { logger } from '$lib/state/logging';
+import type { TimelineItem, AudioFileTimelineItem, SpacerTimelineItem } from '$lib/state/state.svelte';
 
-export interface TimelineItem {
-  id: string;
-  startOffset: number;
-  size: number;
-  fileName: string;
-  type: string;
-  active?: boolean;
+/**
+ * Helper to get the "size" of a timeline item for positioning calculations.
+ * AudioFileTimelineItem uses `size`, SpacerTimelineItem uses `length`.
+ */
+function getItemSize(item: TimelineItem): number {
+  if (item.kind === 'spacer') {
+    return (item as SpacerTimelineItem).length;
+  }
+  return (item as AudioFileTimelineItem).size;
 }
 
 export interface D3TimelineManagerOptions {
@@ -215,9 +218,7 @@ export class D3TimelineManager {
    * Convert screen coordinates to timeline coordinates
    */
   screenToTimeline(screenX: number): number {
-    return this.currentTransform.invert
-      ? this.currentTransform.invertX(screenX)
-      : screenX / this.currentTransform.k - this.currentTransform.x / this.currentTransform.k;
+    return this.currentTransform.invertX(screenX);
   }
 
   /**
@@ -274,7 +275,7 @@ export class D3TimelineManager {
         this.currentTransform.x;
       const itemEndX =
         itemStartX +
-        item.size * this.options.originalPathWidth * this.scaleX * this.currentTransform.k;
+        getItemSize(item) * this.options.originalPathWidth * this.scaleX * this.currentTransform.k;
 
       if (relativeX >= itemStartX && relativeX <= itemEndX) {
         logger.d3timelinemanager.segment('Found clicked segment', {
@@ -318,7 +319,7 @@ export class D3TimelineManager {
       }
 
       const itemStartX = item.startOffset * this.options.originalPathWidth * this.scaleX;
-      const itemEndX = itemStartX + item.size * this.options.originalPathWidth * this.scaleX;
+      const itemEndX = itemStartX + getItemSize(item) * this.options.originalPathWidth * this.scaleX;
 
       if (timelineX >= itemStartX && timelineX <= itemEndX) {
         const midPoint = itemStartX + (itemEndX - itemStartX) / 2;
@@ -340,7 +341,7 @@ export class D3TimelineManager {
       const lastItem = timelineItems[timelineItems.length - 1];
       if (lastItem) {
         targetX =
-          (lastItem.startOffset + lastItem.size) * this.options.originalPathWidth * this.scaleX;
+          (lastItem.startOffset + getItemSize(lastItem)) * this.options.originalPathWidth * this.scaleX;
       }
     }
 

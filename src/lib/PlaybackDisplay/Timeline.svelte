@@ -14,14 +14,8 @@
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
   import DropIndicator from './Timeline/DropIndicator.svelte';
-  import {
-    selectionService,
-    selectedIds,
-    previewIds,
-    previewActive,
-  } from '../state/selection.svelte';
-  import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
-  import { timelineDebugMode } from '../state/state.svelte';
+  import { D3TimelineManager } from './Timeline/D3TimelineManager';
+  import type { TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
   import {
     operationTimelineItems,
@@ -31,8 +25,18 @@
     initWaveformService,
   } from '../state/waveformCache';
   import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
-  // Import operation playback service
-  import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
+
+  // New scoped stores and services
+  import {
+    timelineStore,
+    selectionStore,
+    playbackStore,
+    timelineDebugMode,
+    initWaveformServiceOnce,
+    type TimelineId,
+  } from '../state/timelines';
+  import { createTimelineSelectionService, type TimelineSelectionService } from '../state/timelineSelection';
+  import { createTimelinePlaybackService, type TimelinePlaybackService } from '../state/timelinePlayback';
 
   import {
     DragDropManager,
@@ -43,13 +47,30 @@
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
-  import {
-    removeOperationSourcesFromCurrentOpCommand,
-    type OperationId,
-  } from '$lib/state/undo/undo';
   import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
 
-  const dispatch = createEventDispatcher();
+  // ============================================================================
+  // PROPS
+  // ============================================================================
+
+  /** Unique identifier for this timeline instance - REQUIRED for multi-timeline support */
+  export let timelineId: TimelineId = 'main';
+  
+  /** Whether to use the legacy global stores (for backwards compatibility) */
+  export let useLegacyStores: boolean = true;
+  
+  /** Whether to use backend playback service */
+  export let useBackendPlayback: boolean = true;
+  
+  /** Backend command prefix for playback */
+  export let backendPrefix: string = 'op_playback';
+
+  const dispatch = createEventDispatcher<{
+    selectionChange: Set<number>;
+    removeItems: { timelineId: TimelineId; operationIds: string[] };
+    seek: { timelineId: TimelineId; time: number };
+    dragComplete: { timelineId: TimelineId; fromIndices: number[]; toIndex: number };
+  }>();
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -127,45 +148,97 @@
   const timelineXAxisBg = '#1d1c23';
 
   // ============================================================================
-  // TIMELINE ITEMS - Operation-based system
+  // SCOPED SERVICES - Per-timeline instances
   // ============================================================================
 
-  // Reactive timeline items from operation system
-  $: timelineItems = $operationTimelineItems;
+  // Selection service scoped to this timeline
+  let selectionSvc: TimelineSelectionService;
+  
+  // Playback service scoped to this timeline
+  let playbackSvc: TimelinePlaybackService;
+  
+  // Initialize scoped services
+  $: {
+    selectionSvc = createTimelineSelectionService(timelineId, () => timelineItems.length);
+    playbackSvc = createTimelinePlaybackService(timelineId, {
+      useBackend: useBackendPlayback,
+      backendPrefix,
+    });
+  }
 
-  // Reactive duration from operation system
-  $: currentDuration = $operationDuration;
+  // ============================================================================
+  // TIMELINE ITEMS - Support both legacy global stores and scoped stores
+  // ============================================================================
+
+  // Scoped timeline state store
+  $: scopedTimelineState = timelineStore.forTimeline(timelineId);
+
+  // Reactive timeline items - use legacy or scoped based on prop
+  $: timelineItems = useLegacyStores 
+    ? $operationTimelineItems 
+    : ($scopedTimelineState?.items ?? []);
+
+  // Reactive duration - use legacy or scoped based on prop
+  $: currentDuration = useLegacyStores 
+    ? $operationDuration 
+    : ($scopedTimelineState?.duration ?? 0);
 
   // Loading state for operation waveforms
-  $: isLoadingWaveforms = $operationWaveformsLoading;
+  $: isLoadingWaveforms = useLegacyStores 
+    ? $operationWaveformsLoading 
+    : ($scopedTimelineState?.waveformsLoading ?? false);
 
   // Hierarchy information for drag operations
-  $: timelineHierarchy = $operationTimelineHierarchy;
+  $: timelineHierarchy = useLegacyStores 
+    ? $operationTimelineHierarchy 
+    : ($scopedTimelineState?.hierarchy ?? null);
 
   // Check if we have no active samples
   $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;
 
-  // Selection state - derived from the selection service
-  $: selectedSegments = $selectedIds;
-  $: previewSegments = $previewIds;
-  $: isPreviewActive = $previewActive;
-  let lastSelectedIndex: number | null = null;
+  // ============================================================================
+  // SELECTION STATE - Scoped to this timeline
+  // ============================================================================
+
+  // Selection state from scoped service
+  $: scopedSelection = selectionSvc?.selection;
+  $: selectedSegments = $scopedSelection?.selectedIds ?? new Set<number>();
+  $: previewSegments = $scopedSelection?.previewIds ?? new Set<number>();
+  $: isPreviewActive = $scopedSelection?.previewActive ?? false;
+  $: lastSelectedIndex = $scopedSelection?.lastSelectedIndex ?? null;
+
+  // ============================================================================
+  // PLAYBACK STATE - Scoped to this timeline
+  // ============================================================================
+  
+  $: scopedPlayback = playbackSvc?.playback;
+  
+  // Update playhead position from scoped playback
+  $: if ($scopedPlayback && currentDuration > 0) {
+    playHeadPosition = $scopedPlayback.progress * currentDuration;
+  }
+
+  // Sync duration to playback service when it changes
+  $: if (playbackSvc && currentDuration > 0) {
+    playbackSvc.setDuration(currentDuration);
+  }
+
+  // ============================================================================
+  // SELECTION HANDLERS
+  // ============================================================================
 
   function handleSegmentSelection(
     segmentIndex: number,
     isMultiSelect: boolean = false,
     isShiftSelect: boolean = false
   ) {
-    // Use the selection service to handle the click
-    selectionService.handleClick(segmentIndex, {
+    if (!selectionSvc) return;
+    
+    // Use the scoped selection service to handle the click
+    selectionSvc.handleClick(segmentIndex, {
       isMultiSelect,
       isShiftSelect,
-      lastSelectedIndex,
-      source: 'timeline',
     });
-
-    // Update last selected index for shift-select operations
-    lastSelectedIndex = segmentIndex;
 
     // Update the drag drop manager with the new selection
     if (dragDropManager) {
@@ -184,8 +257,9 @@
   }
 
   function handleClearSelection() {
-    selectionService.clear('timeline');
-    lastSelectedIndex = null;
+    if (!selectionSvc) return;
+    
+    selectionSvc.clear();
 
     // Update the drag drop manager with the cleared selection
     if (dragDropManager) {
@@ -199,12 +273,13 @@
     if (!svgEl || !axisGroup || !pathGroup || !container) return;
 
     // DEBUG: Log initialization
-    console.log('🔧 Timeline: Initializing managers with:', {
+    console.log(`🔧 Timeline[${timelineId}]: Initializing managers with:`, {
+      timelineId,
       currentDuration,
       width,
-      operationTimelineItems: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
+      timelineItems: timelineItems?.length || 0,
       isLoadingWaveforms,
+      useLegacyStores,
     });
 
     // Create new D3 manager
@@ -224,8 +299,14 @@
 
     d3Manager.initialize(svgEl, axisGroup, pathGroup);
 
-    // Create new drag drop manager
-    dragDropManager = new DragDropManager(appState);
+    // Create new drag drop manager with timeline ID
+    dragDropManager = new DragDropManager({
+      timelineId,
+      appStateStore: appState,
+      onDragComplete: (fromIndices, toIndex) => {
+        dispatch('dragComplete', { timelineId, fromIndices, toIndex });
+      },
+    });
     dragDropManager.initialize(d3Manager, container);
 
     // Initialize with current selection
@@ -262,11 +343,6 @@
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
-  // Listen to operation playback progress
-  $: if ($opPlaybackProgress !== undefined) {
-    playHeadPosition = $opPlaybackProgress * currentDuration;
-  }
-
   function handleClick(event: MouseEvent) {
     if (!d3Manager) return;
 
@@ -282,8 +358,8 @@
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
-      // Use operation playback service for seeking
-      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      // Use scoped playback service for seeking
+      handleSeek(clickedTime);
       return;
     }
 
@@ -297,9 +373,24 @@
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
-      // Use operation playback service for seeking
-      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      // Use scoped playback service for seeking
+      handleSeek(clickedTime);
     }
+  }
+
+  /**
+   * Handle seek - uses scoped playback service and emits event
+   */
+  async function handleSeek(time: number) {
+    if (playbackSvc) {
+      try {
+        await playbackSvc.seek(time);
+      } catch (err) {
+        console.error(`[Timeline:${timelineId}] Failed to seek:`, err);
+      }
+    }
+    // Always dispatch the event so parent can handle it
+    dispatch('seek', { timelineId, time });
   }
 
   function handleKeyDown(event: KeyboardEvent) {
@@ -325,7 +416,7 @@
       event.preventDefault();
       event.stopPropagation();
       timelineDebugMode.toggle();
-      console.log('🔧 Timeline: Toggled debug mode:', !$timelineDebugMode);
+      console.log(`🔧 Timeline[${timelineId}]: Toggled debug mode:`, !$timelineDebugMode);
       return;
     }
 
@@ -335,20 +426,22 @@
       event.preventDefault();
 
       // Collect unique operation IDs from selected timeline items
-      const operationIdsToRemove = new Set<OperationId>();
+      const operationIdsToRemove: string[] = [];
       if (timelineItems.length > 0) {
         Array.from(selectedSegments).forEach(index => {
           if (index < timelineItems.length) {
             const item = timelineItems[index];
-            if (item && item.operationId) {
-              operationIdsToRemove.add(item.operationId);
+            if (item && item.operationId && !operationIdsToRemove.includes(item.operationId)) {
+              operationIdsToRemove.push(item.operationId);
             }
           }
         });
       }
-      console.log('Removing operations from current op:', Array.from(operationIdsToRemove));
-      if (operationIdsToRemove.size > 0) {
-        removeOperationSourcesFromCurrentOpCommand(Array.from(operationIdsToRemove));
+      console.log(`[Timeline:${timelineId}] Removing operations:`, operationIdsToRemove);
+      
+      if (operationIdsToRemove.length > 0) {
+        // Dispatch event instead of direct mutation - let parent handle it
+        dispatch('removeItems', { timelineId, operationIds: operationIdsToRemove });
         handleClearSelection();
       }
     }
@@ -372,25 +465,31 @@
 
   onMount(() => {
     // DEBUG: Log component mount state
-    console.log('🔧 Timeline: Component mounted with:', {
-      operationTimelineItems: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
-      operationWaveformsLoading: $operationWaveformsLoading,
+    console.log(`🔧 Timeline[${timelineId}]: Component mounted with:`, {
+      timelineId,
+      useLegacyStores,
+      timelineItems: timelineItems?.length || 0,
+      currentDuration,
+      isLoadingWaveforms,
     });
 
-    // Initialize waveform service
-    console.log('🔧 Timeline: Initializing waveform service...');
-    try {
-      initWaveformService();
-      console.log('🔧 Timeline: Waveform service initialized');
-    } catch (error) {
-      console.error('🔧 Timeline: Failed to initialize waveform service:', error);
+    // Initialize waveform service (guarded - only runs once globally)
+    if (useLegacyStores) {
+      console.log(`🔧 Timeline[${timelineId}]: Initializing waveform service...`);
+      try {
+        initWaveformServiceOnce(initWaveformService);
+        console.log(`🔧 Timeline[${timelineId}]: Waveform service initialized`);
+      } catch (error) {
+        console.error(`🔧 Timeline[${timelineId}]: Failed to initialize waveform service:`, error);
+      }
     }
 
-    // Initialize the operation playback progress listener
-    opPlaybackService.initProgressListener().catch(err => {
-      console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
-    });
+    // Initialize the scoped playback progress listener
+    if (playbackSvc) {
+      playbackSvc.initProgressListener().catch(err => {
+        console.error(`🔧 Timeline[${timelineId}]: Failed to initialize playback progress listener:`, err);
+      });
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
@@ -419,8 +518,10 @@
         unsubscribeDragDrop = null;
       }
 
-      // Clean up operation playback listener
-      opPlaybackService.cleanupProgressListener();
+      // Clean up scoped playback listener
+      if (playbackSvc) {
+        playbackSvc.cleanupProgressListener();
+      }
     };
   });
 
@@ -442,8 +543,10 @@
       unsubscribeDragDrop = null;
     }
 
-    // Clean up operation playback listener
-    opPlaybackService.cleanupProgressListener();
+    // Clean up scoped playback listener
+    if (playbackSvc) {
+      playbackSvc.cleanupProgressListener();
+    }
 
     // Clear any pending scroll timeout
     if (scrollTimeout !== null) {

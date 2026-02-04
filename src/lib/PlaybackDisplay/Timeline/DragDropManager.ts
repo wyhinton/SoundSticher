@@ -1,4 +1,5 @@
-import type { D3TimelineManager, TimelineItem } from './D3TimelineManager';
+import type { D3TimelineManager } from './D3TimelineManager';
+import type { TimelineItem } from '../../state/state.svelte';
 import { invokeWithPerf, updateInputs } from '../../state/performance';
 import { generateProgressChannel, type SortAudioEvent } from '../../state/events';
 import { Channel } from '@tauri-apps/api/core';
@@ -6,6 +7,7 @@ import { type AppState } from '../../state/state.svelte';
 import { get, type Writable } from 'svelte/store';
 import { writable, type Readable } from 'svelte/store';
 import { logger } from '../../state/logging';
+import type { TimelineId } from '../../state/timelines';
 
 export type DragDropState = {
   isDragging: boolean;
@@ -43,6 +45,13 @@ export interface DragEndEvent {
   event: d3.D3DragEvent<SVGGElement, unknown, d3.SubjectPosition>;
 }
 
+export interface DragDropManagerOptions {
+  timelineId?: TimelineId;
+  appStateStore: Writable<AppState>;
+  /** Optional callback when drag completes - allows parent to handle the reorder */
+  onDragComplete?: (fromIndices: number[], toIndex: number) => void;
+}
+
 export class DragDropManager {
   private _state: DragDropState = DEFAULT_DD;
 
@@ -57,9 +66,32 @@ export class DragDropManager {
   private selectedSegments: Set<number> = new Set();
   /** Pre-computed segments to move (for group drag operations) */
   private precomputedSegmentsToMove: Set<number> | null = null;
+  
+  /** Timeline ID for scoped operations */
+  private timelineId: TimelineId;
+  
+  /** Optional callback for drag completion */
+  private onDragComplete?: (fromIndices: number[], toIndex: number) => void;
 
-  constructor(appStateStore: Writable<AppState>) {
-    this.appStateStore = appStateStore;
+  constructor(options: DragDropManagerOptions | Writable<AppState>) {
+    // Support both old signature (just appStateStore) and new options object
+    if ('subscribe' in options) {
+      // Old signature: Writable<AppState>
+      this.appStateStore = options;
+      this.timelineId = 'default';
+    } else {
+      // New signature: DragDropManagerOptions
+      this.appStateStore = options.appStateStore;
+      this.timelineId = options.timelineId ?? 'default';
+      this.onDragComplete = options.onDragComplete;
+    }
+  }
+
+  /**
+   * Get the timeline ID this manager is associated with
+   */
+  getTimelineId(): TimelineId {
+    return this.timelineId;
   }
 
   /**
@@ -75,7 +107,7 @@ export class DragDropManager {
    */
   setSegmentsToMove(segments: Set<number>): void {
     this.precomputedSegmentsToMove = new Set(segments);
-    logger.dragdrop.info(`Pre-computed ${segments.size} segments for group drag`);
+    logger.dragdrop.info(`[${this.timelineId}] Pre-computed ${segments.size} segments for group drag`);
   }
 
   private setState(next: DragDropState) {
