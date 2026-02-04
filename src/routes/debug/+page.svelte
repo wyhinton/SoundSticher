@@ -6,6 +6,7 @@
     resetPerformance,
     type PerformanceMetric,
   } from '$lib/state/performance';
+  import PerformanceDebugTable from '$lib/components/PerformanceDebugTable.svelte';
   import {
     appState,
     hoveredSourceItem,
@@ -144,14 +145,6 @@
       );
     }
   };
-  const sortedPerformance = derived(performanceStore, $store => {
-    return Object.entries($store).sort((a, b) => {
-      const lastA = a[1][a[1].length - 1] ?? 0;
-      const lastB = b[1][b[1].length - 1] ?? 0;
-      return lastB.timeStamp - lastA.timeStamp;
-    });
-  });
-
   // Derive invoke history - all invokes sorted by timestamp
   const invokeHistory = derived(performanceStore, $store => {
     const allInvokes: Array<{
@@ -486,32 +479,7 @@
 
     <!-- Performance Tab -->
     <div slot="performance">
-      <div class="d-flex justify-content-between">
-        <h3>Performance Metrics</h3>
-        <div class="performance-controls">
-          {@render actionButton(() => resetPerformance(), 'fa-trash', 'Reset Performance')}
-        </div>
-      </div>
-      <table class="performance-table">
-        <thead>
-          <tr>
-            <th style:min-width="150px">Metric</th>
-            <th>Time (ms)</th>
-            <th>Count</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each $sortedPerformance as [key, value]}
-            <tr>
-              <td><b>{key}</b></td>
-              {#if value.length > 0}
-                <td class="text-center">{value[value.length - 1].time.toFixed(2)}</td>
-              {/if}
-              <td class="text-center">{value.length}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+      <PerformanceDebugTable />
     </div>
 
     <!-- Invoke History Tab -->
@@ -877,40 +845,6 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 4px;
-  }
-
-  /* Performance Section */
-  .performance-controls {
-    margin-bottom: 16px;
-  }
-
-  .performance-table {
-    width: 100%;
-    background-color: rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .performance-table th {
-    background-color: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
-    padding: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .performance-table td {
-    padding: 8px 12px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.8);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .performance-table tr:last-child td {
-    border-bottom: none;
   }
 
   /* Invoke History Styles */
