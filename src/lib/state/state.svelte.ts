@@ -871,15 +871,6 @@ export function getCurrentOperationSources(): OperationSource[] {
 }
 
 /**
- * DEPRECATED: Operations no longer have sections
- * This is kept temporarily for compatibility until UI is updated
- */
-export function getCurrentOperationSections(): Section[] {
-  console.warn('getCurrentOperationSections is deprecated - operations no longer have sections');
-  return [];
-}
-
-/**
  * Add a source operation (by ID) to the current MergeOp
  */
 export function addOperationSourceToCurrent(operationId: OperationId) {

@@ -52,6 +52,9 @@ pub enum Error {
 
     #[error("Duration error: {0}")]
     DurationError(String),
+
+    #[error("Invalid operation ID format")]
+    InvalidOperationId,
 }
 
 #[derive(serde::Serialize)]
@@ -74,6 +77,7 @@ pub enum ErrorKind {
     FlacOutputError(String),
     WaveformError(String),
     DurationError(String),
+    InvalidOperationId,
 }
 
 impl serde::Serialize for Error {
@@ -100,6 +104,7 @@ impl serde::Serialize for Error {
             Self::LockPoisoned => ErrorKind::UnevenNumberOfSamples,
             Self::WaveformError(_) => ErrorKind::WaveformError(error_message),
             Self::DurationError(_) => ErrorKind::DurationError(error_message),
+            Self::InvalidOperationId => ErrorKind::InvalidOperationId,
         };
         error_kind.serialize(serializer)
     }

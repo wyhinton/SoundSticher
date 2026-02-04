@@ -21,6 +21,17 @@ pub mod id_utils {
         format!("{}_{}", prefix, id.data().as_ffi())
     }
 
+    /// Generate a globally unique ID string
+    pub fn generate_unique_id() -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let random: u32 = rand::random();
+        format!("{}_{:08x}", timestamp, random)
+    }
+
     /// Create a new SlotMap with initial capacity
     pub fn new_slotmap_with_capacity<T>(capacity: usize) -> SlotMap<DefaultKey, T> {
         SlotMap::with_capacity(capacity)

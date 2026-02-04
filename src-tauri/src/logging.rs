@@ -26,6 +26,7 @@ pub enum LogSystem {
     Timeline,  // Add timeline system
     Operation, // Add operation system
     EventEmits,
+    Artifacts, // Add artifacts system
 }
 
 /// A log message that will be sent to the frontend
@@ -52,6 +53,7 @@ pub struct FileLocation {
 /// Configuration for which systems should log
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct LoggingConfig {
+    pub artifacts_enabled: bool, // Add artifacts logging
     pub combine_enabled: bool,
     pub cook_enabled: bool,
     pub graph_enabled: bool,
@@ -69,6 +71,7 @@ pub struct LoggingConfig {
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
+            artifacts_enabled: false, // Default off for artifacts
             combine_enabled: false,
             cook_enabled: false,
             graph_enabled: false,
@@ -148,10 +151,11 @@ impl LoggingService {
             LogSystem::Graph => config.graph_enabled,
             LogSystem::Sorting => config.sorting_enabled,
             LogSystem::Waveform => config.waveform_enabled,
-            LogSystem::Duration => config.duration_enabled, // Add duration check
-            LogSystem::Timeline => config.timeline_enabled, // Add timeline check
-            LogSystem::Operation => config.operation_enabled, // Add operation check
+            LogSystem::Duration => config.duration_enabled,
+            LogSystem::Timeline => config.timeline_enabled,
+            LogSystem::Operation => config.operation_enabled,
             LogSystem::EventEmits => config.event_emits_enabled,
+            LogSystem::Artifacts => config.artifacts_enabled,
         };
 
         if !should_log {
@@ -191,7 +195,8 @@ impl LoggingService {
                 LogSystem::Duration => "DURATION",
                 LogSystem::Timeline => "TIMELINE",
                 LogSystem::Operation => "OPERATION",
-                LogSystem::EventEmits => "EVENT EMITS",
+                LogSystem::EventEmits => "EVENT_EMITS",
+                LogSystem::Artifacts => "ARTIFACTS",
             };
 
             let category_str = category.map(|c| format!("[{}] ", c)).unwrap_or_default();
@@ -395,6 +400,63 @@ macro_rules! operation_error {
     ($logger:expr, $category:expr, $message:expr) => {
         $logger.error(
             $crate::logging::LogSystem::Operation,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+// Artifacts-specific logging macros
+#[macro_export]
+macro_rules! artifacts_debug {
+    ($logger:expr, $message:expr) => {
+        $logger.debug($crate::logging::LogSystem::Artifacts, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.debug(
+            $crate::logging::LogSystem::Artifacts,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! artifacts_info {
+    ($logger:expr, $message:expr) => {
+        $logger.info($crate::logging::LogSystem::Artifacts, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.info(
+            $crate::logging::LogSystem::Artifacts,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! artifacts_warning {
+    ($logger:expr, $message:expr) => {
+        $logger.warning($crate::logging::LogSystem::Artifacts, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.warning(
+            $crate::logging::LogSystem::Artifacts,
+            $message,
+            Some($category),
+        );
+    };
+}
+
+#[macro_export]
+macro_rules! artifacts_error {
+    ($logger:expr, $message:expr) => {
+        $logger.error($crate::logging::LogSystem::Artifacts, $message, None);
+    };
+    ($logger:expr, $category:expr, $message:expr) => {
+        $logger.error(
+            $crate::logging::LogSystem::Artifacts,
             $message,
             Some($category),
         );

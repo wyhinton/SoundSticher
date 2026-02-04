@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use tauri::State;
 use uuid::Uuid;
 
+use crate::artifacts::ArtifactRegistry;
+
 #[derive(Clone)]
 pub struct AudioFile {
     pub samples: Vec<i16>,
@@ -28,6 +30,7 @@ pub struct AppState {
     pub custom_order: Mutex<Vec<Uuid>>, // Store the custom order
     pub current_play_progress: Mutex<f32>, // Track normalized play progress (0.0-1.0)
     pub seek_start_time: Mutex<f32>, // Time in seconds when seeking started (for accurate elapsed time)
+    pub artifact_registry: Arc<ArtifactRegistry>, // Global artifact registry
 }
 
 #[derive(Serialize)]

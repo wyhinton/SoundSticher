@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface LoggingState {
+  artifactsLog: boolean;
   combineLog: boolean;
   cookLog: boolean;
   d3timelinemanagerLog: boolean;
@@ -46,7 +47,8 @@ export interface BackendLogMessage {
     | 'waveform'
     | 'timeline'
     | 'operation'
-    | 'eventEmits';
+    | 'eventEmits'
+    | 'artifacts';
   category?: string;
   message: string;
   data?: any;
@@ -54,6 +56,7 @@ export interface BackendLogMessage {
 }
 
 export const loggingState = persisted<LoggingState>('loggingState', {
+  artifactsLog: false,
   cookLog: false,
   combineLog: false,
   d3timelinemanagerLog: false,
@@ -139,6 +142,7 @@ export const initializeBackendLogListener = () => {
     };
 
     const systemColors = {
+      artifacts: { bg: '#00ACC1', color: 'white' },
       encoder: { bg: '#4CAF50', color: 'white' },
       combine: { bg: '#FF5722', color: 'white' },
       playback: { bg: '#9C27B0', color: 'white' },
@@ -183,6 +187,7 @@ export const initializeBackendLogListener = () => {
 export const updateBackendLoggingConfig = async (config: Partial<LoggingState>) => {
   try {
     const backendConfig = {
+      artifacts_enabled: config.artifactsLog ?? false,
       combine_enabled: config.combineLog ?? false,
       console_output: true,
       cook_enabled: config.cookLog ?? false,
@@ -210,6 +215,68 @@ const isLoggingEnabled = (category: keyof LoggingState): boolean => {
 
 // Logging utility functions with consistent styling and emojis
 export const logger = {
+  artifacts: {
+    info: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('artifactsLog')) {
+        console.log(
+          `%c📦 Artifacts %c${message}`,
+          'background: #00ACC1; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #00ACC1; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    success: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('artifactsLog')) {
+        console.log(
+          `%c✅ Artifacts %c${message}`,
+          'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #4CAF50; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    warning: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('artifactsLog')) {
+        console.warn(
+          `%c⚠️ Artifacts %c${message}`,
+          'background: #FF9800; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #FF9800; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    error: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('artifactsLog')) {
+        console.error(
+          `%c❌ Artifacts %c${message}`,
+          'background: #f44336; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #f44336; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    register: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('artifactsLog')) {
+        console.log(
+          `%c📝 Artifacts-Register %c${message}`,
+          'background: #009688; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #009688; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+    query: (message: string, ...args: any[]) => {
+      if (isLoggingEnabled('artifactsLog')) {
+        console.log(
+          `%c🔍 Artifacts-Query %c${message}`,
+          'background: #3F51B5; color: white; padding: 2px 4px; border-radius: 3px; font-weight: bold;',
+          'color: #3F51B5; font-weight: normal;',
+          ...args
+        );
+      }
+    },
+  },
   groups: {
     info: (message: string, ...args: any[]) => {
       if (isLoggingEnabled('groupsLog')) {

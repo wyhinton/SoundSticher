@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatBytes, formatMilliseconds } from '../utils/format';
+  import OperationArtifactsTable from './OperationArtifactsTable.svelte';
   import {
     animatedIds,
     appState,
@@ -8,10 +9,15 @@
     pause_sample_preview,
     play_sample_preview,
     setHoveredItem,
-    currentOperationFileList,
     type Section,
   } from '../state/state.svelte';
   import { invoke } from '@tauri-apps/api/core';
+
+  // Props
+  export let operationId: string | undefined = undefined;
+
+  // Derived file list from operation ID
+  let currentFileList: string[] = [];
 
   // Define interface for file metadata from Tauri
   interface FileMetadata {
@@ -29,12 +35,12 @@
 
   // Function to fetch metadata for current file list
   async function fetchMetadata() {
-    if (metadataLoading || $currentOperationFileList.length === 0) return;
+    if (metadataLoading || currentFileList.length === 0) return;
 
     metadataLoading = true;
     try {
       const metadataResults: FileMetadata[] = await invoke('get_metadata', {
-        titles: $currentOperationFileList,
+        titles: currentFileList,
       });
 
       // Update our metadata map
@@ -52,9 +58,9 @@
     }
   }
 
-  // Local sorting function - now uses currentOperationFileList with real metadata
+  // Local sorting function - now uses currentFileList with real metadata
   function getSortedFiles(state: typeof $appState) {
-    return $currentOperationFileList.map((fileId, index) => {
+    return currentFileList.map((fileId, index) => {
       const metadata = fileMetadata.get(fileId);
       return {
         id: fileId,
@@ -71,16 +77,47 @@
     });
   }
 
-  // Reactive statement to fetch metadata when file list changes
-  $: if ($currentOperationFileList.length > 0) {
+  // Function to derive file list from operation ID
+  function getFileListFromOperation(opId: string | undefined): string[] {
+    if (!opId) return [];
+
+    const operation = $appState.operations?.defs?.[opId];
+    if (!operation || operation.kind !== 'merge') return [];
+
+    const fileIds: string[] = [];
+
+    // For each source in the MergeOp (which should be operation references)
+    for (const source of operation.sources) {
+      if (source.type === 'operation') {
+        // Get the referenced SampleOp by its operationId
+        const sampleOp = $appState.operations?.defs?.[source.operationId];
+        if (sampleOp && sampleOp.kind === 'sample') {
+          // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
+          for (const sampleSource of sampleOp.sources) {
+            if (sampleSource.type === 'file') {
+              fileIds.push(sampleSource.fileId);
+            }
+          }
+        }
+      }
+    }
+
+    return fileIds;
+  }
+
+  // Reactive statements
+  $: currentFileList = getFileListFromOperation(operationId);
+
+  $: if (currentFileList.length > 0) {
     fetchMetadata();
   }
 </script>
 
 <div class="w-fill-available card d-flex flex-column position-relative h-fill-available">
   <div class="d-flex flex-column h-fill-available" style:background-color="#080808">
+    <!-- Inputs/Outputs Section -->
     <div class="d-flex flex-column"></div>
-    {#if $currentOperationFileList.length === 0}
+    {#if currentFileList.length === 0}
       <div class="position-absolute no-inputs-warning">No files in current operation</div>
     {:else if metadataLoading}
       <div class="position-absolute no-inputs-warning">
@@ -170,6 +207,9 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Artifacts Section -->
+    <OperationArtifactsTable {operationId} />
   </div>
 
   <!-- ERRORS -->

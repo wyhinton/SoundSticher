@@ -8,6 +8,7 @@
 
   import SourceNode from './SourceNode.svelte';
   import OperationNode from './OperationNode.svelte';
+  import OperationNodeWithStatus from './OperationNodeWithStatus.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
   import { onMount } from 'svelte';
   import { createOperationRenderStore } from '$lib/state/autoRender';
@@ -50,7 +51,7 @@
 
   // Custom node types
   const nodeTypes: NodeTypes = {
-    operation: OperationNode,
+    operation: OperationNodeWithStatus,
     source: SourceNode,
   };
 

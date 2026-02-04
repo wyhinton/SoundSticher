@@ -8,6 +8,8 @@ use crate::playback::op_playback::AudioSpec;
 use crate::render_ops::generated_operation_defs::{FrontendOperationDef, FrontendOperationsState};
 use crate::render_ops::{MergeOpRender, OperationContext, RenderOperation, SampleOpRender};
 use crate::send_channel_event;
+use crate::state::AppState;
+use crate::util::id::id_utils;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -239,6 +241,7 @@ impl Default for TestOperationParams {
 pub async fn test_render_single_operation(
     operation_name: String,
     params: TestOperationParams,
+    app_state: State<'_, Arc<AppState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
     let start_time = std::time::Instant::now();
@@ -845,10 +848,12 @@ pub async fn test_render_single_operation(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: None, // Test context without frontend ID
                 work_dir,
                 inputs,
                 parameters: params.parameters.clone(),
                 progress_callback: None,
+                artifact_registry: Some(app_state.artifact_registry.clone()),
             };
 
             // Execute the merge operation
@@ -1232,10 +1237,12 @@ fn execute_child_operation(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: None, // No frontend ID for test helper functions
                 work_dir,
                 inputs: HashMap::new(), // No inputs for load operations
                 parameters,
                 progress_callback: None,
+                artifact_registry: None, // No artifact registry for test helper functions
             };
 
             // Execute the operation
@@ -1442,6 +1449,7 @@ pub struct BatchRenderParams {
 pub enum RenderAllAutoOperationsEvent {
     Started {
         total_operations: usize,
+        operation_ids: Vec<OperationId>,
     },
     Progress {
         operation_index: usize,
@@ -1458,6 +1466,7 @@ pub enum RenderAllAutoOperationsEvent {
 #[tauri::command]
 pub async fn render_all_auto_operations(
     params: BatchRenderParams,
+    app_state: State<'_, Arc<AppState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<RenderAllAutoOperationsEvent>,
 ) -> Result<BatchRenderResult, Error> {
@@ -1519,6 +1528,7 @@ pub async fn render_all_auto_operations(
         on_event,
         RenderAllAutoOperationsEvent::Started {
             total_operations: operations_to_process.len(),
+            operation_ids: render_order.clone(),
         }
     );
 
@@ -1614,8 +1624,13 @@ pub async fn render_all_auto_operations(
             );
         }
 
-        let render_result =
-            render_single_operation_internal(op, &params.operations_state, &logging_service).await;
+        let render_result = render_single_operation_internal(
+            op,
+            &params.operations_state,
+            &app_state,
+            &logging_service,
+        )
+        .await;
 
         let op_duration = op_start.elapsed();
 
@@ -1802,6 +1817,7 @@ fn compute_render_order(
 async fn render_single_operation_internal(
     op: &FrontendOperationDef,
     operations_state: &FrontendOperationsState,
+    app_state: &State<'_, Arc<AppState>>,
     logging_service: &State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<String, Error> {
     let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
@@ -1823,6 +1839,14 @@ async fn render_single_operation_internal(
                     &format!(
                         "🔄 Rendering merge operation '{}' -> '{}'",
                         name, output_path
+                    )
+                );
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📋 Frontend operation ID (from FrontendOperationDef): '{}'",
+                        id
                     )
                 );
             }
@@ -1866,7 +1890,28 @@ async fn render_single_operation_internal(
             );
 
             let op_id = op_map.insert(());
+            let op_id_string = id_utils::id_to_string(op_id);
             let work_dir = base_artifacts_dir.join(format!("auto_merge_{:?}", op_id));
+
+            // Enhanced logging to debug ID mismatch
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "🔑 ID COMPARISON:\n  Frontend ID (string): '{}'\n  Backend OpId (SlotMap): {:?}\n  Backend OpId as string: '{}'",
+                        id, op_id, op_id_string
+                    )
+                );
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "⚠️ NOTE: Frontend ID '{}' != Backend OpId string '{}' - these are different ID systems!",
+                        id, op_id_string
+                    )
+                );
+            }
 
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
                 return Err(Error::Io(std::io::Error::other(format!(
@@ -1877,13 +1922,27 @@ async fn render_single_operation_internal(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: Some(id.clone()), // Pass frontend ID for artifact registration
                 work_dir,
                 inputs,
                 parameters: serde_json::json!({
                     "output_path": output_path,
+                    "frontend_op_id": id,  // Pass frontend ID in parameters for artifact registration
                 }),
                 progress_callback: None,
+                artifact_registry: Some(app_state.artifact_registry.clone()),
             };
+
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Combine,
+                    &format!(
+                        "📦 Creating OperationContext with op_id={:?}, frontend_op_id passed in parameters",
+                        op_id
+                    )
+                );
+            }
 
             operation.execute(context).map_err(|e| {
                 Error::Io(std::io::Error::other(format!(
@@ -1982,6 +2041,7 @@ async fn render_single_operation_internal(
 fn render_single_operation_blocking(
     op: &FrontendOperationDef,
     operations_state: &FrontendOperationsState,
+    artifact_registry: Option<Arc<crate::artifacts::ArtifactRegistry>>,
     logging_service: &Arc<Mutex<LoggingService>>,
 ) -> Result<String, Error> {
     let base_artifacts_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
@@ -2059,12 +2119,14 @@ fn render_single_operation_blocking(
 
             let context = OperationContext {
                 op_id,
+                frontend_op_id: None, // Blocking version without frontend ID
                 work_dir,
                 inputs,
                 parameters: serde_json::json!({
                     "output_path": output_path,
                 }),
                 progress_callback: None,
+                artifact_registry,
             };
 
             operation.execute(context).map_err(|e| {
@@ -2416,7 +2478,7 @@ fn render_all_auto_operations_blocking(
         }
 
         let render_result =
-            render_single_operation_blocking(op, &params.operations_state, &logging_service);
+            render_single_operation_blocking(op, &params.operations_state, None, &logging_service);
 
         let op_duration = op_start.elapsed();
 

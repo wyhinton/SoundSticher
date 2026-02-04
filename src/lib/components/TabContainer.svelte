@@ -94,6 +94,8 @@
         <slot name="invoke-history" />
       {:else if activeTab === 'selection'}
         <slot name="selection" />
+      {:else if activeTab === 'artifacts'}
+        <slot name="artifacts" />
       {:else if activeTab === 'undo-redo'}
         <slot name="undo-redo" />
       {:else}

@@ -1,8 +1,9 @@
 // Operation trait definition
 
-use crate::artifacts::Artifact;
+use crate::artifacts::{Artifact, ArtifactRegistry, ArtifactId};
 use crate::graph::OpId;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Result of an operation execution
 pub type OperationResult = Result<Artifact, OperationError>;
@@ -31,8 +32,13 @@ pub enum OperationError {
 
 /// Context provided to operations during execution
 pub struct OperationContext {
-    /// The operation's unique identifier
+    /// The operation's unique identifier (backend SlotMap key)
     pub op_id: OpId,
+
+    /// Frontend operation ID string (e.g., "op_mkxk4epg_itm7ep")
+    /// This is the ID used by the frontend to identify operations and should be
+    /// used when registering artifacts so they can be queried by frontend ID.
+    pub frontend_op_id: Option<String>,
 
     /// Input artifacts from dependencies
     pub inputs: HashMap<String, Artifact>,
@@ -45,18 +51,26 @@ pub struct OperationContext {
 
     /// Optional progress callback
     pub progress_callback: Option<Box<dyn Fn(f32) + Send + Sync>>,
+
+    /// Artifact registry for publishing operation outputs
+    pub artifact_registry: Option<Arc<ArtifactRegistry>>,
 }
 
 impl std::fmt::Debug for OperationContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OperationContext")
             .field("op_id", &self.op_id)
+            .field("frontend_op_id", &self.frontend_op_id)
             .field("inputs", &self.inputs)
             .field("parameters", &self.parameters)
             .field("work_dir", &self.work_dir)
             .field(
                 "progress_callback",
                 &self.progress_callback.as_ref().map(|_| "<callback>"),
+            )
+            .field(
+                "artifact_registry",
+                &self.artifact_registry.as_ref().map(|_| "<registry>"),
             )
             .finish()
     }
@@ -89,6 +103,54 @@ impl OperationContext {
     pub fn report_progress(&self, progress: f32) {
         if let Some(ref callback) = self.progress_callback {
             callback(progress.clamp(0.0, 1.0));
+        }
+    }
+
+    /// Publish an artifact to the registry
+    /// Uses frontend_op_id if available for proper frontend-backend ID mapping
+    pub fn publish_artifact(&self, artifact: Artifact) -> Result<Option<ArtifactId>, OperationError> {
+        if let Some(ref registry) = self.artifact_registry {
+            registry.register_artifact_with_frontend_id(
+                artifact, 
+                self.op_id, 
+                self.frontend_op_id.clone()
+            )
+                .map(Some)
+                .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
+        } else {
+            // If no registry is available, we still succeed but return None
+            Ok(None)
+        }
+    }
+
+    /// Publish an artifact with metadata tags
+    /// Uses frontend_op_id if available for proper frontend-backend ID mapping
+    pub fn publish_artifact_with_tags(
+        &self, 
+        artifact: Artifact, 
+        tags: HashMap<String, String>
+    ) -> Result<Option<ArtifactId>, OperationError> {
+        if let Some(ref registry) = self.artifact_registry {
+            registry.register_artifact_with_tags_and_frontend_id(
+                artifact, 
+                self.op_id, 
+                tags, 
+                self.frontend_op_id.clone()
+            )
+                .map(Some)
+                .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
+        } else {
+            // If no registry is available, we still succeed but return None
+            Ok(None)
+        }
+    }
+
+    /// Get artifacts published by this operation
+    pub fn get_published_artifacts(&self) -> Vec<(ArtifactId, Artifact)> {
+        if let Some(ref registry) = self.artifact_registry {
+            registry.get_artifacts_by_op(&self.op_id)
+        } else {
+            Vec::new()
         }
     }
 }

@@ -24,6 +24,7 @@
   import TabContainer from '$lib/components/TabContainer.svelte';
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
   import LoggingControls from '$lib/components/LoggingControls.svelte';
+  import ArtifactRegistryDebug from '$lib/components/ArtifactRegistryDebug.svelte';
   import {
     selectedCount,
     previewCount,
@@ -264,6 +265,7 @@
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
     { id: 'listeners', label: 'Listeners', icon: 'fa-ear-listen' },
+    { id: 'artifacts', label: 'Artifact Registry', icon: 'fa-archive' },
     { id: 'debug', label: 'Debug Info', icon: 'fa-bug' },
   ];
 
@@ -816,6 +818,11 @@
           </table>
         </div>
       {/if}
+    </div>
+
+    <!-- Artifact Registry Tab -->
+    <div slot="artifacts">
+      <ArtifactRegistryDebug />
     </div>
 
     <!-- Debug Info Tab -->
