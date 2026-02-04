@@ -1,6 +1,8 @@
 <script lang="ts">
   import { resetPerformance, performanceStore } from '$lib/state/performance';
+  import { TAURI_COMMANDS, type CommandInfo } from '$lib/generated/tauri_commands';
   import { derived } from 'svelte/store';
+  import { invoke } from '@tauri-apps/api/core';
 
   const sortedPerformance = derived(performanceStore, $store => {
     return Object.entries($store).sort((a, b) => {
@@ -12,6 +14,27 @@
 
   function handleReset() {
     resetPerformance();
+  }
+
+  function getCommandInfo(commandName: string): CommandInfo | undefined {
+    return TAURI_COMMANDS[commandName];
+  }
+
+  async function openCommandSource(commandName: string) {
+    const info = getCommandInfo(commandName);
+    if (!info) {
+      console.warn(`Command info not found for: ${commandName}`);
+      return;
+    }
+
+    try {
+      await invoke('open_file_in_editor', {
+        filePath: info.file_path,
+        lineNumber: info.line_number,
+      });
+    } catch (error) {
+      console.error('Failed to open file:', error);
+    }
   }
 </script>
 
@@ -52,7 +75,19 @@
     <tbody>
       {#each $sortedPerformance as [key, value]}
         <tr>
-          <td><b>{key}</b></td>
+          <td>
+            {#if getCommandInfo(key)}
+              <button
+                class="metric-link"
+                on:click={() => openCommandSource(key)}
+                title="Click to open {key} source in VS Code"
+              >
+                <b>{key}</b>
+              </button>
+            {:else}
+              <b>{key}</b>
+            {/if}
+          </td>
           {#if value.length > 0}
             <td class="text-center">{value[value.length - 1].time.toFixed(2)}</td>
           {/if}
@@ -96,6 +131,30 @@
 
   .performance-table tr:last-child td {
     border-bottom: none;
+  }
+
+  /* Metric Link Styles */
+  .metric-link {
+    background: none;
+    border: none;
+    color: #60a5fa;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    font-weight: 700;
+    text-decoration: underline;
+    transition: all 0.2s ease;
+    font-size: inherit;
+    font-family: inherit;
+  }
+
+  .metric-link:hover {
+    color: #93c5fd;
+    text-decoration-color: #93c5fd;
+  }
+
+  .metric-link:active {
+    color: #3b82f6;
   }
 
   /* Button Styles */
