@@ -26,6 +26,7 @@
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
   import LoggingControls from '$lib/components/LoggingControls.svelte';
   import ArtifactRegistryDebug from '$lib/components/ArtifactRegistryDebug.svelte';
+  import TimelineStoreDebug from '$lib/components/TimelineStoreDebug.svelte';
   import {
     selectedCount,
     previewCount,
@@ -252,6 +253,7 @@
     { id: 'frontend', label: 'Frontend State', icon: 'fa-code' },
     { id: 'backend', label: 'Backend State', icon: 'fa-server' },
     { id: 'selection', label: 'Selection', icon: 'fa-check-square' },
+    { id: 'timeline-stores', label: 'Timeline Stores', icon: 'fa-layer-group' },
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
     { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'undo-redo', label: 'Undo/Redo', icon: 'fa-undo' },
@@ -475,6 +477,11 @@
         </div>
       </div>
       <PrismWrapper data={$selectionDisplayDataStore} panelKey="selection" />
+    </div>
+
+    <!-- Timeline Stores Tab -->
+    <div slot="timeline-stores">
+      <TimelineStoreDebug />
     </div>
 
     <!-- Performance Tab -->

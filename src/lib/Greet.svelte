@@ -3,7 +3,7 @@
 
   import { appState } from './state/state.svelte';
   import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
-  import Plotted from './PlaybackDisplay/Timeline.svelte';
+  import Timeline from './PlaybackDisplay/Timeline.svelte';
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import { onDestroy, onMount } from 'svelte';
   import Footer from './StatusFooter.svelte';
@@ -123,7 +123,7 @@
         >
           <div class="timeline-container">
             <PlottedInfo />
-            <Plotted
+            <Timeline
               bind:this={timelineComponent}
               on:selectionChange={handleTimelineSelectionChange}
             />

@@ -98,6 +98,8 @@
         <slot name="artifacts" />
       {:else if activeTab === 'undo-redo'}
         <slot name="undo-redo" />
+      {:else if activeTab === 'timeline-stores'}
+        <slot name="timeline-stores" />
       {:else}
         <slot {activeTab} />
       {/if}

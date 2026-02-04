@@ -5,6 +5,7 @@ import { initializeStatusPublishers } from './status-publishers';
 import { undo, redo, canUndo, canRedo } from './undo/undo';
 import { opPlaybackService } from './opPlaybackService';
 import { initializeAutoRenderSubscription } from './autoRender';
+import { initializeTimelines } from './timelines';
 
 /**
  * Initialize all frontend systems and services
@@ -24,6 +25,9 @@ export function initializeFrontend(): () => void {
 
   // Initialize waveform service (handles loading waveforms when operation changes)
   const cleanupWaveformService = initWaveformService();
+
+  // Initialize timeline system (auto-creates timeline for selected operation)
+  const cleanupTimelines = initializeTimelines();
 
   // Setup keyboard shortcuts
   const handleKeyPress = (ev: KeyboardEvent) => {
@@ -72,5 +76,6 @@ export function initializeFrontend(): () => void {
   return () => {
     window.removeEventListener('keydown', handleKeyPress);
     cleanupWaveformService?.();
+    cleanupTimelines?.();
   };
 }
