@@ -30,6 +30,7 @@
     operationTimelineHierarchy,
     initWaveformService,
   } from '../state/waveformCache';
+  import { activeTimelineId, timelinesStore, type TimelineId } from '$lib/state/timelines';
   import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
   // Import operation playback service
   import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
@@ -50,6 +51,8 @@
   import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
 
   const dispatch = createEventDispatcher();
+
+  export let timelineId: TimelineId | null = null;
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -130,17 +133,25 @@
   // TIMELINE ITEMS - Operation-based system
   // ============================================================================
 
+  // Resolve the active timeline (or use the provided timelineId)
+  $: resolvedTimelineId = timelineId ?? $activeTimelineId ?? null;
+  $: activeTimeline = resolvedTimelineId ? $timelinesStore.timelines[resolvedTimelineId] : null;
+  $: timelineSource = activeTimeline?.source ?? null;
+
   // Reactive timeline items from operation system
-  $: timelineItems = $operationTimelineItems;
+  $: timelineItems =
+    timelineSource?.kind === 'operation' ? $operationTimelineItems : ([] as TimelineItem[]);
 
   // Reactive duration from operation system
-  $: currentDuration = $operationDuration;
+  $: currentDuration = timelineSource?.kind === 'operation' ? $operationDuration : 0;
 
   // Loading state for operation waveforms
-  $: isLoadingWaveforms = $operationWaveformsLoading;
+  $: isLoadingWaveforms =
+    timelineSource?.kind === 'operation' ? $operationWaveformsLoading : false;
 
   // Hierarchy information for drag operations
-  $: timelineHierarchy = $operationTimelineHierarchy;
+  $: timelineHierarchy =
+    timelineSource?.kind === 'operation' ? $operationTimelineHierarchy : null;
 
   // Check if we have no active samples
   $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;
@@ -278,6 +289,9 @@
     const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
+      if (timelineSource?.kind !== 'operation') {
+        return;
+      }
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
@@ -294,6 +308,9 @@
         : null;
 
     if (clickedSegmentIndex === null) {
+      if (timelineSource?.kind !== 'operation') {
+        return;
+      }
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
@@ -330,6 +347,9 @@
     }
 
     if (event.key === 'Delete' && selectedSegments.size > 0) {
+      if (timelineSource?.kind !== 'operation') {
+        return;
+      }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();

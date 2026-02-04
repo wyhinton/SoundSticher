@@ -26,6 +26,7 @@
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
   import LoggingControls from '$lib/components/LoggingControls.svelte';
   import ArtifactRegistryDebug from '$lib/components/ArtifactRegistryDebug.svelte';
+  import TimelineStoreDebug from '$lib/components/TimelineStoreDebug.svelte';
   import {
     selectedCount,
     previewCount,
@@ -255,6 +256,7 @@
     { id: 'performance', label: 'Performance', icon: 'fa-chart-line' },
     { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'undo-redo', label: 'Undo/Redo', icon: 'fa-undo' },
+    { id: 'timeline-store', label: 'Timeline Store', icon: 'fa-clock' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
     { id: 'listeners', label: 'Listeners', icon: 'fa-ear-listen' },
@@ -676,6 +678,11 @@
           {/if}
         </div>
       </div>
+    </div>
+
+    <!-- Timeline Store Tab -->
+    <div slot="timeline-store">
+      <TimelineStoreDebug />
     </div>
 
     <!-- Export State Tab -->
