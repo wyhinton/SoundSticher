@@ -182,7 +182,12 @@ pub async fn get_filtered_artifacts(
         // Log all available operation IDs for comparison (both backend and frontend IDs)
         let available_ids: Vec<(String, Option<String>)> = records
             .iter()
-            .map(|r| (id_utils::id_to_string(r.creator_op_id), r.frontend_op_id.clone()))
+            .map(|r| {
+                (
+                    id_utils::id_to_string(r.creator_op_id),
+                    r.frontend_op_id.clone(),
+                )
+            })
             .collect();
 
         logger.debug(
@@ -201,17 +206,23 @@ pub async fn get_filtered_artifacts(
 
         records.retain(|r| {
             let backend_id_string = id_utils::id_to_string(r.creator_op_id);
-            
+
             // Try to match against frontend_op_id first if it looks like a frontend ID
             let matches = if is_frontend_id {
                 // Match against frontend_op_id (preferred for frontend queries)
-                let frontend_match = r.frontend_op_id.as_ref().map_or(false, |fid| fid == operation_id);
+                let frontend_match = r
+                    .frontend_op_id
+                    .as_ref()
+                    .map_or(false, |fid| fid == operation_id);
                 // Fallback to backend ID match if no frontend match
                 frontend_match || backend_id_string == *operation_id
             } else {
                 // Match against backend ID first, then try frontend ID
                 let backend_match = backend_id_string == *operation_id;
-                let frontend_match = r.frontend_op_id.as_ref().map_or(false, |fid| fid == operation_id);
+                let frontend_match = r
+                    .frontend_op_id
+                    .as_ref()
+                    .map_or(false, |fid| fid == operation_id);
                 backend_match || frontend_match
             };
 
