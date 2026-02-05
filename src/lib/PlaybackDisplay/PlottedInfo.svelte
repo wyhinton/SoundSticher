@@ -2,9 +2,9 @@
   import { listen } from '@tauri-apps/api/event';
   import Progress from '../Progress.svelte';
   import TransportControls from './TransportControls.svelte';
-  import TimeDisplay from './TimeDisplay.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
   import { type Timeline } from '../state/timelines';
+  import TimeDisplay from './TimeDisplay.svelte';
 
   export let timeline: Timeline;
 
@@ -28,7 +28,7 @@
   $: transportDisabled = (timelineItems?.length || 0) === 0;
 </script>
 
-<div class="d-flex flex-column text-success">
+<div class="d-flex text-success">
   <!-- Timeline header with operation info -->
   <div class="timeline-header">
     <span class="timeline-operation-name">
@@ -50,7 +50,7 @@
 
   <div class="d-flex gap-1">
     <TransportControls disabled={transportDisabled} />
-    <TimeDisplay />
+    <TimeDisplay compact={true} />
   </div>
   <TimelineInfo></TimelineInfo>
 </div>
@@ -61,10 +61,9 @@
   }
 
   .timeline-header {
-    padding: 4px 8px;
     background-color: var(--bs-secondary-bg);
     border-bottom: 1px solid var(--bs-border-color);
-    margin-bottom: 4px;
+    font-size: 14px;
   }
 
   .timeline-operation-name {

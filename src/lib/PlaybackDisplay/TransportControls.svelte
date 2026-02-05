@@ -122,7 +122,7 @@
 {/snippet}
 
 <!-- Audacity-style Transport Controls -->
-<div class="transport-controls d-flex align-items-center gap-2 py-2 px-2" class:disabled>
+<div class="transport-controls d-flex align-items-center gap-2 py-1 px-1" class:disabled>
   {@render transportButton(
     'fa-backward-step',
     'Skip to Start',
@@ -159,6 +159,7 @@
     border-radius: 4px;
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
     transition: opacity 0.2s ease;
+    padding: 2px 4px;
   }
 
   .transport-controls.disabled {
@@ -168,8 +169,8 @@
   }
 
   .btn-transport {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     border: 1px solid #4a5568;
     background: linear-gradient(to bottom, #4a5568, #2d3748);
     color: #e2e8f0;
@@ -178,7 +179,7 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    font-size: 14px;
+    font-size: 11px;
     transition: all 0.1s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
