@@ -12,10 +12,9 @@
   import MainDebugToolbar from './components/debug/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
-  import { opPlaybackService } from './state/opPlaybackService';
   import { TIMELINE_RESIZE } from './config/timelineConfig';
   import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
-  import { operationTimelines } from './state/timelines';
+  import { operationTimelines } from './state/timeline/timelines';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})

@@ -23,13 +23,13 @@
   import { D3TimelineManager } from './Timeline/D3TimelineManager';
   import { timelineDebugMode, type TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
-  import { timelinesStore, type TimelineId, type Timeline } from '$lib/state/timelines';
+  import { timelinesStore, type TimelineId, type Timeline } from '$lib/state/timeline/timelines';
   import {
     getIndicesToMoveOnDrag,
     type TimelineHierarchy,
     type FlattenedTimelineItem,
     buildHierarchyMaps,
-  } from '../state/timelineGraph';
+  } from '../state/timeline/timelineGraph';
   import { type AudioFileTimelineItem } from '../state/state.svelte';
   // Import operation playback service
   import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';

@@ -68,24 +68,37 @@ export interface BuildGraphRequest {
 }
 
 /**
- * Build graph event types from Rust backend
+ * Build graph event types from Rust backend (timeline-aware)
  */
 export interface OpPlaybackBuildGraphEvent {
   event: 'started' | 'progress' | 'finished';
   data:
-    | { operationCount: number } // started
     | {
+        timelineId: string;
+        operationCount: number;
+      } // started
+    | {
+        timelineId: string;
         operationName: string;
         operationIndex: number;
         totalOperations: number;
         durationSeconds: number;
       } // progress
     | {
+        timelineId: string;
         operationCount: number;
         totalDurationSeconds: number;
         sampleRate: number;
         channels: number;
       }; // finished
+}
+
+/**
+ * Timeline progress event from Rust backend
+ */
+export interface OpTimelineProgressEvent {
+  timelineId: string | null;
+  progress: number;
 }
 
 /**
@@ -187,31 +200,43 @@ export const opIsPaused: Readable<boolean> = derived(internalState, $state => $s
 let progressUnlisten: UnlistenFn | null = null;
 
 /**
- * Initialize the progress event listener
+ * Initialize the progress event listener (legacy global listener)
+ *
+ * NOTE: This is being phased out in favor of timeline-specific progress handling.
+ * New timeline progress events include timelineId and should be handled in timelines.ts
  */
 async function initProgressListener(): Promise<void> {
   if (progressUnlisten) return;
 
-  progressUnlisten = await listen<number>('op-timeline-progress', event => {
-    const progress = event.payload;
+  progressUnlisten = await listen<OpTimelineProgressEvent>('op-timeline-progress', event => {
+    const { timelineId, progress } = event.payload;
     const state = get(internalState);
     const newPositionSeconds = progress * state.durationSeconds;
 
-    // Add detailed progress logging
-    if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
+    // Only update global state if this is for the "active" timeline or no specific timeline
+    // This maintains backward compatibility for legacy single-timeline usage
+    if (!timelineId || timelineId === 'global') {
+      // Add detailed progress logging
+      if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
+        logger.opPlayback.info(
+          `Progress update: ${(progress * 100).toFixed(1)}% -> ${newPositionSeconds.toFixed(2)}s (was ${state.positionSeconds.toFixed(2)}s)`
+        );
+      }
+
+      internalState.update(s => ({
+        ...s,
+        progress,
+        positionSeconds: newPositionSeconds,
+      }));
+    } else {
+      // Timeline-specific progress - should be handled by timeline stores
       logger.opPlayback.info(
-        `Progress update: ${(progress * 100).toFixed(1)}% -> ${newPositionSeconds.toFixed(2)}s (was ${state.positionSeconds.toFixed(2)}s)`
+        `Timeline-specific progress for '${timelineId}': ${(progress * 100).toFixed(1)}% (handled by timeline store)`
       );
     }
-
-    internalState.update(s => ({
-      ...s,
-      progress,
-      positionSeconds: newPositionSeconds,
-    }));
   });
 
-  logger.opPlayback.info('Progress listener initialized');
+  logger.opPlayback.info('Progress listener initialized (legacy mode)');
 }
 
 /**
@@ -244,16 +269,101 @@ function cleanupEventListeners(): void {
 // ============================================================================
 
 /**
- * Build a playback graph from operations
+ * Build a playback graph for a specific timeline
  */
-export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
+export async function buildGraphForTimeline(
+  timelineId: string,
+  request: BuildGraphRequest
+): Promise<BuildGraphResponse> {
   // Ensure progress listener is initialized
   await initProgressListener();
 
-  // Use the utility function with state updater
-  const result = await buildGraphInternal(request, internalState.update);
+  logger.opPlayback.info(
+    `Building graph for timeline '${timelineId}' with ${request.operations.length} operations`
+  );
 
-  return result;
+  try {
+    const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', {
+      timelineId,
+      request,
+    });
+
+    if (!result.ok) {
+      throw new Error(
+        `Failed to build graph for timeline '${timelineId}': ${result.error.message}`
+      );
+    }
+
+    // Update global state for backward compatibility (if this becomes the active timeline)
+    internalState.update(s => ({
+      ...s,
+      hasGraph: true,
+      durationSeconds: result.value.totalDurationSeconds,
+      buildState: {
+        ...s.buildState,
+        isBuilding: false,
+        buildProgress: 1.0,
+      },
+    }));
+
+    logger.opPlayback.success(
+      `Graph built for timeline '${timelineId}': ${result.value.operationCount} operations, ${result.value.totalDurationSeconds.toFixed(2)}s`
+    );
+    return result.value;
+  } catch (error) {
+    logger.opPlayback.error(`Failed to build graph for timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
+ * Build a playback graph from operations (legacy - uses global timeline)
+ */
+export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
+  // For backward compatibility, use a default timeline ID
+  return buildGraphForTimeline('global', request);
+}
+
+/**
+ * Build a graph from file paths for a specific timeline
+ */
+export async function buildGraphFromFilesForTimeline(
+  timelineId: string,
+  filePaths: string[],
+  options: {
+    sampleRate?: number;
+    channels?: number;
+    loopPlayback?: boolean;
+    gap?: number; // Gap between files in seconds
+  } = {}
+): Promise<BuildGraphResponse> {
+  // Create operations for each file
+  const operations: AddOpRequest[] = [];
+  let currentTime = 0;
+
+  for (const filePath of filePaths) {
+    operations.push({
+      name: `file-${operations.length}`,
+      opType: 'sample',
+      filePath,
+      startTime: currentTime,
+      // endTime will be determined by file duration
+    });
+
+    // For now, assume a duration and add gap
+    // In a real implementation, you'd get the actual duration
+    const estimatedDuration = 30; // seconds - placeholder
+    currentTime += estimatedDuration + (options.gap ?? 0);
+  }
+
+  const request: BuildGraphRequest = {
+    operations,
+    sampleRate: options.sampleRate,
+    channels: options.channels,
+    loopPlayback: options.loopPlayback,
+  };
+
+  return buildGraphForTimeline(timelineId, request);
 }
 
 /**
@@ -277,7 +387,40 @@ export async function buildGraphFromFiles(
 }
 
 /**
- * Start playback
+ * Start playback for a specific timeline
+ */
+export async function playTimeline(timelineId: string, startSeconds?: number): Promise<void> {
+  logger.opPlayback.info(
+    `Starting playback for timeline '${timelineId}' at ${startSeconds?.toFixed(2) ?? 'current position'}s`
+  );
+
+  try {
+    const result = await invokeWithPerf('op_playback_play', {
+      timelineId,
+      startSeconds,
+    });
+
+    if (!result.ok) {
+      throw new Error(
+        `Failed to start playback for timeline '${timelineId}': ${result.error.message}`
+      );
+    }
+
+    internalState.update(s => ({
+      ...s,
+      isPlaying: true,
+      isPaused: false,
+    }));
+
+    logger.opPlayback.success(`Playback started for timeline '${timelineId}'`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to start playback for timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
+ * Start playback (legacy - uses global timeline behavior)
  */
 export async function play(startSeconds?: number): Promise<void> {
   const currentState = get(internalState);
@@ -291,7 +434,10 @@ export async function play(startSeconds?: number): Promise<void> {
   );
 
   try {
-    const result = await invokeWithPerf('op_playback_play', { startSeconds: actualStartSeconds });
+    const result = await invokeWithPerf('op_playback_play', {
+      timelineId: 'global',
+      startSeconds: actualStartSeconds,
+    });
 
     if (!result.ok) {
       throw new Error(`Failed to start playback: ${result.error.message}`);
@@ -401,13 +547,39 @@ export async function stop(): Promise<void> {
 }
 
 /**
- * Seek to a position
+ * Seek to a position in a specific timeline
+ */
+export async function seekTimeline(timelineId: string, positionSeconds: number): Promise<void> {
+  logger.opPlayback.info(`Seeking timeline '${timelineId}' to ${positionSeconds.toFixed(2)}s`);
+
+  try {
+    const result = await invokeWithPerf('op_playback_seek', {
+      timelineId,
+      positionSeconds,
+    });
+
+    if (!result.ok) {
+      throw new Error(`Failed to seek timeline '${timelineId}': ${result.error.message}`);
+    }
+
+    logger.opPlayback.success(`Seeked timeline '${timelineId}' to ${positionSeconds.toFixed(2)}s`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to seek timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
+ * Seek to a position (legacy - uses global timeline)
  */
 export async function seek(positionSeconds: number): Promise<void> {
   logger.opPlayback.info(`Seeking to ${positionSeconds.toFixed(2)}s`);
 
   try {
-    const result = await invokeWithPerf('op_playback_seek', { positionSeconds });
+    const result = await invokeWithPerf('op_playback_seek', {
+      timelineId: 'global',
+      positionSeconds,
+    });
 
     if (!result.ok) {
       throw new Error(`Failed to seek: ${result.error.message}`);
@@ -468,13 +640,41 @@ export async function setVolume(volume: number): Promise<void> {
 }
 
 /**
- * Set loop mode
+ * Set loop mode for a specific timeline
+ */
+export async function setTimelineLoop(timelineId: string, enabled: boolean): Promise<void> {
+  logger.opPlayback.info(`Setting loop mode to ${enabled} for timeline '${timelineId}'`);
+
+  try {
+    const result = await invokeWithPerf('op_playback_set_loop', {
+      timelineId,
+      loopPlayback: enabled,
+    });
+
+    if (!result.ok) {
+      throw new Error(
+        `Failed to set loop mode for timeline '${timelineId}': ${result.error.message}`
+      );
+    }
+
+    logger.opPlayback.success(`Loop mode set to ${enabled} for timeline '${timelineId}'`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to set loop mode for timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
+ * Set loop mode (legacy - uses global timeline)
  */
 export async function setLoop(enabled: boolean): Promise<void> {
   logger.opPlayback.info(`Setting loop mode to ${enabled}`);
 
   try {
-    const result = await invokeWithPerf('op_playback_set_loop', { loopPlayback: enabled });
+    const result = await invokeWithPerf('op_playback_set_loop', {
+      timelineId: 'global',
+      loopPlayback: enabled,
+    });
 
     if (!result.ok) {
       throw new Error(`Failed to set loop mode: ${result.error.message}`);
@@ -488,6 +688,70 @@ export async function setLoop(enabled: boolean): Promise<void> {
     logger.opPlayback.success(`Loop mode set to ${enabled}`);
   } catch (error) {
     logger.opPlayback.error('Failed to set loop mode:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get current progress for a specific timeline
+ */
+export async function getTimelineProgress(timelineId: string): Promise<number> {
+  const result = await invokeWithPerf<number>('op_playback_get_progress', { timelineId });
+
+  if (!result.ok) {
+    throw new Error(`Failed to get progress for timeline '${timelineId}': ${result.error.message}`);
+  }
+
+  return result.value;
+}
+
+/**
+ * Clear a specific timeline's playback session
+ */
+export async function clearTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Clearing timeline '${timelineId}'`);
+
+  try {
+    const result = await invokeWithPerf('op_playback_clear_timeline', { timelineId });
+
+    if (!result.ok) {
+      throw new Error(`Failed to clear timeline '${timelineId}': ${result.error.message}`);
+    }
+
+    logger.opPlayback.success(`Timeline '${timelineId}' cleared`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to clear timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
+ * Clear all timeline playback sessions
+ */
+export async function clearAllTimelines(): Promise<void> {
+  logger.opPlayback.info('Clearing all timelines');
+
+  try {
+    const result = await invokeWithPerf('op_playback_clear_all_timelines');
+
+    if (!result.ok) {
+      throw new Error(`Failed to clear all timelines: ${result.error.message}`);
+    }
+
+    // Reset global state
+    internalState.update(s => ({
+      ...s,
+      hasGraph: false,
+      durationSeconds: 0,
+      progress: 0,
+      positionSeconds: 0,
+      isPlaying: false,
+      isPaused: false,
+    }));
+
+    logger.opPlayback.success('All timelines cleared');
+  } catch (error) {
+    logger.opPlayback.error('Failed to clear all timelines:', error);
     throw error;
   }
 }
@@ -583,7 +847,7 @@ export const opPlaybackService = {
   isPlaying: opIsPlaying,
   isPaused: opIsPaused,
 
-  // Control functions
+  // Legacy single-timeline control functions
   buildGraph,
   buildGraphFromFiles,
   play,
@@ -596,6 +860,16 @@ export const opPlaybackService = {
   setLoop,
   togglePlayPause,
   clearGraph,
+
+  // New timeline-aware control functions
+  buildGraphForTimeline,
+  buildGraphFromFilesForTimeline,
+  playTimeline,
+  seekTimeline,
+  setTimelineLoop,
+  getTimelineProgress,
+  clearTimeline,
+  clearAllTimelines,
 
   // Progress functions
   getProgress,

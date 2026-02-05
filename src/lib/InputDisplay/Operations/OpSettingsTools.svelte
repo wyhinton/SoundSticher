@@ -3,7 +3,10 @@
   import { type RenderPolicy } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
   import { setRenderPolicyCommand } from '$lib/state/undo/undo';
-  import { toggleTimelineVisibilityByOpId, isOperationTimelineVisible } from '$lib/state/timelines';
+  import {
+    toggleTimelineVisibilityByOpId,
+    isOperationTimelineVisible,
+  } from '$lib/state/timeline/timelines';
 
   export let operationId: OperationId;
   export let operationName: string;

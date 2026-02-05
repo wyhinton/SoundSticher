@@ -14,9 +14,8 @@
  *   - Selection rules (click MergeOp to select group)
  */
 
-import type { TimelineItem, TimelineItemKind, AudioFileTimelineItem } from './state.svelte';
-import type { OperationDef, MergeOp, SampleOp } from './operation';
-import { logger } from './logging';
+import { logger } from '../logging';
+import type { TimelineItem, TimelineItemKind, AudioFileTimelineItem } from '../state.svelte';
 
 // ============================================================================
 // TYPES

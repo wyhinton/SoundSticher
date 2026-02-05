@@ -5,7 +5,7 @@
     toggleTimelineVisibilityByOpId,
     type Timeline,
     operationTimelines,
-  } from '$lib/state/timelines';
+  } from '$lib/state/timeline/timelines';
   import { appState } from '$lib/state/state.svelte';
   import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
   // Reactive stores

@@ -83,6 +83,8 @@ export interface PerformanceState {
   op_playback_build_graph: PerformanceMetric[];
   op_playback_build_graph_legacy: PerformanceMetric[];
   op_playback_clear_graph: PerformanceMetric[];
+  op_playback_clear_timeline: PerformanceMetric[];
+  op_playback_clear_all_timelines: PerformanceMetric[];
   op_playback_get_progress: PerformanceMetric[];
   op_playback_pause: PerformanceMetric[];
   op_playback_play: PerformanceMetric[];
@@ -135,6 +137,8 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   op_playback_build_graph: [],
   op_playback_build_graph_legacy: [],
   op_playback_clear_graph: [],
+  op_playback_clear_timeline: [],
+  op_playback_clear_all_timelines: [],
   op_playback_get_progress: [],
   op_playback_pause: [],
   op_playback_play: [],

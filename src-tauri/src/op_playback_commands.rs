@@ -1,7 +1,7 @@
-// Operation-based timeline playback commands
+// Multi-timeline operation playback commands (Model A)
 //
-// This module provides Tauri commands for playing back operations
-// using the pull-based playback system.
+// This module provides Tauri commands for managing multiple timeline sessions,
+// where each timeline has its own playback graph, progress, and state.
 
 use crate::logging::{LogSystem, LoggingService};
 use crate::playback::op_playback::{
@@ -14,12 +14,16 @@ use crate::{emit_logged, log_debug, log_info, send_channel_event};
 use rodio::{OutputStream, Sink};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
+use dashmap::DashMap;
+
+/// Timeline identifier type
+pub type TimelineId = String;
 
 /// Events emitted during playback graph building
 #[derive(Clone, Serialize)]
@@ -31,15 +35,18 @@ use tauri::{AppHandle, Emitter, State};
 )]
 pub enum OpPlaybackBuildGraphEvent {
     Started {
+        timeline_id: TimelineId,
         operation_count: usize,
     },
     Progress {
+        timeline_id: TimelineId,
         operation_name: String,
         operation_index: usize,
         total_operations: usize,
         duration_seconds: f64,
     },
     Finished {
+        timeline_id: TimelineId,
         operation_count: usize,
         total_duration_seconds: f64,
         sample_rate: u32,
@@ -47,66 +54,91 @@ pub enum OpPlaybackBuildGraphEvent {
     },
 }
 
-/// State for operation-based playback
+/// A playback session for a specific timeline
+pub struct PlaybackSession {
+    /// The playback graph for this timeline
+    pub graph: Arc<PlaybackGraph>,
+    
+    /// Audio specification
+    pub spec: AudioSpec,
+    
+    /// Current playback progress (normalized 0.0-1.0)
+    pub progress: Mutex<f32>,
+    
+    /// Current seek position in seconds
+    pub seek_seconds: Mutex<f32>,
+    
+    /// Whether this timeline loops
+    pub loop_playback: bool,
+    
+    /// Mapping of operation names to their IDs in this timeline's graph
+    pub op_ids: HashMap<String, PlaybackOpId>,
+}
+
+impl PlaybackSession {
+    pub fn new(graph: Arc<PlaybackGraph>, spec: AudioSpec, loop_playback: bool, op_ids: HashMap<String, PlaybackOpId>) -> Self {
+        Self {
+            graph,
+            spec,
+            progress: Mutex::new(0.0),
+            seek_seconds: Mutex::new(0.0),
+            loop_playback,
+            op_ids,
+        }
+    }
+    
+    pub fn duration_seconds(&self) -> f64 {
+        self.graph.duration().to_seconds(self.spec.sample_rate)
+    }
+}
+
+/// State for multi-timeline operation playback
 pub struct OpPlaybackState {
-    /// The current playback graph
-    graph: RwLock<Option<Arc<PlaybackGraph>>>,
-
-    /// Current audio sink
+    /// All timeline sessions
+    sessions: DashMap<TimelineId, PlaybackSession>,
+    
+    /// Which timeline is currently audible (only one can play at a time)
+    active_timeline: RwLock<Option<TimelineId>>,
+    
+    /// Single audio sink (hardware constraint)
     sink: Mutex<Option<Arc<Sink>>>,
-
-    /// Current playback position (normalized 0.0-1.0)
-    progress: Mutex<f32>,
-
-    /// Seek position in seconds (set when seeking during playback)
-    seek_position: Mutex<f32>,
-
+    
+    /// Whether audio is currently playing
+    is_playing: AtomicBool,
+    
     /// Whether playback is paused
     is_paused: AtomicBool,
-
-    /// Whether playback is active
-    is_playing: AtomicBool,
-
-    /// Whether to loop playback
-    loop_playback: AtomicBool,
-
-    /// Sample rate for playback
-    sample_rate: AtomicU64,
-
-    /// Mapping of operation names to their IDs in the current graph
-    op_id_map: RwLock<HashMap<String, PlaybackOpId>>,
-
-    /// Audio specification
-    spec: RwLock<AudioSpec>,
 }
 
 impl OpPlaybackState {
     pub fn new() -> Self {
         Self {
-            graph: RwLock::new(None),
+            sessions: DashMap::new(),
+            active_timeline: RwLock::new(None),
             sink: Mutex::new(None),
-            progress: Mutex::new(0.0),
-            seek_position: Mutex::new(0.0),
             is_paused: AtomicBool::new(false),
             is_playing: AtomicBool::new(false),
-            loop_playback: AtomicBool::new(true),
-            sample_rate: AtomicU64::new(44100),
-            op_id_map: RwLock::new(HashMap::new()),
-            spec: RwLock::new(AudioSpec::cd_quality()),
         }
     }
 
-    pub fn set_graph(&self, graph: Arc<PlaybackGraph>) {
-        *self.graph.write().unwrap() = Some(graph);
+    pub fn get_session(&self, timeline_id: &TimelineId) -> Option<dashmap::mapref::one::Ref<TimelineId, PlaybackSession>> {
+        self.sessions.get(timeline_id)
     }
 
-    pub fn get_graph(&self) -> Option<Arc<PlaybackGraph>> {
-        self.graph.read().unwrap().clone()
+    pub fn insert_session(&self, timeline_id: TimelineId, session: PlaybackSession) {
+        self.sessions.insert(timeline_id, session);
     }
 
-    pub fn clear_graph(&self) {
-        *self.graph.write().unwrap() = None;
-        self.op_id_map.write().unwrap().clear();
+    pub fn remove_session(&self, timeline_id: &TimelineId) -> Option<(TimelineId, PlaybackSession)> {
+        self.sessions.remove(timeline_id)
+    }
+
+    pub fn get_active_timeline(&self) -> Option<TimelineId> {
+        self.active_timeline.read().unwrap().clone()
+    }
+
+    pub fn set_active_timeline(&self, timeline_id: Option<TimelineId>) {
+        *self.active_timeline.write().unwrap() = timeline_id;
     }
 }
 
@@ -210,9 +242,10 @@ pub struct BuildGraphResponse {
     pub channels: u16,
 }
 
-/// Build a playback graph from the request
+/// Build a playback graph for a specific timeline
 #[tauri::command]
 pub async fn op_playback_build_graph(
+    timeline_id: TimelineId,
     request: BuildGraphRequest,
     state: State<'_, Arc<OpPlaybackState>>,
     sample_cache: State<'_, Arc<SampleCacheService>>,
@@ -230,39 +263,31 @@ pub async fn op_playback_build_graph(
                 LogSystem::Playback,
                 "op_build_graph",
                 &format!(
-                    "Building playback graph with {} operations",
-                    request.operations.len()
+                    "Building playback graph for timeline '{}' with {} operations",
+                    timeline_id, request.operations.len()
                 )
             );
         }
+
         let total_graph_ops = count_graph_ops(&request)?;
+        
         // Emit started event
         send_channel_event!(
             on_event,
             OpPlaybackBuildGraphEvent::Started {
+                timeline_id: timeline_id.clone(),
                 operation_count: total_graph_ops
             }
         );
 
-        // Stop any current playback
-        stop_current_playback(&state);
-
         let sample_rate = request.sample_rate.unwrap_or(44100);
         let channels = request.channels.unwrap_or(2);
         let spec = AudioSpec::new(sample_rate, channels);
-
-        // Update state
-        *state.spec.write().unwrap() = spec;
-        state
-            .sample_rate
-            .store(sample_rate as u64, Ordering::Relaxed);
-        state
-            .loop_playback
-            .store(request.loop_playback.unwrap_or(true), Ordering::Relaxed);
+        let loop_playback = request.loop_playback.unwrap_or(true);
 
         // Create new graph
         let graph = Arc::new(PlaybackGraph::new(spec));
-        let mut op_id_map = HashMap::new();
+        let mut op_ids = HashMap::new();
 
         for (index, op_request) in request.operations.iter().enumerate() {
             // Create the playable operation based on type
@@ -272,7 +297,7 @@ pub async fn op_playback_build_graph(
                     let samples_arc: Arc<Vec<f32>> = if let Some(ref samples) = op_request.samples {
                         Arc::new(samples.clone())
                     } else if let Some(ref file_path) = op_request.file_path {
-                        // Load samples from file using cache - no clone needed!
+                        // Load samples from file using cache
                         let path = std::path::PathBuf::from(file_path);
                         let buffer = sample_cache.get_or_load(path, sample_rate, channels)?;
                         Arc::clone(&buffer.data)
@@ -352,12 +377,13 @@ pub async fn op_playback_build_graph(
                 graph.timeline.write().unwrap().set_gain(op_id, gain);
             }
 
-            op_id_map.insert(op_request.name.clone(), op_id);
+            op_ids.insert(op_request.name.clone(), op_id);
 
             // Emit progress event
             send_channel_event!(
                 on_event,
                 OpPlaybackBuildGraphEvent::Progress {
+                    timeline_id: timeline_id.clone(),
                     operation_name: op_request.name.clone(),
                     operation_index: index,
                     total_operations: total_graph_ops,
@@ -371,8 +397,9 @@ pub async fn op_playback_build_graph(
                     LogSystem::Playback,
                     "op_build_graph",
                     &format!(
-                        "Added operation '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s)",
+                        "Added operation '{}' to timeline '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s)",
                         op_request.name,
+                        timeline_id,
                         op_id,
                         op_request.start_time,
                         end.to_seconds(sample_rate),
@@ -385,14 +412,15 @@ pub async fn op_playback_build_graph(
         let total_duration = graph.duration();
         let total_duration_seconds = total_duration.to_seconds(sample_rate);
 
-        // Store the graph and ID map
-        *state.op_id_map.write().unwrap() = op_id_map;
-        state.set_graph(graph);
+        // Create and store the session
+        let session = PlaybackSession::new(graph, spec, loop_playback, op_ids);
+        state.insert_session(timeline_id.clone(), session);
 
         // Emit finished event
         send_channel_event!(
             on_event,
             OpPlaybackBuildGraphEvent::Finished {
+                timeline_id: timeline_id.clone(),
                 operation_count: request.operations.len(),
                 total_duration_seconds,
                 sample_rate,
@@ -406,9 +434,8 @@ pub async fn op_playback_build_graph(
                 LogSystem::Playback,
                 "op_build_graph",
                 &format!(
-                    "Graph built successfully: {} operations, {:.2}s total duration",
-                    total_graph_ops,
-                    total_duration_seconds
+                    "Timeline '{}' built successfully: {} operations, {:.2}s total duration",
+                    timeline_id, total_graph_ops, total_duration_seconds
                 )
             );
         }
@@ -427,6 +454,7 @@ pub async fn op_playback_build_graph(
 /// Build a playback graph from the request (legacy version without cache)
 #[tauri::command]
 pub async fn op_playback_build_graph_legacy(
+    timeline_id: TimelineId,
     request: BuildGraphRequest,
     state: State<'_, Arc<OpPlaybackState>>,
     _sample_cache: State<'_, Arc<SampleCacheService>>, // Not used in legacy mode
@@ -443,8 +471,8 @@ pub async fn op_playback_build_graph_legacy(
                 LogSystem::Playback,
                 "op_build_graph_legacy",
                 &format!(
-                    "Building playback graph (LEGACY - no cache) with {} operations",
-                    request.operations.len()
+                    "Building playback graph (LEGACY - no cache) for timeline '{}' with {} operations",
+                    timeline_id, request.operations.len()
                 )
             );
         }
@@ -453,29 +481,19 @@ pub async fn op_playback_build_graph_legacy(
         send_channel_event!(
             on_event,
             OpPlaybackBuildGraphEvent::Started {
+                timeline_id: timeline_id.clone(),
                 operation_count: total_graph_ops
             }
         );
 
-        // Stop any current playback
-        stop_current_playback(&state);
-
         let sample_rate = request.sample_rate.unwrap_or(44100);
         let channels = request.channels.unwrap_or(2);
         let spec = AudioSpec::new(sample_rate, channels);
-
-        // Update state
-        *state.spec.write().unwrap() = spec;
-        state
-            .sample_rate
-            .store(sample_rate as u64, Ordering::Relaxed);
-        state
-            .loop_playback
-            .store(request.loop_playback.unwrap_or(true), Ordering::Relaxed);
+        let loop_playback = request.loop_playback.unwrap_or(true);
 
         // Create new graph
         let graph = Arc::new(PlaybackGraph::new(spec));
-        let mut op_id_map = HashMap::new();
+        let mut op_ids = HashMap::new();
 
         for (index, op_request) in request.operations.iter().enumerate() {
             // Create the playable operation based on type
@@ -562,12 +580,13 @@ pub async fn op_playback_build_graph_legacy(
                 graph.timeline.write().unwrap().set_gain(op_id, gain);
             }
 
-            op_id_map.insert(op_request.name.clone(), op_id);
+            op_ids.insert(op_request.name.clone(), op_id);
 
             // Emit progress event
             send_channel_event!(
                 on_event,
                 OpPlaybackBuildGraphEvent::Progress {
+                    timeline_id: timeline_id.clone(),
                     operation_name: op_request.name.clone(),
                     operation_index: index,
                     total_operations: total_graph_ops,
@@ -581,8 +600,9 @@ pub async fn op_playback_build_graph_legacy(
                     LogSystem::Playback,
                     "op_build_graph",
                     &format!(
-                        "Added operation '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s) [LEGACY - NO CACHE]",
+                        "Added operation '{}' to timeline '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s) [LEGACY - NO CACHE]",
                         op_request.name,
+                        timeline_id,
                         op_id,
                         op_request.start_time,
                         end.to_seconds(sample_rate),
@@ -595,14 +615,15 @@ pub async fn op_playback_build_graph_legacy(
         let total_duration = graph.duration();
         let total_duration_seconds = total_duration.to_seconds(sample_rate);
 
-        // Store the graph and ID map
-        *state.op_id_map.write().unwrap() = op_id_map;
-        state.set_graph(graph);
+        // Create and store the session
+        let session = PlaybackSession::new(graph, spec, loop_playback, op_ids);
+        state.insert_session(timeline_id.clone(), session);
 
         // Emit finished event
         send_channel_event!(
             on_event,
             OpPlaybackBuildGraphEvent::Finished {
+                timeline_id: timeline_id.clone(),
                 operation_count: request.operations.len(),
                 total_duration_seconds,
                 sample_rate,
@@ -616,9 +637,8 @@ pub async fn op_playback_build_graph_legacy(
                 LogSystem::Playback,
                 "op_build_graph",
                 &format!(
-                    "Graph built successfully (LEGACY - NO CACHE): {} operations, {:.2}s total duration",
-                    total_graph_ops,
-                    total_duration_seconds
+                    "Timeline '{}' built successfully (LEGACY - NO CACHE): {} operations, {:.2}s total duration",
+                    timeline_id, total_graph_ops, total_duration_seconds
                 )
             );
         }
@@ -867,24 +887,25 @@ fn resample_audio(
 
     Ok(output)
 }
-/// Start playback of the current graph
+/// Start playback of a specific timeline
 #[tauri::command]
 pub fn op_playback_play(
+    timeline_id: TimelineId,
     start_seconds: Option<f64>,
     state: State<'_, Arc<OpPlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let graph = state.get_graph().ok_or("No playback graph available")?;
-    let spec = *state.spec.read().unwrap();
-    let loop_playback = state.loop_playback.load(Ordering::Relaxed);
-
-    // Get operation info for logging
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_count = op_id_map.len();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
-    let total_duration = graph.duration().to_seconds(spec.sample_rate);
+    let session = state.get_session(&timeline_id)
+        .ok_or(format!("Timeline '{}' not found", timeline_id))?;
+    
+    let loop_playback = session.loop_playback;
+    let spec = session.spec;
+    let graph = session.graph.clone();
+    let total_duration = session.duration_seconds();
+    let op_count = session.op_ids.len();
+    let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
+    drop(session); // Release the reference
 
     if let Ok(logger) = logging_service.lock() {
         log_info!(
@@ -892,8 +913,8 @@ pub fn op_playback_play(
             LogSystem::Playback,
             "op_play",
             &format!(
-                "Starting operation playback: {} operations [{}], {:.2}s duration, start={:?}s, loop={}",
-                op_count, op_names.join(", "), total_duration, start_seconds, loop_playback
+                "Starting playback for timeline '{}': {} operations [{}], {:.2}s duration, start={:?}s, loop={}",
+                timeline_id, op_count, op_names.join(", "), total_duration, start_seconds, loop_playback
             )
         );
     }
@@ -902,6 +923,9 @@ pub fn op_playback_play(
     stop_current_playback(&state);
 
     // Determine start position
+    let session_ref = state.get_session(&timeline_id)
+        .ok_or(format!("Timeline '{}' not found", timeline_id))?;
+    
     let start_position = if let Some(start) = start_seconds {
         if let Ok(logger) = logging_service.lock() {
             log_info!(
@@ -911,175 +935,82 @@ pub fn op_playback_play(
                 &format!("Using explicit start position: {:.2}s", start)
             );
         }
+        *session_ref.seek_seconds.lock().unwrap() = start as f32;
+        *session_ref.progress.lock().unwrap() = (start / total_duration).clamp(0.0, 1.0) as f32;
         SampleTime::from_seconds(start, spec.sample_rate)
     } else {
         // Resume from current progress
-        let progress = *state.progress.lock().unwrap();
-        let duration = graph.duration();
-        let calculated_samples = (duration.samples() as f64 * progress as f64) as u64;
-        let calculated_seconds = SampleTime::new(calculated_samples).to_seconds(spec.sample_rate);
-
+        let seek_seconds = *session_ref.seek_seconds.lock().unwrap() as f64;
         if let Ok(logger) = logging_service.lock() {
             log_info!(
                 logger,
                 LogSystem::Playback,
                 "op_play",
-                &format!(
-                    "Resuming from current progress: {:.1}% -> {:.2}s ({} samples)",
-                    progress * 100.0,
-                    calculated_seconds,
-                    calculated_samples
-                )
+                &format!("Resuming from current position: {:.2}s", seek_seconds)
             );
         }
-
-        SampleTime::new(calculated_samples)
+        SampleTime::from_seconds(seek_seconds, spec.sample_rate)
     };
+    drop(session_ref);
+
+    // Set this timeline as active
+    state.set_active_timeline(Some(timeline_id.clone()));
+    state.is_playing.store(true, Ordering::Relaxed);
+    state.is_paused.store(false, Ordering::Relaxed);
 
     // Clone what we need for the playback thread
     let state_clone = state.inner().clone();
     let app_clone = app.clone();
-    let total_duration = graph.duration();
-
-    state.is_playing.store(true, Ordering::Relaxed);
-    state.is_paused.store(false, Ordering::Relaxed);
+    let timeline_id_clone = timeline_id.clone();
 
     thread::spawn(move || {
-        // Create audio output
-        let (_stream, stream_handle) = match OutputStream::try_default() {
-            Ok(output) => output,
-            Err(e) => {
-                eprintln!("Error creating audio output stream: {}", e);
-                state_clone.is_playing.store(false, Ordering::Relaxed);
-                return;
-            }
-        };
-
-        let sink = match Sink::try_new(&stream_handle) {
-            Ok(sink) => Arc::new(sink),
-            Err(e) => {
-                eprintln!("Error creating sink: {}", e);
-                state_clone.is_playing.store(false, Ordering::Relaxed);
-                return;
-            }
-        };
-
-        // Create timeline source
-        let source = TimelineSourceBuilder::new()
-            .spec(spec)
-            .looping(loop_playback)
-            .start_position(start_position)
-            .build(graph.clone()); // Store current position for tracking
-        let start_seconds_actual = start_position.to_seconds(spec.sample_rate);
-        *state_clone.seek_position.lock().unwrap() = start_seconds_actual as f32;
-
-        sink.append(source);
-        sink.set_volume(1.0);
-        sink.play();
-
-        // Store the sink
-        *state_clone.sink.lock().unwrap() = Some(Arc::clone(&sink));
-
-        // Progress tracking
-        let mut tracking_start = Instant::now();
-        let mut pause_start: Option<Instant> = None;
-        let mut total_pause_duration = Duration::from_secs(0);
-        let total_duration_seconds = total_duration.to_seconds(spec.sample_rate);
-
-        loop {
-            // Check if we should stop
-            if !state_clone.is_playing.load(Ordering::Relaxed) {
-                break;
-            }
-
-            if sink.empty() && !loop_playback {
-                break;
-            }
-            if state_clone.is_paused.load(Ordering::Relaxed) {
-                // Mark pause start if we just entered pause state
-                if pause_start.is_none() {
-                    pause_start = Some(Instant::now());
-                    println!("DEBUG: Entering pause state in playback loop");
-                }
-                thread::sleep(Duration::from_millis(50));
-                continue;
-            } else if let Some(pause_started_at) = pause_start.take() {
-                // We just resumed from pause
-                let pause_duration = pause_started_at.elapsed();
-                total_pause_duration += pause_duration;
-                println!(
-                    "DEBUG: Resuming from pause - pause lasted {:.2}s, total pause time: {:.2}s",
-                    pause_duration.as_secs_f32(),
-                    total_pause_duration.as_secs_f32()
-                );
-                // Reset tracking_start to now so we measure from resume point, not from initial play start
-                tracking_start = Instant::now();
-            }
-
-            // Calculate current position (excluding time spent paused)
-            let seek_start = *state_clone.seek_position.lock().unwrap();
-            let total_elapsed = tracking_start.elapsed();
-            let current_position = seek_start + total_elapsed.as_secs_f32();
-
-            // Calculate progress (handle looping)
-            let progress = if total_duration_seconds > 0.0 {
-                if loop_playback {
-                    (current_position % total_duration_seconds as f32)
-                        / total_duration_seconds as f32
-                } else {
-                    (current_position / total_duration_seconds as f32).min(1.0)
-                }
-            } else {
-                0.0
-            };
-
-            // Update state and emit progress
-            *state_clone.progress.lock().unwrap() = progress;
-            emit_logged!(app_clone, "op-timeline-progress", progress);
-
-            thread::sleep(Duration::from_millis(16)); // ~60 FPS
-        }
-        state_clone.is_playing.store(false, Ordering::Relaxed);
-        println!("DEBUG: Operation playback finished");
+        start_playback_from_position(
+            state_clone,
+            app_clone,
+            timeline_id_clone,
+            graph,
+            spec,
+            loop_playback,
+            start_position,
+            false, // not paused
+        );
     });
 
     Ok(())
 }
 
-/// Pause playback
+/// Pause playback of the currently active timeline
 #[tauri::command]
 pub fn op_playback_pause(
     state: State<'_, Arc<OpPlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let progress = *state.progress.lock().unwrap();
-    let spec = *state.spec.read().unwrap();
-    let graph = state.get_graph();
+    let active_timeline = state.get_active_timeline();
+    
+    if let Some(timeline_id) = active_timeline {
+        if let Some(session) = state.get_session(&timeline_id) {
+            let progress = *session.progress.lock().unwrap();
+            let total_duration = session.duration_seconds();
+            let current_position = progress as f64 * total_duration;
+            let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
+            drop(session);
 
-    let current_position = if let Some(ref g) = graph {
-        let total_duration = g.duration().to_seconds(spec.sample_rate);
-        progress as f64 * total_duration
-    } else {
-        0.0
-    };
-
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
-
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Playback,
-            "op_pause",
-            &format!(
-                "Pausing operation playback [{}] at {:.2}s (progress: {:.1}%)",
-                op_names.join(", "),
-                current_position,
-                progress * 100.0
-            )
-        );
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Playback,
+                    "op_pause",
+                    &format!(
+                        "Pausing timeline '{}' [{}] at {:.2}s (progress: {:.1}%)",
+                        timeline_id,
+                        op_names.join(", "),
+                        current_position,
+                        progress * 100.0
+                    )
+                );
+            }
+        }
     }
 
     let sink = state.sink.lock().unwrap();
@@ -1087,47 +1018,52 @@ pub fn op_playback_pause(
         sink.pause();
         state.is_paused.store(true, Ordering::Relaxed);
 
-        // Emit current progress
-        let progress = *state.progress.lock().unwrap();
-        emit_logged!(app, "op-timeline-progress", progress);
+        // Emit current progress for the active timeline
+        if let Some(timeline_id) = state.get_active_timeline() {
+            if let Some(session) = state.get_session(&timeline_id) {
+                let progress = *session.progress.lock().unwrap();
+                emit_logged!(app, "op-timeline-progress", serde_json::json!({
+                    "timelineId": timeline_id,
+                    "progress": progress
+                }));
+            }
+        }
     }
 
     Ok(())
 }
 
-/// Resume playback
+/// Resume playback of the currently active timeline
 #[tauri::command]
 pub fn op_playback_resume(
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let progress = *state.progress.lock().unwrap();
-    let spec = *state.spec.read().unwrap();
-    let graph = state.get_graph();
+    let active_timeline = state.get_active_timeline();
+    
+    if let Some(timeline_id) = active_timeline {
+        if let Some(session) = state.get_session(&timeline_id) {
+            let progress = *session.progress.lock().unwrap();
+            let total_duration = session.duration_seconds();
+            let current_position = progress as f64 * total_duration;
+            let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
+            drop(session);
 
-    let current_position = if let Some(ref g) = graph {
-        let total_duration = g.duration().to_seconds(spec.sample_rate);
-        progress as f64 * total_duration
-    } else {
-        0.0
-    };
-
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
-
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Playback,
-            "op_resume",
-            &format!(
-                "Resuming operation playback [{}] from {:.2}s (progress: {:.1}%)",
-                op_names.join(", "),
-                current_position,
-                progress * 100.0
-            )
-        );
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Playback,
+                    "op_resume",
+                    &format!(
+                        "Resuming timeline '{}' [{}] from {:.2}s (progress: {:.1}%)",
+                        timeline_id,
+                        op_names.join(", "),
+                        current_position,
+                        progress * 100.0
+                    )
+                );
+            }
+        }
     }
 
     let sink = state.sink.lock().unwrap();
@@ -1167,55 +1103,67 @@ pub fn op_playback_resume(
     Ok(())
 }
 
-/// Stop playback
+/// Stop playback and reset progress for all timelines
 #[tauri::command]
 pub fn op_playback_stop(
     state: State<'_, Arc<OpPlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let progress = *state.progress.lock().unwrap();
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_count = op_id_map.len();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
+    let active_timeline = state.get_active_timeline();
+    
+    if let Some(timeline_id) = active_timeline {
+        if let Some(session) = state.get_session(&timeline_id) {
+            let progress = *session.progress.lock().unwrap();
+            let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
 
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Playback,
-            "op_stop",
-            &format!(
-                "Stopping operation playback ({} operations [{}], was at {:.1}%)",
-                op_count,
-                op_names.join(", "),
-                progress * 100.0
-            )
-        );
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Playback,
+                    "op_stop",
+                    &format!(
+                        "Stopping timeline '{}' [{}] (was at {:.1}%)",
+                        timeline_id,
+                        op_names.join(", "),
+                        progress * 100.0
+                    )
+                );
+            }
+
+            // Reset progress for this timeline
+            *session.progress.lock().unwrap() = 0.0;
+            *session.seek_seconds.lock().unwrap() = 0.0;
+        }
     }
 
     stop_current_playback(&state);
-    *state.progress.lock().unwrap() = 0.0;
-    emit_logged!(app, "op-timeline-progress", 0.0f32);
+    state.set_active_timeline(None);
+    
+    emit_logged!(app, "op-timeline-progress", serde_json::json!({
+        "timelineId": null,
+        "progress": 0.0
+    }));
 
     Ok(())
 }
-/// Seek to a position in the current playback graph
+/// Seek to a position in a specific timeline
 #[tauri::command]
 pub fn op_playback_seek(
+    timeline_id: TimelineId,
     position_seconds: f64,
     state: State<'_, Arc<OpPlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let graph = state.get_graph().ok_or("No playback graph available")?;
-    let spec = *state.spec.read().unwrap();
-    let total_duration = graph.duration().to_seconds(spec.sample_rate);
-
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_count = op_id_map.len();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
+    let session = state.get_session(&timeline_id)
+        .ok_or(format!("Timeline '{}' not found", timeline_id))?;
+        
+    let total_duration = session.duration_seconds();
+    let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
+    let spec = session.spec;
+    let graph = session.graph.clone();
+    let loop_playback = session.loop_playback;
 
     // Calculate and update progress
     let progress = (position_seconds / total_duration).clamp(0.0, 1.0) as f32;
@@ -1226,24 +1174,28 @@ pub fn op_playback_seek(
             LogSystem::Playback,
             "op_seek",
             &format!(
-                "Seeking to {:.2}s / {:.2}s ({:.1}%) in {} operations [{}]",
+                "Seeking to {:.2}s / {:.2}s ({:.1}%) in timeline '{}' [{}]",
                 position_seconds,
                 total_duration,
                 progress * 100.0,
-                op_count,
+                timeline_id,
                 op_names.join(", ")
             )
         );
     }
 
-    *state.progress.lock().unwrap() = progress;
-    *state.seek_position.lock().unwrap() = position_seconds as f32;
+    *session.progress.lock().unwrap() = progress;
+    *session.seek_seconds.lock().unwrap() = position_seconds as f32;
+    drop(session);
 
     // Emit progress
-    emit_logged!(app, "op-timeline-progress", progress);
+    emit_logged!(app, "op-timeline-progress", serde_json::json!({
+        "timelineId": timeline_id,
+        "progress": progress
+    }));
 
-    // If currently playing, try to seek on the active source
-    if state.is_playing.load(Ordering::Relaxed) {
+    // If this is the currently active timeline and it's playing, handle seeking
+    if state.get_active_timeline().as_ref() == Some(&timeline_id) && state.is_playing.load(Ordering::Relaxed) {
         let seek_duration = Duration::from_secs_f64(position_seconds);
 
         // Try to seek on the current sink's source
@@ -1257,8 +1209,8 @@ pub fn op_playback_seek(
                             LogSystem::Playback,
                             "op_seek",
                             &format!(
-                                "Successfully seeked to {:.2}s using try_seek",
-                                position_seconds
+                                "Successfully seeked timeline '{}' to {:.2}s using try_seek",
+                                timeline_id, position_seconds
                             )
                         );
                     }
@@ -1271,8 +1223,8 @@ pub fn op_playback_seek(
                             LogSystem::Playback,
                             "op_seek",
                             &format!(
-                                "Seek not supported by source ({}). Restarting playback from {:.2}s.",
-                                e, position_seconds
+                                "Seek not supported by source ({}). Restarting timeline '{}' playback from {:.2}s.",
+                                e, timeline_id, position_seconds
                             )
                         );
                     }
@@ -1295,14 +1247,14 @@ pub fn op_playback_seek(
 
             let state_clone = state.inner().clone();
             let app_clone = app.clone();
-            let loop_playback = state.loop_playback.load(Ordering::Relaxed);
             let seek_position_time = SampleTime::from_seconds(position_seconds, spec.sample_rate);
 
             thread::spawn(move || {
                 start_playback_from_position(
                     state_clone,
                     app_clone,
-                    graph.clone(),
+                    timeline_id,
+                    graph,
                     spec,
                     loop_playback,
                     seek_position_time,
@@ -1319,6 +1271,7 @@ pub fn op_playback_seek(
 fn start_playback_from_position(
     state: Arc<OpPlaybackState>,
     app: AppHandle,
+    timeline_id: TimelineId,
     graph: Arc<PlaybackGraph>,
     spec: AudioSpec,
     loop_playback: bool,
@@ -1363,84 +1316,136 @@ fn start_playback_from_position(
     *state.sink.lock().unwrap() = Some(Arc::clone(&sink));
 
     // Progress tracking loop
-    let tracking_start = Instant::now();
-    let mut pause_start: Option<Instant> = None;
-    let mut total_pause_duration = Duration::from_secs(0);
-    let total_duration_seconds = graph.duration().to_seconds(spec.sample_rate);
+    spawn_progress_loop(state, timeline_id, app);
+}
 
-    loop {
-        if !state.is_playing.load(Ordering::Relaxed) {
-            break;
-        }
+/// Spawn the progress tracking loop for a timeline
+fn spawn_progress_loop(state: Arc<OpPlaybackState>, timeline_id: TimelineId, app: AppHandle) {
+    thread::spawn(move || {
+        let mut tracking_start = Instant::now();
+        let mut pause_start: Option<Instant> = None;
+        let mut total_pause_duration = Duration::from_secs(0);
 
-        if sink.empty() && !loop_playback {
-            break;
-        }
-
-        if state.is_paused.load(Ordering::Relaxed) {
-            if pause_start.is_none() {
-                pause_start = Some(Instant::now());
+        loop {
+            // Check if we should stop
+            if !state.is_playing.load(Ordering::Relaxed) {
+                break;
             }
-            thread::sleep(Duration::from_millis(50));
-            continue;
-        } else if let Some(pause_started_at) = pause_start.take() {
-            total_pause_duration += pause_started_at.elapsed();
-        }
 
-        let seek_start = *state.seek_position.lock().unwrap();
-        let total_elapsed = tracking_start.elapsed();
-        let active_elapsed = total_elapsed - total_pause_duration;
-        let current_position = seek_start + active_elapsed.as_secs_f32();
+            // Check if this timeline is still the active one
+            if state.get_active_timeline().as_ref() != Some(&timeline_id) {
+                break;
+            }
 
-        let progress = if total_duration_seconds > 0.0 {
-            if loop_playback {
-                (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
+            // Get session info
+            let session = if let Some(s) = state.get_session(&timeline_id) {
+                s
             } else {
-                (current_position / total_duration_seconds as f32).min(1.0)
+                break;
+            };
+
+            let total_duration_seconds = session.duration_seconds();
+            let loop_playback = session.loop_playback;
+            drop(session);
+
+            // Check if sink is empty and not looping
+            let sink = state.sink.lock().unwrap();
+            if let Some(ref sink) = *sink {
+                if sink.empty() && !loop_playback {
+                    drop(sink);
+                    break;
+                }
             }
-        } else {
-            0.0
-        };
+            drop(sink);
 
-        *state.progress.lock().unwrap() = progress;
-        emit_logged!(app, "op-timeline-progress", progress);
+            if state.is_paused.load(Ordering::Relaxed) {
+                // Mark pause start if we just entered pause state
+                if pause_start.is_none() {
+                    pause_start = Some(Instant::now());
+                }
+                thread::sleep(Duration::from_millis(50));
+                continue;
+            } else if let Some(pause_started_at) = pause_start.take() {
+                // We just resumed from pause
+                let pause_duration = pause_started_at.elapsed();
+                total_pause_duration += pause_duration;
+                // Reset tracking_start to now so we measure from resume point
+                tracking_start = Instant::now();
+            }
 
-        thread::sleep(Duration::from_millis(16)); // ~60 FPS
-    }
+            // Get session reference again for updating progress
+            if let Some(session) = state.get_session(&timeline_id) {
+                let seek_start = *session.seek_seconds.lock().unwrap();
+                let total_elapsed = tracking_start.elapsed();
+                let current_position = seek_start + total_elapsed.as_secs_f32();
 
-    state.is_playing.store(false, Ordering::Relaxed);
+                // Calculate progress (handle looping)
+                let progress = if total_duration_seconds > 0.0 {
+                    if loop_playback {
+                        (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
+                    } else {
+                        (current_position / total_duration_seconds as f32).min(1.0)
+                    }
+                } else {
+                    0.0
+                };
+
+                *session.progress.lock().unwrap() = progress;
+                *session.seek_seconds.lock().unwrap() = current_position;
+
+                emit_logged!(app, "op-timeline-progress", serde_json::json!({
+                    "timelineId": timeline_id,
+                    "progress": progress
+                }));
+            }
+
+            thread::sleep(Duration::from_millis(16)); // ~60 FPS
+        }
+
+        state.is_playing.store(false, Ordering::Relaxed);
+    });
 }
 
-/// Get current playback progress
+/// Get current playback progress for a specific timeline
 #[tauri::command]
-pub fn op_playback_get_progress(state: State<'_, Arc<OpPlaybackState>>) -> f32 {
-    *state.progress.lock().unwrap()
+pub fn op_playback_get_progress(
+    timeline_id: TimelineId,
+    state: State<'_, Arc<OpPlaybackState>>
+) -> Result<f32, String> {
+    let session = state.get_session(&timeline_id)
+        .ok_or(format!("Timeline '{}' not found", timeline_id))?;
+        
+    let progress = *session.progress.lock().unwrap();
+    Ok(progress)
 }
 
-/// Set playback volume
+/// Set playback volume for the currently active audio sink
 #[tauri::command]
 pub fn op_playback_set_volume(
     volume: f32,
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_count = op_id_map.len();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
+    let active_timeline = state.get_active_timeline();
+    
+    if let Some(timeline_id) = active_timeline {
+        if let Some(session) = state.get_session(&timeline_id) {
+            let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
 
-    if let Ok(logger) = logging_service.lock() {
-        log_info!(
-            logger,
-            LogSystem::Playback,
-            "op_volume",
-            &format!(
-                "Setting volume to {:.2} ({} operations [{}])",
-                volume,
-                op_count,
-                op_names.join(", ")
-            )
-        );
+            if let Ok(logger) = logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Playback,
+                    "op_volume",
+                    &format!(
+                        "Setting volume to {:.2} for timeline '{}' [{}]",
+                        volume,
+                        timeline_id,
+                        op_names.join(", ")
+                    )
+                );
+            }
+        }
     }
 
     let sink = state.sink.lock().unwrap();
@@ -1451,17 +1456,18 @@ pub fn op_playback_set_volume(
     Ok(())
 }
 
-/// Set loop playback mode
+/// Set loop playback mode for a specific timeline
 #[tauri::command]
 pub fn op_playback_set_loop(
+    timeline_id: TimelineId,
     loop_playback: bool,
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_count = op_id_map.len();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
+    let mut session = state.sessions.get_mut(&timeline_id)
+        .ok_or(format!("Timeline '{}' not found", timeline_id))?;
+    
+    let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
 
     if let Ok(logger) = logging_service.lock() {
         log_info!(
@@ -1469,53 +1475,76 @@ pub fn op_playback_set_loop(
             LogSystem::Playback,
             "op_loop",
             &format!(
-                "Setting loop mode to {} ({} operations [{}])",
+                "Setting loop mode to {} for timeline '{}' [{}]",
                 loop_playback,
-                op_count,
+                timeline_id,
                 op_names.join(", ")
             )
         );
     }
 
-    state.loop_playback.store(loop_playback, Ordering::Relaxed);
+    session.loop_playback = loop_playback;
     Ok(())
 }
 
-/// Clear the current playback graph
+/// Remove a specific timeline's playback session
 #[tauri::command]
-pub fn op_playback_clear_graph(
+pub fn op_playback_clear_timeline(
+    timeline_id: TimelineId,
     state: State<'_, Arc<OpPlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let op_id_map = state.op_id_map.read().unwrap();
-    let op_count = op_id_map.len();
-    let op_names: Vec<String> = op_id_map.keys().cloned().collect();
-    drop(op_id_map);
+    // Stop playback if this timeline is currently active
+    if state.get_active_timeline().as_ref() == Some(&timeline_id) {
+        stop_current_playback(&state);
+        state.set_active_timeline(None);
+    }
 
-    let spec = *state.spec.read().unwrap();
-    let total_duration = if let Some(ref graph) = state.get_graph() {
-        graph.duration().to_seconds(spec.sample_rate)
+    if let Some((_, session)) = state.remove_session(&timeline_id) {
+        let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
+        let total_duration = session.duration_seconds();
+
+        if let Ok(logger) = logging_service.lock() {
+            log_info!(
+                logger,
+                LogSystem::Playback,
+                "op_clear_timeline",
+                &format!(
+                    "Cleared timeline '{}' ({} operations [{}], {:.2}s duration)",
+                    timeline_id,
+                    session.op_ids.len(),
+                    op_names.join(", "),
+                    total_duration
+                )
+            );
+        }
     } else {
-        0.0
-    };
+        return Err(format!("Timeline '{}' not found", timeline_id));
+    }
+
+    Ok(())
+}
+
+/// Clear all timeline playback sessions
+#[tauri::command]
+pub fn op_playback_clear_all_timelines(
+    state: State<'_, Arc<OpPlaybackState>>,
+    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<(), String> {
+    let timeline_count = state.sessions.len();
 
     if let Ok(logger) = logging_service.lock() {
         log_info!(
             logger,
             LogSystem::Playback,
-            "op_clear",
-            &format!(
-                "Clearing playback graph ({} operations [{}], {:.2}s duration)",
-                op_count,
-                op_names.join(", "),
-                total_duration
-            )
+            "op_clear_all",
+            &format!("Clearing all {} timeline sessions", timeline_count)
         );
     }
 
     stop_current_playback(&state);
-    state.clear_graph();
-    *state.progress.lock().unwrap() = 0.0;
+    state.set_active_timeline(None);
+    state.sessions.clear();
 
     Ok(())
 }

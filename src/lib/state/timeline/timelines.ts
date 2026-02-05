@@ -1,8 +1,88 @@
 import { derived, get, Readable, writable } from 'svelte/store';
-import { appState, AudioFileTimelineItem, TimelineItem } from './state.svelte';
-import type { OperationDef, OperationId } from './operation';
-import { logger } from './logging';
-import { operationWaveforms, waveformCache, type Waveform } from './waveformCache';
+import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
+import type { OperationDef, OperationId } from '../operation';
+import { logger } from '../logging';
+import { operationWaveforms, waveformCache, type Waveform } from '../waveformCache';
+import { listen } from '@tauri-apps/api/event';
+import type { OpTimelineProgressEvent } from '../opPlaybackService';
+import { buildGraphForTimeline } from '../opPlaybackService';
+
+// Timeline progress listener for updating individual timeline views
+let timelineProgressUnlisten: (() => void) | null = null;
+
+/**
+ * Initialize the timeline-specific progress event listener
+ * This replaces the global progress listener for timeline-aware playback
+ */
+async function initTimelineProgressListener(): Promise<void> {
+  if (timelineProgressUnlisten) return;
+
+  timelineProgressUnlisten = await listen<OpTimelineProgressEvent>(
+    'op-timeline-progress',
+    event => {
+      const { timelineId, progress } = event.payload;
+
+      if (!timelineId) {
+        logger.opPlayback.info('Received progress event with no timelineId (legacy event)');
+        return;
+      }
+
+      logger.opPlayback.info(
+        `Timeline progress: '${timelineId}' -> ${(progress * 100).toFixed(1)}%`
+      );
+
+      // Update the specific timeline's view state
+      timelinesStore.update(state => {
+        const timeline = state.timelines[timelineId];
+        if (!timeline) {
+          logger.opPlayback.warning(`Timeline '${timelineId}' not found for progress update`);
+          return state;
+        }
+
+        // Calculate playheadTime from progress and timeline duration
+        if (timeline.waveformState) {
+          const currentWaveformState = get(timeline.waveformState);
+          const playheadTime = progress * currentWaveformState.totalDuration;
+
+          // Update the timeline's view state with new playhead position
+          const updatedTimeline = {
+            ...timeline,
+            view: {
+              ...timeline.view,
+              playheadTime,
+            },
+          };
+
+          return {
+            ...state,
+            timelines: {
+              ...state.timelines,
+              [timelineId]: updatedTimeline,
+            },
+          };
+        } else {
+          logger.opPlayback.warning(
+            `Timeline '${timelineId}' has no waveform state for progress update`
+          );
+          return state;
+        }
+      });
+    }
+  );
+
+  logger.opPlayback.info('Timeline progress listener initialized');
+}
+
+/**
+ * Cleanup the timeline progress listener
+ */
+function cleanupTimelineProgressListener(): void {
+  if (timelineProgressUnlisten) {
+    timelineProgressUnlisten();
+    timelineProgressUnlisten = null;
+    logger.opPlayback.info('Timeline progress listener cleaned up');
+  }
+}
 
 export type TimelineId = string;
 export type TrackId = string;
@@ -414,8 +494,22 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
     }
   };
 
-  // Trigger async loading (don't await to avoid blocking timeline creation)
+  // Build the backend playback graph for this timeline
+  const buildBackendGraph = async () => {
+    try {
+      logger.opPlayback.info(
+        `Building backend graph for timeline ${timelineId}, operation ${operationId}`
+      );
+      await buildGraphForTimeline(timelineId, operationId);
+      logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
+    } catch (error) {
+      logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);
+    }
+  };
+
+  // Trigger async loading and backend graph building (don't await to avoid blocking timeline creation)
   loadWaveformData();
+  buildBackendGraph();
 
   return {
     id: timelineId,
@@ -694,3 +788,21 @@ export const operationTimelines = derived(timelinesStore, $timelinesStore => {
     timeline => timeline && timeline.source.kind === 'operation'
   );
 });
+
+/**
+ * Timeline progress event management
+ * These functions manage the timeline-specific progress events
+ */
+export const timelineProgressManager = {
+  initTimelineProgressListener,
+  cleanupTimelineProgressListener,
+};
+
+// Auto-initialize timeline progress listener when module loads
+// This ensures timeline progress updates work as soon as the module is imported
+if (typeof window !== 'undefined') {
+  // Only in browser environment
+  initTimelineProgressListener().catch(error => {
+    logger.opPlayback.error('Failed to initialize timeline progress listener:', error);
+  });
+}

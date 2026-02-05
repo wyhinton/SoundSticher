@@ -3,7 +3,7 @@
   import Progress from '../Progress.svelte';
   import TransportControls from './TransportControls.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
-  import { type Timeline } from '../state/timelines';
+  import { type Timeline } from '../state/timeline/timelines';
   import TimeDisplay from './TimeDisplay.svelte';
 
   export let timeline: Timeline;

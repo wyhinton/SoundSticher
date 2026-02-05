@@ -25,8 +25,8 @@ import {
   type TimelineHierarchy,
   buildHierarchyMaps,
   getIndicesToMoveOnDrag,
-} from './timelineGraph';
-import { getHierarchicalTimelineItems, TimelineItemWithHierarchy } from './timelines';
+} from './timeline/timelineGraph';
+import { getHierarchicalTimelineItems, TimelineItemWithHierarchy } from './timeline/timelines';
 
 // ============================================================================
 // TYPES

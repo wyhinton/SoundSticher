@@ -5,6 +5,7 @@ import { initializeStatusPublishers } from './status-publishers';
 import { undo, redo, canUndo, canRedo } from './undo/undo';
 import { opPlaybackService } from './opPlaybackService';
 import { initializeAutoRenderSubscription } from './autoRender';
+import { subscribeForTimelineStoreSerialization } from './timeline/persistentTimeline';
 
 /**
  * Initialize all frontend systems and services
@@ -22,6 +23,7 @@ export function initializeFrontend(): () => void {
   // Initialize automatic status publishers (buffering, etc.)
   initializeStatusPublishers();
 
+  subscribeForTimelineStoreSerialization();
   // Initialize waveform service (handles loading waveforms when operation changes)
   const cleanupWaveformService = initWaveformService();
 
