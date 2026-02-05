@@ -703,6 +703,8 @@
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
     overflow: hidden;
+    flex: 1; /* Take up remaining space in flex container */
+    min-height: 0; /* Allow flexbox to shrink below content size */
   }
   svg {
     width: 100%;

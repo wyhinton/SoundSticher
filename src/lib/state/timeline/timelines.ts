@@ -206,7 +206,7 @@ export interface SerializableTimelinesState {
  */
 function serializeTimeline(timeline: Timeline): SerializableTimeline {
   const currentItems = get(timeline.items);
-  
+
   return {
     id: timeline.id,
     source: timeline.source,
@@ -221,17 +221,17 @@ function serializeTimeline(timeline: Timeline): SerializableTimeline {
  */
 function deserializeTimeline(serialized: SerializableTimeline): Timeline {
   const { id, source, view } = serialized;
-  
+
   // Create waveform store for this timeline
   const waveformState = createTimelineWaveformStore(id);
-  
+
   let items: Readable<TimelineItem[]>;
-  
+
   if (source.kind === 'operation') {
     // For operation-based timelines, recreate the reactive items store
     const operationIdReadable = writable(source.operationId);
     items = createOperationTimelineItems(operationIdReadable, waveformState);
-    
+
     // Trigger async loading of waveform data
     setTimeout(async () => {
       try {
@@ -256,7 +256,7 @@ function deserializeTimeline(serialized: SerializableTimeline): Timeline {
     // For other timeline types, create a static store with the serialized items
     items = writable(serialized.items);
   }
-  
+
   return {
     id,
     source,
@@ -274,28 +274,30 @@ const timelineStoreSerializer = {
     try {
       const serialized: SerializableTimelinesState = JSON.parse(text);
       const timelines: Record<TimelineId, Timeline> = {};
-      
+
       for (const [timelineId, serializedTimeline] of Object.entries(serialized.timelines)) {
         try {
           timelines[timelineId] = deserializeTimeline(serializedTimeline);
-          logger.timeline?.info(`Restored timeline: ${timelineId} (source: ${serializedTimeline.source.kind})`);
+          logger.timeline?.info(
+            `Restored timeline: ${timelineId} (source: ${serializedTimeline.source.kind})`
+          );
         } catch (error) {
           logger.timeline?.error(`Failed to restore timeline ${timelineId}:`, error);
           // Skip this timeline but continue with others
         }
       }
-      
+
       return { timelines };
     } catch (error) {
       logger.timeline?.error('Failed to parse timeline store:', error);
       return { timelines: {} };
     }
   },
-  
+
   stringify: (value: TimelinesState): string => {
     try {
       const serialized: SerializableTimelinesState = { timelines: {} };
-      
+
       for (const [timelineId, timeline] of Object.entries(value.timelines)) {
         if (timeline) {
           try {
@@ -306,13 +308,13 @@ const timelineStoreSerializer = {
           }
         }
       }
-      
+
       return JSON.stringify(serialized);
     } catch (error) {
       logger.timeline?.error('Failed to stringify timeline store:', error);
       return JSON.stringify({ timelines: {} });
     }
-  }
+  },
 };
 
 export const timelinesStore = persisted<TimelinesState>(

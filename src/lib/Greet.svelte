@@ -118,8 +118,10 @@
             <Splitpanes theme="modern-theme" horizontal={true}>
               {#each $operationTimelines as timeline (timeline.id)}
                 <Pane>
-                  <PlottedInfo {timeline} />
-                  <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
+                  <div class="timeline-pane-content">
+                    <PlottedInfo {timeline} />
+                    <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
+                  </div>
                 </Pane>
               {:else}
                 <div class="no-timelines">
@@ -156,6 +158,13 @@
     overflow: hidden;
     height: 100%;
     width: 100%;
+  }
+
+  .timeline-pane-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
   }
 
   /* Modern theme for splitpanes */
