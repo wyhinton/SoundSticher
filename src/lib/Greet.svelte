@@ -65,6 +65,8 @@
   // Handle resize of operations panel
   function handleOperationsPanelResize(event: CustomEvent<number>) {
     if (event.detail) {
+      console.log(`%cHERE LINE :68 %c`, 'color: yellow; font-weight: bold', '');
+
       operationsPanelHeight = (event.detail as any as IPaneSizingEvent[])[0].size;
     }
   }
