@@ -232,7 +232,7 @@ fn load_audio_file(file_path: &str) -> Result<(Vec<f32>, u32, u32, f64), Operati
     use symphonia::core::meta::MetadataOptions;
     use symphonia::core::probe::Hint;
 
-    let file = File::open(file_path).map_err(|e| OperationError::IoError(e))?;
+    let file = File::open(file_path).map_err(OperationError::IoError)?;
 
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 

@@ -212,8 +212,7 @@ pub async fn get_filtered_artifacts(
                 // Match against frontend_op_id (preferred for frontend queries)
                 let frontend_match = r
                     .frontend_op_id
-                    .as_ref()
-                    .map_or(false, |fid| fid == operation_id);
+                    .as_ref() == Some(operation_id);
                 // Fallback to backend ID match if no frontend match
                 frontend_match || backend_id_string == *operation_id
             } else {
@@ -221,8 +220,7 @@ pub async fn get_filtered_artifacts(
                 let backend_match = backend_id_string == *operation_id;
                 let frontend_match = r
                     .frontend_op_id
-                    .as_ref()
-                    .map_or(false, |fid| fid == operation_id);
+                    .as_ref() == Some(operation_id);
                 backend_match || frontend_match
             };
 
@@ -382,8 +380,8 @@ pub async fn remove_artifacts_by_operation_debug(
 
     for record in all_records {
         let op_id_string = id_utils::id_to_string(record.creator_op_id);
-        if op_id_string == operation_id {
-            if registry.remove_artifact(&record.id).is_some() {
+        if op_id_string == operation_id
+            && registry.remove_artifact(&record.id).is_some() {
                 removed_count += 1;
                 logger.debug(
                     LogSystem::Artifacts,
@@ -391,7 +389,6 @@ pub async fn remove_artifacts_by_operation_debug(
                     Some("remove"),
                 );
             }
-        }
     }
 
     logger.info(
@@ -488,6 +485,7 @@ impl From<ArtifactRecord> for ArtifactRecordForFrontend {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ArtifactFilter {
     pub artifact_type: Option<String>,
     pub exists: Option<bool>,
@@ -496,14 +494,3 @@ pub struct ArtifactFilter {
     pub max_size_bytes: Option<u64>,
 }
 
-impl Default for ArtifactFilter {
-    fn default() -> Self {
-        Self {
-            artifact_type: None,
-            exists: None,
-            operation_id: None,
-            min_size_bytes: None,
-            max_size_bytes: None,
-        }
-    }
-}

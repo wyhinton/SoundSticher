@@ -143,7 +143,7 @@ impl ArtifactRegistry {
         // Track which operation created this artifact
         self.by_op
             .entry(creator_op_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(artifact_id.clone());
 
         Ok(artifact_id)
@@ -178,7 +178,7 @@ impl ArtifactRegistry {
         // Track which operation created this artifact
         self.by_op
             .entry(creator_op_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(artifact_id.clone());
 
         Ok(artifact_id)

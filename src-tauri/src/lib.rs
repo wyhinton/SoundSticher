@@ -200,7 +200,7 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
                 return Command::new(&code_path)
                     .args(&args)
                     .spawn()
-                    .map(|mut child| {
+                    .map(|_child| {
                         // Don't wait for the process to finish, just let it run
                         // let _ = child.kill();
                     })

@@ -117,7 +117,7 @@ impl RenderOperation for MergeOpRender {
         artifact_tags.insert("output_format".to_string(), "wav".to_string());
 
         let artifact = Artifact::Audio(output_audio.clone());
-        if let Ok(Some(artifact_id)) = context.publish_artifact_with_tags(artifact.clone(), artifact_tags) {
+        if let Ok(Some(_artifact_id)) = context.publish_artifact_with_tags(artifact.clone(), artifact_tags) {
             // Artifact successfully registered - optionally log this
             // This could be used later for tracking, cleanup, or dependency management
         }
