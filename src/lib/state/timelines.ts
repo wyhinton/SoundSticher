@@ -1,13 +1,8 @@
 import { derived, get, Readable, writable } from 'svelte/store';
 import { appState, AudioFileTimelineItem, TimelineItem } from './state.svelte';
-import type { OperationId } from './operation';
+import type { OperationDef, OperationId } from './operation';
 import { logger } from './logging';
-import {
-  getHierarchicalTimelineItems,
-  operationWaveforms,
-  waveformCache,
-  type Waveform,
-} from './waveformCache';
+import { operationWaveforms, waveformCache, type Waveform } from './waveformCache';
 
 export type TimelineId = string;
 export type TrackId = string;
@@ -67,6 +62,26 @@ export interface TimelineLayout {
 
 export interface TimelinesState {
   timelines: Record<TimelineId, Timeline>;
+}
+
+/**
+ * Metadata for a timeline item with hierarchy information
+ *
+ * IMPORTANT: operationId is the stable identifier for the operation that
+ * produced this timeline item. Use this for deletion and updates, NOT names.
+ */
+export interface TimelineItemWithHierarchy {
+  id: string; // Timeline item ID (sample file ID or merge group ID)
+  path: string;
+  active: boolean;
+  index: number;
+  kind: 'sample' | 'merge';
+  operationId: string; // 🔑 Immutable operation ID (source of truth)
+  operationName: string; // Display name (for UI only)
+  depth: number;
+  parentId: string | undefined;
+  children: string[];
+  isGroup: boolean;
 }
 
 const DEFAULT_VIEW_STATE: TimelineViewState = {
@@ -456,6 +471,205 @@ export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
       },
     }));
   }
+}
+
+/**
+ * Get flattened timeline items with hierarchy for the root operation
+ * This is used when we want to show nested MergeOps as distinct visual groups
+ */
+export function getHierarchicalTimelineItems(
+  operation: OperationDef | undefined,
+  operationId: string
+): TimelineItemWithHierarchy[] {
+  if (!operation) return [];
+
+  const appStateValue = get(appState);
+  const operations = appStateValue.operations?.defs;
+
+  if (!operations) return [];
+
+  // For the root operation, we only show its contents, not the root itself
+  // (the root is implied by the selection)
+  if (operation.kind === 'merge') {
+    const items: TimelineItemWithHierarchy[] = [];
+    let globalIndex = 0;
+
+    // Process each source in the root MergeOp
+    for (const source of operation.sources) {
+      if (source.type === 'operation') {
+        const childOp = operations[source.operationId];
+        if (childOp) {
+          // Check if this child is itself a MergeOp
+          if (childOp.kind === 'merge') {
+            // This is a nested MergeOp - flatten it with depth tracking
+            const nestedItems = flattenOperationToTimelineItems(
+              childOp,
+              childOp.id,
+              operations,
+              0, // Start at depth 0 for nested MergeOps (they're top-level within our view)
+              undefined
+            );
+            // Re-index the items
+            for (const item of nestedItems) {
+              item.index = globalIndex++;
+            }
+            items.push(...nestedItems);
+          } else if (childOp.kind === 'sample') {
+            // Regular sample - add as leaf
+            for (const sampleSource of childOp.sources) {
+              if (sampleSource.type === 'file') {
+                items.push({
+                  id: sampleSource.fileId,
+                  path: sampleSource.fileId,
+                  active: true,
+                  index: globalIndex++,
+                  kind: 'sample',
+                  operationId: childOp.id,
+                  operationName: childOp.name,
+                  depth: 0,
+                  parentId: undefined,
+                  children: [],
+                  isGroup: false,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return items;
+  } else if (operation.kind === 'sample') {
+    // Single sample operation
+    const items: TimelineItemWithHierarchy[] = [];
+    for (const source of operation.sources) {
+      if (source.type === 'file') {
+        items.push({
+          id: source.fileId,
+          path: source.fileId,
+          active: true,
+          index: 0,
+          kind: 'sample',
+          operationId: operation.id,
+          operationName: operation.name,
+          depth: 0,
+          parentId: undefined,
+          children: [],
+          isGroup: false,
+        });
+      }
+    }
+    return items;
+  }
+
+  return [];
+}
+
+/**
+ * Flatten an operation graph into timeline items while preserving hierarchy
+ *
+ * This walks the operation graph recursively and produces a flat array
+ * where each item knows its:
+ * - kind ('sample' or 'merge')
+ * - depth (nesting level)
+ * - parentId (immediate parent MergeOp)
+ * - children (for MergeOps, the IDs of direct children)
+ * - isGroup (true for MergeOps)
+ */
+function flattenOperationToTimelineItems(
+  operation: OperationDef | undefined,
+  operationId: string,
+  operations: Record<string, OperationDef>,
+  depth: number = 0,
+  parentId: string | undefined = undefined
+): TimelineItemWithHierarchy[] {
+  if (!operation) return [];
+
+  const items: TimelineItemWithHierarchy[] = [];
+  let globalIndex = 0;
+
+  function processOperation(
+    op: OperationDef,
+    opId: string,
+    currentDepth: number,
+    currentParentId: string | undefined
+  ): TimelineItemWithHierarchy[] {
+    const result: TimelineItemWithHierarchy[] = [];
+
+    if (op.kind === 'sample') {
+      // Leaf node - extract file from sources
+      for (const source of op.sources) {
+        if (source.type === 'file') {
+          result.push({
+            id: source.fileId,
+            path: source.fileId,
+            active: true,
+            index: globalIndex++,
+            kind: 'sample',
+            operationId: op.id,
+            operationName: op.name,
+            depth: currentDepth,
+            parentId: currentParentId,
+            children: [],
+            isGroup: false,
+          });
+        }
+      }
+    } else if (op.kind === 'merge') {
+      // MergeOp - this is a group container
+      const mergeId = `merge:${op.id}`;
+      const childIds: string[] = [];
+      const childItems: TimelineItemWithHierarchy[] = [];
+
+      // Process each source in the MergeOp
+      for (const source of op.sources) {
+        if (source.type === 'operation') {
+          const childOp = operations[source.operationId];
+          if (childOp) {
+            // Recursively process child operations
+            const childResult = processOperation(
+              childOp,
+              source.operationId,
+              currentDepth + 1,
+              mergeId
+            );
+
+            // Collect child IDs (direct children only, not grandchildren)
+            for (const item of childResult) {
+              if (item.depth === currentDepth + 1) {
+                childIds.push(item.id);
+              }
+            }
+
+            childItems.push(...childResult);
+          }
+        }
+      }
+
+      // Add the MergeOp itself as a group container (at the current depth)
+      // Note: We insert the MergeOp BEFORE its children for proper ordering
+      result.push({
+        id: mergeId,
+        path: op.name,
+        active: true,
+        index: globalIndex++,
+        kind: 'merge',
+        operationId: op.id,
+        operationName: op.name,
+        depth: currentDepth,
+        parentId: currentParentId,
+        children: childIds,
+        isGroup: true,
+      });
+
+      // Add all child items after the MergeOp
+      result.push(...childItems);
+    }
+
+    return result;
+  }
+
+  return processOperation(operation, operationId, depth, parentId);
 }
 
 /**
