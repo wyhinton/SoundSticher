@@ -5,7 +5,7 @@
     backendLogs,
     type BackendLogMessage,
   } from '$lib/state/logging';
-  import PrismWrapper from './PrismWrapper.svelte';
+  import PrismWrapper from '../../Shared/PrismWrapper.svelte';
   import { invoke } from '@tauri-apps/api/core';
 
   // ...existing code...

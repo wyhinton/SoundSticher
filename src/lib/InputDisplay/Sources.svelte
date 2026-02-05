@@ -9,7 +9,7 @@
   import { tick } from 'svelte';
   import lottie from 'lottie-web';
 
-  import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
+  import DropDownActionsButton from '../components/Shared/DropDownActionsButton.svelte';
   import { dropzone } from '$lib/attachments/droppable';
 
   // Get sample op files for display using operationId

@@ -2,7 +2,7 @@
   import GroupItem from './GroupItem.svelte';
   import GroupDebugPanel from './GroupDebugPanel.svelte';
   import GroupDetailsPanel from './GroupDetailsPanel.svelte';
-  import ButtonPill from '$lib/components/ButtonPill.svelte';
+  import ButtonPill from '$lib/components/Shared/ButtonPill.svelte';
   import {
     testGroups,
     GroupRegistry,

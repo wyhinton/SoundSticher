@@ -9,7 +9,7 @@
   import Footer from './StatusFooter.svelte';
   import { initializeFrontend } from './state/initializeFrontend';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
-  import MainDebugToolbar from './components/MainDebugToolbar.svelte';
+  import MainDebugToolbar from './components/debug/MainDebugToolbar.svelte';
   import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
   import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { opPlaybackService } from './state/opPlaybackService';

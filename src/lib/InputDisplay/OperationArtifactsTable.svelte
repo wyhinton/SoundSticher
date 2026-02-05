@@ -1,7 +1,7 @@
 <script lang="ts">
   import { formatBytes } from '../utils/format';
   import { invoke } from '@tauri-apps/api/core';
-  import FileLink from '../components/FileLink.svelte';
+  import FileLink from '../components/Shared/FileLink.svelte';
 
   // Props
   export let operationId: string | undefined = undefined;

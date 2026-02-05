@@ -6,7 +6,6 @@
     resetPerformance,
     type PerformanceMetric,
   } from '$lib/state/performance';
-  import PerformanceDebugTable from '$lib/components/PerformanceDebugTable.svelte';
   import {
     appState,
     hoveredSourceItem,
@@ -22,11 +21,10 @@
   import { onDestroy, onMount } from 'svelte';
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   import { exportState } from '$lib/state/export';
-  import TabContainer from '$lib/components/TabContainer.svelte';
-  import PrismWrapper from '$lib/components/PrismWrapper.svelte';
-  import LoggingControls from '$lib/components/LoggingControls.svelte';
-  import ArtifactRegistryDebug from '$lib/components/ArtifactRegistryDebug.svelte';
-  import TimelineStoreDebug from '$lib/components/TimelineStoreDebug.svelte';
+  import TabContainer from '$lib/components/debug/TabContainer.svelte';
+  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
+  import LoggingControls from '$lib/components/debug/tab_panels/LoggingControls.svelte';
+  import ArtifactRegistryDebug from '$lib/components/debug/tab_panels/ArtifactRegistryDebug.svelte';
   import {
     selectedCount,
     previewCount,
@@ -51,6 +49,7 @@
     getRedoStack,
     clearUndoRedoHistory,
   } from '$lib/state/undo/undo';
+  import TimelineStoreDebug from '$lib/components/debug/tab_panels/TimelineStoreDebug.svelte';
 
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {

@@ -7,7 +7,7 @@
     operationTimelines,
   } from '$lib/state/timelines';
   import { appState } from '$lib/state/state.svelte';
-  import PrismWrapper from '$lib/components/PrismWrapper.svelte';
+  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
   // Reactive stores
   $: timelinesState = $timelinesStore;
 

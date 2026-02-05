@@ -5,17 +5,17 @@
     appState,
     callSiteTrackingEnabled,
     toggleCallSiteTrackingEnabled,
-  } from '../state/state.svelte';
-  import { invokeWithPerf, updateInputs } from '../state/performance';
-  import { loggingState } from '../state/logging';
+  } from '../../state/state.svelte';
+  import { invokeWithPerf, updateInputs } from '../../state/performance';
+  import { loggingState } from '../../state/logging';
   import { get } from 'svelte/store';
   import { onMount, onDestroy } from 'svelte';
-  import { debugState, customContextMenu } from '../state/debug.svelte';
-  import { timelineDebugMode } from '../state/state.svelte';
+  import { debugState, customContextMenu } from '../../state/debug.svelte';
+  import { timelineDebugMode } from '../../state/state.svelte';
   import { type DurationResponse } from '$lib/state/durationCache';
-  import UndoRedoControls from './UndoRedoControls.svelte';
-  import TimelineOverlay from './TimelineOverlay.svelte';
-  import { useSampleCache } from '../state/opPlaybackService';
+  import UndoRedoControls from '../UndoRedoControls.svelte';
+  import TimelineOverlay from '../TimelineOverlay.svelte';
+  import { useSampleCache } from '../../state/opPlaybackService';
 
   // Visibility state
   let isVisible = false;

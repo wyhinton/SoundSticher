@@ -2,7 +2,7 @@
   import { toCssRgb } from '../utils/colors';
   import type { Section } from '../state/state.svelte';
   import EditableInput from './EditableInput.svelte';
-  import DropDownActionsButton from '../components/DropDownActionsButton.svelte';
+  import DropDownActionsButton from '../components/Shared/DropDownActionsButton.svelte';
   import { addToFavorites, isFavorite } from '$lib/state/favorites';
 
   export let item: Section;

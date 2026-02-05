@@ -15,6 +15,7 @@
     "lint:fix": "eslint --fix src --ext .js,.ts,.svelte",
     "lint": "svelte-check --tsconfig ./tsconfig.json && eslint src --ext .js,.ts,.svelte",
     "pr": "powershell -ExecutionPolicy Bypass -File ./scripts/create-pr.ps1",
+    "commit": "powershell -ExecutionPolicy Bypass -File ./scripts/commit-all.ps1",
     "release:major": "npm version major && git push && git push --tags",
     "release:minor": "npm version minor && git push && git push --tags",
     "release:patch": "npm version patch && git push && git push --tags",

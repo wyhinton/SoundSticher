@@ -1,5 +1,5 @@
 <script lang="ts">
-  import DropDownActionsButton from '$lib/components/DropDownActionsButton.svelte';
+  import DropDownActionsButton from '$lib/components/Shared/DropDownActionsButton.svelte';
   import { type GroupDef, ItemQueryDetailsDictionary } from '$lib/state/groups';
 
   export let groupName: string;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { appState } from '../state/state.svelte';
+  import { appState } from '../../state/state.svelte';
 
   export let isOpen = false;
   export let onClose: () => void;
