@@ -23,7 +23,7 @@
   import { D3TimelineManager } from './Timeline/D3TimelineManager';
   import { timelineDebugMode, type TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
-  import { timelinesStore, type TimelineId, type Timeline } from '$lib/state/timeline/timelines';
+  import { timelinesStore, type TimelineId, type Timeline, setActiveTimeline } from '$lib/state/timeline/timelines';
   import {
     getIndicesToMoveOnDrag,
     type TimelineHierarchy,
@@ -299,6 +299,11 @@
 
   function handleClick(event: MouseEvent) {
     if (!d3Manager) return;
+
+    // Set this timeline as the active timeline when clicked
+    if (activeTimeline?.id) {
+      setActiveTimeline(activeTimeline.id);
+    }
 
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;

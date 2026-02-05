@@ -143,6 +143,7 @@ export interface TimelineLayout {
 
 export interface TimelinesState {
   timelines: Record<TimelineId, Timeline>;
+  activeTimelineId: TimelineId | null;
 }
 
 /**
@@ -198,6 +199,7 @@ export interface SerializableTimeline {
 
 export interface SerializableTimelinesState {
   timelines: Record<TimelineId, SerializableTimeline>;
+  activeTimelineId: TimelineId | null;
 }
 
 /**
@@ -287,16 +289,25 @@ const timelineStoreSerializer = {
         }
       }
 
-      return { timelines };
+      return { 
+        timelines,
+        activeTimelineId: serialized.activeTimelineId || null
+      };
     } catch (error) {
       logger.timeline?.error('Failed to parse timeline store:', error);
-      return { timelines: {} };
+      return { 
+        timelines: {},
+        activeTimelineId: null
+      };
     }
   },
 
   stringify: (value: TimelinesState): string => {
     try {
-      const serialized: SerializableTimelinesState = { timelines: {} };
+      const serialized: SerializableTimelinesState = { 
+        timelines: {},
+        activeTimelineId: value.activeTimelineId
+      };
 
       for (const [timelineId, timeline] of Object.entries(value.timelines)) {
         if (timeline) {
@@ -312,14 +323,20 @@ const timelineStoreSerializer = {
       return JSON.stringify(serialized);
     } catch (error) {
       logger.timeline?.error('Failed to stringify timeline store:', error);
-      return JSON.stringify({ timelines: {} });
+      return JSON.stringify({ 
+        timelines: {},
+        activeTimelineId: null
+      });
     }
   },
 };
 
 export const timelinesStore = persisted<TimelinesState>(
   'timelines:v1',
-  { timelines: {} },
+  { 
+    timelines: {},
+    activeTimelineId: null
+  },
   {
     serializer: timelineStoreSerializer,
   }
@@ -926,6 +943,38 @@ export const operationTimelines = derived(timelinesStore, $timelinesStore => {
     timeline => timeline && timeline.source.kind === 'operation'
   );
 });
+
+/**
+ * Set the active timeline ID
+ */
+export function setActiveTimeline(timelineId: TimelineId | null): void {
+  timelinesStore.update(state => ({
+    ...state,
+    activeTimelineId: timelineId
+  }));
+  
+  if (timelineId) {
+    logger.timeline?.info(`Set active timeline: ${timelineId}`);
+  } else {
+    logger.timeline?.info('Cleared active timeline');
+  }
+}
+
+/**
+ * Get the current active timeline ID
+ */
+export function getActiveTimelineId(): TimelineId | null {
+  return get(timelinesStore).activeTimelineId;
+}
+
+/**
+ * Get the current active timeline
+ */
+export function getActiveTimeline(): Timeline | null {
+  const state = get(timelinesStore);
+  const activeId = state.activeTimelineId;
+  return activeId ? state.timelines[activeId] || null : null;
+}
 
 /**
  * Timeline progress event management

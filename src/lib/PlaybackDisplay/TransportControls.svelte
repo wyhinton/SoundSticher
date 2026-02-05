@@ -7,6 +7,7 @@
     opIsPaused,
   } from '$lib/state/opPlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
+  import { getActiveTimelineId, getActiveTimeline } from '$lib/state/timeline/timelines';
 
   // Component props
   export let disabled: boolean = false;
