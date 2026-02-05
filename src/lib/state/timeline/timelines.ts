@@ -1,4 +1,5 @@
 import { derived, get, Readable, writable } from 'svelte/store';
+import { persisted } from 'svelte-persisted-store';
 import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
 import type { OperationDef, OperationId } from '../operation';
 import { logger } from '../logging';
@@ -184,15 +185,150 @@ export function defaultTimelineViewState(): TimelineViewState {
   };
 }
 
-export const timelinesStore = writable<TimelinesState>({
-  timelines: {},
-});
+// ============================================================================
+// SERIALIZATION FOR PERSISTENCE
+// ============================================================================
+
+export interface SerializableTimeline {
+  id: TimelineId;
+  source: TimelineSource;
+  view: TimelineViewState;
+  items: TimelineItem[]; // plain array instead of Readable
+}
+
+export interface SerializableTimelinesState {
+  timelines: Record<TimelineId, SerializableTimeline>;
+}
+
+/**
+ * Serialize a Timeline to a SerializableTimeline
+ * Converts the reactive items store to a plain array
+ */
+function serializeTimeline(timeline: Timeline): SerializableTimeline {
+  const currentItems = get(timeline.items);
+  
+  return {
+    id: timeline.id,
+    source: timeline.source,
+    view: timeline.view,
+    items: currentItems,
+  };
+}
+
+/**
+ * Deserialize a SerializableTimeline back to a Timeline
+ * Recreates the reactive stores and waveform state
+ */
+function deserializeTimeline(serialized: SerializableTimeline): Timeline {
+  const { id, source, view } = serialized;
+  
+  // Create waveform store for this timeline
+  const waveformState = createTimelineWaveformStore(id);
+  
+  let items: Readable<TimelineItem[]>;
+  
+  if (source.kind === 'operation') {
+    // For operation-based timelines, recreate the reactive items store
+    const operationIdReadable = writable(source.operationId);
+    items = createOperationTimelineItems(operationIdReadable, waveformState);
+    
+    // Trigger async loading of waveform data
+    setTimeout(async () => {
+      try {
+        const currentAppState = get(appState);
+        const operation = currentAppState.operations?.defs?.[source.operationId];
+        if (operation) {
+          const hierarchicalItems = getHierarchicalTimelineItems(operation, source.operationId);
+          const filePaths = hierarchicalItems
+            .filter(item => item.kind === 'sample')
+            .map(item => item.path);
+
+          if (filePaths.length > 0) {
+            await waveformState.load(filePaths, 1000);
+          }
+        }
+        logger.timeline?.info(`Restored timeline ${id} for operation ${source.operationId}`);
+      } catch (error) {
+        logger.timeline?.error(`Failed to restore waveform data for timeline ${id}:`, error);
+      }
+    }, 0);
+  } else {
+    // For other timeline types, create a static store with the serialized items
+    items = writable(serialized.items);
+  }
+  
+  return {
+    id,
+    source,
+    view,
+    items,
+    waveformState,
+  };
+}
+
+/**
+ * Custom serializer for the persisted timelines store
+ */
+const timelineStoreSerializer = {
+  parse: (text: string): TimelinesState => {
+    try {
+      const serialized: SerializableTimelinesState = JSON.parse(text);
+      const timelines: Record<TimelineId, Timeline> = {};
+      
+      for (const [timelineId, serializedTimeline] of Object.entries(serialized.timelines)) {
+        try {
+          timelines[timelineId] = deserializeTimeline(serializedTimeline);
+          logger.timeline?.info(`Restored timeline: ${timelineId} (source: ${serializedTimeline.source.kind})`);
+        } catch (error) {
+          logger.timeline?.error(`Failed to restore timeline ${timelineId}:`, error);
+          // Skip this timeline but continue with others
+        }
+      }
+      
+      return { timelines };
+    } catch (error) {
+      logger.timeline?.error('Failed to parse timeline store:', error);
+      return { timelines: {} };
+    }
+  },
+  
+  stringify: (value: TimelinesState): string => {
+    try {
+      const serialized: SerializableTimelinesState = { timelines: {} };
+      
+      for (const [timelineId, timeline] of Object.entries(value.timelines)) {
+        if (timeline) {
+          try {
+            serialized.timelines[timelineId] = serializeTimeline(timeline);
+          } catch (error) {
+            logger.timeline?.error(`Failed to serialize timeline ${timelineId}:`, error);
+            // Skip this timeline but continue with others
+          }
+        }
+      }
+      
+      return JSON.stringify(serialized);
+    } catch (error) {
+      logger.timeline?.error('Failed to stringify timeline store:', error);
+      return JSON.stringify({ timelines: {} });
+    }
+  }
+};
+
+export const timelinesStore = persisted<TimelinesState>(
+  'timelines:v1',
+  { timelines: {} },
+  {
+    serializer: timelineStoreSerializer,
+  }
+);
 
 /**
  * Create a timeline-scoped waveform store
  * This replaces the global operationWaveforms store for individual timelines
  */
 function createTimelineWaveformStore(timelineId: TimelineId) {
+  //THIS BECOMES PERISSTED AND
   const { subscribe, set, update } = writable<TimelineWaveformState>({
     timelineId,
     filePaths: [],

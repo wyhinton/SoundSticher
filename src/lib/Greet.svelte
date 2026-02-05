@@ -127,10 +127,8 @@
             <Splitpanes theme="modern-theme" horizontal={true}>
               {#each $operationTimelines as timeline (timeline.id)}
                 <Pane>
-                  <div class="timeline-wrapper">
-                    <PlottedInfo {timeline} />
-                    <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
-                  </div>
+                  <PlottedInfo {timeline} />
+                  <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
                 </Pane>
               {:else}
                 <div class="no-timelines">
