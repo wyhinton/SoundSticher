@@ -2,7 +2,12 @@ import { derived, get, Readable, writable } from 'svelte/store';
 import { appState, AudioFileTimelineItem, TimelineItem } from './state.svelte';
 import type { OperationId } from './operation';
 import { logger } from './logging';
-import { getHierarchicalTimelineItems, operationWaveforms } from './waveformCache';
+import {
+  getHierarchicalTimelineItems,
+  operationWaveforms,
+  waveformCache,
+  type Waveform,
+} from './waveformCache';
 
 export type TimelineId = string;
 export type TrackId = string;
@@ -31,11 +36,28 @@ export interface TimelineViewState {
   visibleTracks: TrackId[];
 }
 
+export interface TimelineWaveformState {
+  timelineId: TimelineId;
+  filePaths: string[];
+  durations: Map<string, number>;
+  waveforms: Map<string, Waveform>;
+  totalDuration: number;
+  pxPerSecond: number;
+  loading: boolean;
+  loadingWaveforms: boolean;
+  error: string | null;
+}
+
 export interface Timeline {
   id: TimelineId;
   source: TimelineSource;
   view: TimelineViewState;
   items: Readable<TimelineItem[]>;
+  waveformState?: {
+    subscribe: (this: void, run: (value: TimelineWaveformState) => void) => () => void;
+    load: (filePaths: string[], timelineWidth: number) => Promise<void>;
+    clear: () => Promise<void>;
+  };
 }
 
 export interface TimelineLayout {
@@ -71,12 +93,114 @@ export const timelinesStore = writable<TimelinesState>({
   timelines: {},
 });
 
+/**
+ * Create a timeline-scoped waveform store
+ * This replaces the global operationWaveforms store for individual timelines
+ */
+function createTimelineWaveformStore(timelineId: TimelineId) {
+  const { subscribe, set, update } = writable<TimelineWaveformState>({
+    timelineId,
+    filePaths: [],
+    durations: new Map(),
+    waveforms: new Map(),
+    totalDuration: 0,
+    pxPerSecond: 10,
+    loading: false,
+    loadingWaveforms: false,
+    error: null,
+  });
+
+  async function load(filePaths: string[], timelineWidth: number) {
+    // Set loading state
+    update(state => ({ ...state, loading: true, loadingWaveforms: true, error: null }));
+
+    try {
+      // Load durations first (these determine layout)
+      const durations = new Map<string, number>();
+      let totalDuration = 0;
+
+      // TODO: Load durations from duration cache
+      // For now, use placeholder durations
+      for (const filePath of filePaths) {
+        const duration = 30; // Placeholder - should come from duration cache
+        durations.set(filePath, duration);
+        totalDuration += duration;
+      }
+
+      // Update with durations loaded (layout is now stable)
+      update(state => ({
+        ...state,
+        filePaths,
+        durations,
+        totalDuration,
+        pxPerSecond: timelineWidth / totalDuration,
+        loading: false,
+      }));
+
+      // Load waveforms asynchronously (visual only, doesn't affect layout)
+      const waveforms = new Map<string, Waveform>();
+
+      for (const filePath of filePaths) {
+        try {
+          const waveform = await waveformCache.getOrFetch(filePath, {
+            width: Math.round((durations.get(filePath) || 0) * (timelineWidth / totalDuration)),
+            height: 100, // Default height
+            normalize: true,
+          });
+          waveforms.set(filePath, waveform);
+
+          // Update progressively as waveforms load
+          update(state => ({
+            ...state,
+            waveforms: new Map(state.waveforms.set(filePath, waveform)),
+          }));
+        } catch (error) {
+          logger.waveform.warning(`Failed to load waveform for ${filePath}:`, error);
+        }
+      }
+
+      // All waveforms loaded
+      update(state => ({ ...state, loadingWaveforms: false }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.waveform.error(`Failed to load timeline waveforms for ${timelineId}:`, error);
+      update(state => ({
+        ...state,
+        loading: false,
+        loadingWaveforms: false,
+        error: errorMessage,
+      }));
+    }
+  }
+
+  async function clear() {
+    set({
+      timelineId,
+      filePaths: [],
+      durations: new Map(),
+      waveforms: new Map(),
+      totalDuration: 0,
+      pxPerSecond: 10,
+      loading: false,
+      loadingWaveforms: false,
+      error: null,
+    });
+  }
+
+  return {
+    subscribe,
+    load,
+    clear,
+  };
+}
+
 export function createOperationTimelineItems(
-  operationId: Readable<string | null>
+  operationId: Readable<string | null>,
+  waveformStateStore: { subscribe: (run: (value: TimelineWaveformState) => void) => () => void }
 ): Readable<TimelineItem[]> {
   return derived(
-    [operationId, appState, operationWaveforms],
-    ([$operationId, $appState, $operationWaveforms]) => {
+    [operationId, appState, waveformStateStore],
+    ([$operationId, $appState, $waveformState]) => {
       if (!$operationId || !$appState.operations?.defs) {
         return [];
       }
@@ -86,9 +210,6 @@ export function createOperationTimelineItems(
         logger.waveform.warning(`Operation id="${$operationId}" not found in definitions`);
         return [];
       }
-
-      // 👇 EVERYTHING BELOW CAN STAY ALMOST IDENTICAL
-      // (this is important)
 
       // Get hierarchical file items from the operation sources
       const hierarchicalItems = getHierarchicalTimelineItems(operation, $operationId);
@@ -100,9 +221,8 @@ export function createOperationTimelineItems(
         return [];
       }
 
-      // ✅ Use durations from duration cache (source of truth for layout)
-      // NOT waveforms - waveforms are purely visual
-      const { durations, totalDuration } = $operationWaveforms;
+      // ✅ Use durations from timeline's waveform state (source of truth for layout)
+      const { durations, totalDuration } = $waveformState;
 
       // If durations aren't loaded yet, we can't compute layout
       if (durations.size === 0 || totalDuration === 0) {
@@ -114,7 +234,7 @@ export function createOperationTimelineItems(
 
       // Log waveform loading status (informational, doesn't affect layout)
       const sampleItems = hierarchicalItems.filter(item => item.kind === 'sample');
-      const loadedWaveforms = $operationWaveforms.waveforms.size;
+      const loadedWaveforms = $waveformState.waveforms.size;
       if (loadedWaveforms < sampleItems.length) {
         logger.waveform.info(
           `Operation "${operation.name}" has ${loadedWaveforms}/${sampleItems.length} waveforms loaded (layout is stable)`
@@ -151,7 +271,7 @@ export function createOperationTimelineItems(
           if (!layout) continue;
 
           const duration = durations.get(item.path);
-          const waveform = $operationWaveforms.waveforms.get(item.path);
+          const waveform = $waveformState.waveforms.get(item.path);
 
           items.push({
             kind: 'sample',
@@ -255,12 +375,39 @@ export function createOperationTimelineItems(
 export function createTimelineStateForOp(operationId: OperationId): Timeline {
   const timelineId = createTimelineId();
   const operationIdReadable = writable(operationId);
+  const waveformState = createTimelineWaveformStore(timelineId);
+
+  // Load waveform data for this operation
+  // This should happen after the timeline is created to get the file paths from the operation
+  const loadWaveformData = async () => {
+    try {
+      const currentAppState = get(appState);
+      const operation = currentAppState.operations?.defs?.[operationId];
+      if (operation) {
+        const hierarchicalItems = getHierarchicalTimelineItems(operation, operationId);
+        const filePaths = hierarchicalItems
+          .filter(item => item.kind === 'sample')
+          .map(item => item.path);
+
+        if (filePaths.length > 0) {
+          // Use default timeline width for initial load, this can be updated later
+          await waveformState.load(filePaths, 1000);
+        }
+      }
+    } catch (error) {
+      logger.waveform.error(`Failed to load waveform data for operation ${operationId}:`, error);
+    }
+  };
+
+  // Trigger async loading (don't await to avoid blocking timeline creation)
+  loadWaveformData();
 
   return {
     id: timelineId,
     source: { kind: 'operation', operationId },
     view: defaultTimelineViewState(),
-    items: createOperationTimelineItems(operationIdReadable),
+    items: createOperationTimelineItems(operationIdReadable, waveformState),
+    waveformState,
   };
 }
 

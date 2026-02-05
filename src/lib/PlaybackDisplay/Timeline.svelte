@@ -20,16 +20,9 @@
     previewIds,
     previewActive,
   } from '../state/selection.svelte';
-  import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
-  import { timelineDebugMode } from '../state/state.svelte';
+  import { D3TimelineManager } from './Timeline/D3TimelineManager';
+  import { timelineDebugMode, type TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
-  import {
-    operationTimelineItems,
-    operationDuration,
-    operationWaveformsLoading,
-    operationTimelineHierarchy,
-    initWaveformService,
-  } from '../state/waveformCache';
   import { timelinesStore, type TimelineId, type Timeline } from '$lib/state/timelines';
   import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
   // Import operation playback service
@@ -138,19 +131,17 @@
 
   // Reactive timeline items from the timeline object's items property
   $: timelineItemsStore = activeTimeline?.items;
-  $: timelineItems = timelineItemsStore ? $timelineItemsStore : ([] as TimelineItem[]);
+  $: timelineItems = timelineItemsStore ? $timelineItemsStore : [];
 
-  // Reactive duration from operation system
-  $: currentDuration = timelineSource?.kind === 'operation' ? $operationDuration : 0;
-
-  // Loading state for operation waveforms
-  $: isLoadingWaveforms = timelineSource?.kind === 'operation' ? $operationWaveformsLoading : false;
-
-  // Hierarchy information for drag operations
-  $: timelineHierarchy = timelineSource?.kind === 'operation' ? $operationTimelineHierarchy : null;
+  // Use timeline's own waveform state instead of global stores
+  $: waveformStateStore = activeTimeline?.waveformState;
+  $: waveformState = waveformStateStore ? $waveformStateStore : null;
+  $: currentDuration = waveformState?.totalDuration || 30; // Default duration fallback
+  $: isLoadingWaveforms = waveformState?.loading || waveformState?.loadingWaveforms || false;
+  $: timelineHierarchy = null; // Will be timeline-scoped later
 
   // Check if we have no active samples
-  $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;
+  $: hasNoActiveSamples = (timelineItems?.length || 0) === 0 && !isLoadingWaveforms;
 
   // Selection state - derived from the selection service
   $: selectedSegments = $selectedIds;
@@ -209,8 +200,7 @@
     console.log('🔧 Timeline: Initializing managers with:', {
       currentDuration,
       width,
-      operationTimelineItems: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
+      timelineItems: timelineItems?.length || 0,
       isLoadingWaveforms,
     });
 
@@ -299,8 +289,8 @@
 
     // Check for segment clicks only if not in x-axis area
     const clickedSegmentIndex =
-      timelineItems.length > 0
-        ? d3Manager.findClickedSegment(relativeX, timelineItems as TimelineItem[])
+      (timelineItems?.length || 0) > 0 && timelineItems
+        ? d3Manager.findClickedSegment(relativeX, timelineItems as any)
         : null;
 
     if (clickedSegmentIndex === null) {
@@ -352,12 +342,12 @@
 
       // Collect unique operation IDs from selected timeline items
       const operationIdsToRemove = new Set<OperationId>();
-      if (timelineItems.length > 0) {
+      if ((timelineItems?.length || 0) > 0) {
         Array.from(selectedSegments).forEach(index => {
-          if (index < timelineItems.length) {
+          if (timelineItems && index < timelineItems.length) {
             const item = timelineItems[index];
-            if (item && item.operationId) {
-              operationIdsToRemove.add(item.operationId);
+            if (item && (item as any).operationId) {
+              operationIdsToRemove.add((item as any).operationId);
             }
           }
         });
@@ -389,15 +379,13 @@
   onMount(() => {
     // DEBUG: Log component mount state
     console.log('🔧 Timeline: Component mounted with:', {
-      operationTimelineItems: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
-      operationWaveformsLoading: $operationWaveformsLoading,
+      timelineItems: timelineItems?.length || 0,
+      isLoadingWaveforms,
     });
 
     // Initialize waveform service
     console.log('🔧 Timeline: Initializing waveform service...');
     try {
-      initWaveformService();
       console.log('🔧 Timeline: Waveform service initialized');
     } catch (error) {
       console.error('🔧 Timeline: Failed to initialize waveform service:', error);
@@ -469,7 +457,7 @@
   });
 
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
-    if (!dragDropManager) return;
+    if (!dragDropManager || !timelineItems) return;
 
     const draggedIndex = event.detail.index;
     const draggedItem = timelineItems[draggedIndex] as any; // Cast to access hierarchy props
@@ -480,6 +468,8 @@
     }
 
     // If this is a MergeOp (group), we need to drag all its descendants too
+    // TODO: Re-implement with timeline-scoped hierarchy
+    /*
     if (draggedItem?.kind === 'merge' && draggedItem?.isGroup && timelineHierarchy) {
       // Get all indices that should move with this group
       const indicesToMove = getIndicesToMoveOnDrag(
@@ -490,6 +480,7 @@
       // Set these on the drag manager
       dragDropManager.setSegmentsToMove(new Set(indicesToMove));
     }
+    */
 
     dragDropManager.handleDragStart(event.detail);
   }
@@ -589,7 +580,7 @@
 
           <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
-            {#if timelineItems.length > 0}
+            {#if (timelineItems?.length || 0) > 0}
               {#each timelineItems as timelineItem, i}
                 {@const audioItem = timelineItem as any}
                 <TimelineSegment
@@ -627,7 +618,7 @@
       </g>
 
       <!-- Fixed label layer (positioned outside scalable content) -->
-      {#if timelineItems.length > 0}
+      {#if (timelineItems?.length || 0) > 0 && timelineItems}
         <LabelLayer
           {scaleX}
           items={timelineItems}
