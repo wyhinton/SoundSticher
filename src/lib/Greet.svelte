@@ -123,17 +123,21 @@
           maxSize={TIMELINE_RESIZE.MAX_HEIGHT_PERCENT}
         >
           <div class="timeline-container">
-            {#each $operationTimelines as timeline (timeline.id)}
-              <div class="timeline-wrapper">
-                <PlottedInfo {timeline} />
-                <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
-              </div>
-            {:else}
-              <div class="no-timelines">
-                <p>No operation timelines visible</p>
-                <small>Use the eye button on operations to show their timelines</small>
-              </div>
-            {/each}
+            <Splitpanes theme="modern-theme" horizontal={true}>
+              {#each $operationTimelines as timeline (timeline.id)}
+                <Pane>
+                  <div class="timeline-wrapper">
+                    <PlottedInfo {timeline} />
+                    <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
+                  </div>
+                </Pane>
+              {:else}
+                <div class="no-timelines">
+                  <p>No operation timelines visible</p>
+                  <small>Use the eye button on operations to show their timelines</small>
+                </div>
+              {/each}
+            </Splitpanes>
             <!-- <Export></Export> -->
           </div>
         </Pane>
