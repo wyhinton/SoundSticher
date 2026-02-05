@@ -527,7 +527,7 @@
   }
 </script>
 
-<div class="svg-container position-relative h-fill-available">
+<div class="svg-container position-relative">
   <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     {currentTransform.k.toFixed(2)}x
   </div>
@@ -713,6 +713,10 @@
   :global(g.axis text) {
     font-family: monospace;
     font-size: 10px; /* optional: adjust as needed */
+  }
+
+  :global(.splitpanes__pane) {
+    transition: none !important;
   }
 
   /* No Active Samples Message */

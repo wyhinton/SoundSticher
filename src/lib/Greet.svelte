@@ -33,15 +33,6 @@
   $: timelineHeight = TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
 
   // Update appState when timeline height changes
-  function setTimelineHeight(height: number) {
-    appState.update(s => ({
-      ...s,
-      uiSettings: {
-        ...s.uiSettings,
-        timelineHeight: height,
-      },
-    }));
-  }
 
   // async function onDrop(event) {
   //   filedropEvent = event;
