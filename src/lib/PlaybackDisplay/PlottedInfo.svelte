@@ -2,7 +2,6 @@
   import { listen } from '@tauri-apps/api/event';
   import Progress from '../Progress.svelte';
   import TransportControls from './TransportControls.svelte';
-  import { operationTimelineItems } from '../state/waveformCache';
 
   import TimeDisplay from './TimeDisplay.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
@@ -12,7 +11,8 @@
   let operationProgress = 1; // Set to 1 (100%) since operations are loaded instantly
 
   // Disable transport controls if no timeline items
-  $: transportDisabled = $operationTimelineItems.length === 0;
+  $: transportDisabled = false;
+  // $: transportDisabled = $operationTimelineItems.length === 0;
 </script>
 
 <div class="d-flex flex-column text-success">

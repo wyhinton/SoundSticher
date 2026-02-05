@@ -24,7 +24,13 @@
   import { timelineDebugMode, type TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
   import { timelinesStore, type TimelineId, type Timeline } from '$lib/state/timelines';
-  import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
+  import {
+    getIndicesToMoveOnDrag,
+    type TimelineHierarchy,
+    type FlattenedTimelineItem,
+    buildHierarchyMaps,
+  } from '../state/timelineGraph';
+  import { type AudioFileTimelineItem } from '../state/state.svelte';
   // Import operation playback service
   import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
 
@@ -138,7 +144,34 @@
   $: waveformState = waveformStateStore ? $waveformStateStore : null;
   $: currentDuration = waveformState?.totalDuration || 30; // Default duration fallback
   $: isLoadingWaveforms = waveformState?.loading || waveformState?.loadingWaveforms || false;
-  $: timelineHierarchy = null; // Will be timeline-scoped later
+
+  // Timeline-scoped hierarchy derived from timeline's own items
+  $: timelineHierarchy = (() => {
+    if (!timelineItems || timelineItems.length === 0) return null;
+
+    // Convert TimelineItems to FlattenedTimelineItems for hierarchy building
+    const flattenedItems: FlattenedTimelineItem[] = timelineItems.map(item => {
+      const audioItem = item as AudioFileTimelineItem;
+      return {
+        kind: (audioItem.kind || 'sample') as 'sample' | 'merge',
+        id: audioItem.id,
+        fileName: audioItem.fileName,
+        svgPath: audioItem.svgPath,
+        startOffset: audioItem.startOffset,
+        size: audioItem.size,
+        active: audioItem.active,
+        duration: audioItem.duration,
+        children: audioItem.children || [],
+        parentId: audioItem.parentId,
+        depth: audioItem.depth ?? 0,
+        isGroup: audioItem.isGroup ?? false,
+        operationName: audioItem.operationName || '',
+        rootGroupId: undefined,
+      };
+    });
+
+    return buildHierarchyMaps(flattenedItems);
+  })();
 
   // Check if we have no active samples
   $: hasNoActiveSamples = (timelineItems?.length || 0) === 0 && !isLoadingWaveforms;
@@ -468,8 +501,6 @@
     }
 
     // If this is a MergeOp (group), we need to drag all its descendants too
-    // TODO: Re-implement with timeline-scoped hierarchy
-    /*
     if (draggedItem?.kind === 'merge' && draggedItem?.isGroup && timelineHierarchy) {
       // Get all indices that should move with this group
       const indicesToMove = getIndicesToMoveOnDrag(
@@ -480,7 +511,6 @@
       // Set these on the drag manager
       dragDropManager.setSegmentsToMove(new Set(indicesToMove));
     }
-    */
 
     dragDropManager.handleDragStart(event.detail);
   }
