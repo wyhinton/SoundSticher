@@ -3,7 +3,7 @@
 
   import { appState } from './state/state.svelte';
   import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
-  import Plotted from './PlaybackDisplay/Timeline.svelte';
+  import Timeline from './PlaybackDisplay/Timeline.svelte';
   import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import { onDestroy, onMount } from 'svelte';
   import Footer from './StatusFooter.svelte';
@@ -123,20 +123,10 @@
           maxSize={TIMELINE_RESIZE.MAX_HEIGHT_PERCENT}
         >
           <div class="timeline-container">
-            <PlottedInfo />
             {#each $operationTimelines as timeline (timeline.id)}
               <div class="timeline-wrapper">
-                <div class="timeline-header">
-                  <span class="timeline-operation-name">
-                    {timeline.source.kind === 'operation' ? 
-                      `Operation: ${timeline.source.operationId}` : 
-                      'Timeline'}
-                  </span>
-                </div>
-                <Plotted
-                  {timeline}
-                  on:selectionChange={handleTimelineSelectionChange}
-                />
+                <PlottedInfo {timeline} />
+                <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
               </div>
             {:else}
               <div class="no-timelines">
