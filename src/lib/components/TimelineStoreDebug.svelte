@@ -1,44 +1,31 @@
 <script lang="ts">
-  import { derived } from 'svelte/store';
   import {
     timelinesStore,
-    timelinesById,
-    activeTimelineId,
-    activeTimeline,
-    createTimeline,
-    setActiveTimelineId,
-    ensureOperationTimeline,
+    createTimelineStateForOp,
+    toggleTimelineVisibilityByOpId,
     type Timeline,
-    type TimelineSource,
-    type TimelineViewState,
-    type TimelineLayout,
+    operationTimelines,
   } from '$lib/state/timelines';
   import { appState } from '$lib/state/state.svelte';
   import PrismWrapper from '$lib/components/PrismWrapper.svelte';
-
   // Reactive stores
   $: timelinesState = $timelinesStore;
-  $: timelines = $timelinesById;
-  $: activeId = $activeTimelineId;
-  $: activeTL = $activeTimeline;
 
   // Computed data for display
-  $: timelineCount = Object.keys($timelinesById).length;
-  $: dockedCount = timelinesState.layout.docked.length;
-  $: floatingCount = timelinesState.layout.floating.length;
+  $: timelineCount = Object.keys($timelinesStore.timelines).length;
 
   // Timeline summary data
-  $: timelinesSummary = Object.values($timelinesById).map((timeline: Timeline) => ({
+  $: timelinesSummary = Object.values(timelinesState.timelines).map((timeline: Timeline) => ({
     id: timeline.id,
     sourceKind: timeline.source.kind,
-    isActive: timeline.id === $activeTimelineId,
+    isActive: false, // No active timeline concept in simplified version
     zoom: timeline.view.zoom,
     scrollX: timeline.view.scrollX,
     playheadTime: timeline.view.playheadTime,
     hasSelection: !!timeline.view.selection,
     visibleTracksCount: timeline.view.visibleTracks.length,
-    isDocked: timelinesState.layout.docked.includes(timeline.id),
-    isFloating: timelinesState.layout.floating.includes(timeline.id),
+    isDocked: false, // No layout concept in simplified version
+    isFloating: false, // No layout concept in simplified version
     // Add source-specific info
     ...(timeline.source.kind === 'operation' ? { operationId: timeline.source.operationId } : {}),
     ...(timeline.source.kind === 'audioFile' ? { fileId: timeline.source.fileId } : {}),
@@ -54,75 +41,52 @@
   function createTestTimeline() {
     const selectedOperationId = $appState.uiSettings?.selectedOperationId;
     if (selectedOperationId) {
-      createTimeline({
-        source: { kind: 'operation', operationId: selectedOperationId },
-        makeActive: true,
-        docked: false,
-      });
-    } else {
-      // Create a test custom timeline
-      createTimeline({
-        source: {
-          kind: 'custom',
-          tracks: [
-            { id: 'track1', name: 'Test Track 1' },
-            { id: 'track2', name: 'Test Track 2' },
-          ],
+      const newTimeline = createTimelineStateForOp(selectedOperationId);
+      timelinesStore.update(state => ({
+        ...state,
+        timelines: {
+          ...state.timelines,
+          [newTimeline.id]: newTimeline,
         },
-        makeActive: true,
-        docked: true,
-      });
+      }));
     }
-  }
-
-  function setAsActive(timelineId: string) {
-    setActiveTimelineId(timelineId);
-  }
-
-  function clearActiveTimeline() {
-    setActiveTimelineId(null);
   }
 
   function clearAllTimelines() {
     timelinesStore.set({
       timelines: {},
-      activeTimelineId: null,
-      layout: {
-        docked: [],
-        floating: [],
-      },
     });
   }
 
-  function ensureCurrentOperationTimeline() {
+  function toggleTimelineForCurrentOp() {
     const selectedOperationId = $appState.uiSettings?.selectedOperationId;
     if (selectedOperationId) {
-      ensureOperationTimeline(selectedOperationId, true);
+      toggleTimelineVisibilityByOpId(selectedOperationId);
     }
   }
 
-  // Layout manipulation
-  function moveToFloating(timelineId: string) {
-    timelinesStore.update(state => {
-      const layout = { ...state.layout };
-      layout.docked = layout.docked.filter(id => id !== timelineId);
-      if (!layout.floating.includes(timelineId)) {
-        layout.floating.push(timelineId);
-      }
-      return { ...state, layout };
-    });
-  }
+  //   // Layout manipulation
+  //   function moveToFloating(timelineId: string) {
+  //     timelinesStore.update(state => {
+  //       const layout = { ...state.layout };
+  //       layout.docked = layout.docked.filter(id => id !== timelineId);
+  //       if (!layout.floating.includes(timelineId)) {
+  //         layout.floating.push(timelineId);
+  //       }
+  //       return { ...state, layout };
+  //     });
+  //   }
 
-  function moveToDocked(timelineId: string) {
-    timelinesStore.update(state => {
-      const layout = { ...state.layout };
-      layout.floating = layout.floating.filter(id => id !== timelineId);
-      if (!layout.docked.includes(timelineId)) {
-        layout.docked.push(timelineId);
-      }
-      return { ...state, layout };
-    });
-  }
+  //   function moveToDocked(timelineId: string) {
+  //     timelinesStore.update(state => {
+  //       const layout = { ...state.layout };
+  //       layout.floating = layout.floating.filter(id => id !== timelineId);
+  //       if (!layout.docked.includes(timelineId)) {
+  //         layout.docked.push(timelineId);
+  //       }
+  //       return { ...state, layout };
+  //     });
+  //   }
 
   // View state manipulation
   function resetViewState(timelineId: string) {
@@ -170,26 +134,6 @@
 {/snippet}
 
 <div class="timeline-store-debug">
-  <!-- Summary Stats -->
-  <div class="stats-section">
-    <div class="stat-card">
-      <div class="stat-label">Total Timelines</div>
-      <div class="stat-value">{timelineCount}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Active Timeline</div>
-      <div class="stat-value">{$activeTimelineId || 'None'}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Docked</div>
-      <div class="stat-value">{dockedCount}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Floating</div>
-      <div class="stat-value">{floatingCount}</div>
-    </div>
-  </div>
-
   <!-- Controls -->
   <div class="controls-section">
     <div class="button-group">
@@ -201,14 +145,7 @@
         false,
         'primary'
       )}
-      {@render actionButton(
-        ensureCurrentOperationTimeline,
-        'fa-sync',
-        'Ensure Current Op Timeline',
-        false,
-        'secondary'
-      )}
-      {@render actionButton(clearActiveTimeline, 'fa-times', 'Clear Active', false, 'warning')}
+
       {@render actionButton(clearAllTimelines, 'fa-trash', 'Clear All', false, 'danger')}
     </div>
   </div>
@@ -317,16 +254,16 @@
                 </td>
                 <td class="actions">
                   <div class="action-buttons">
-                    {#if !timeline.isActive}
+                    <!-- {#if !timeline.isActive}
                       <button
                         class="btn-micro btn-primary"
                         on:click={() => setAsActive(timeline.id)}
                       >
                         <i class="fa fa-star"></i>
                       </button>
-                    {/if}
+                    {/if} -->
 
-                    {#if timeline.isFloating}
+                    <!-- {#if timeline.isFloating}
                       <button
                         class="btn-micro btn-secondary"
                         on:click={() => moveToDocked(timeline.id)}
@@ -340,11 +277,12 @@
                       >
                         <i class="fa fa-window-maximize"></i>
                       </button>
-                    {/if}
+                    {/if} -->
 
                     <button class="btn-micro btn-info" on:click={() => resetViewState(timeline.id)}>
                       <i class="fa fa-refresh"></i>
                     </button>
+                    <PrismWrapper data={$operationTimelines}></PrismWrapper>
                   </div>
                 </td>
               </tr>
@@ -356,12 +294,6 @@
   </div>
 
   <!-- Active Timeline Details -->
-  {#if $activeTimeline}
-    <div class="active-timeline-section">
-      <h4><i class="fa fa-star"></i> Active Timeline Details</h4>
-      <PrismWrapper data={$activeTimeline} maxHeight="300px" fontSize="11px" />
-    </div>
-  {/if}
 
   <!-- Full Store State -->
   <div class="store-state-section">

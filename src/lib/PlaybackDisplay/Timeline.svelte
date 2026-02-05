@@ -30,7 +30,7 @@
     operationTimelineHierarchy,
     initWaveformService,
   } from '../state/waveformCache';
-  import { activeTimelineId, timelinesStore, type TimelineId } from '$lib/state/timelines';
+  import { timelinesStore, type TimelineId, type Timeline } from '$lib/state/timelines';
   import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
   // Import operation playback service
   import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
@@ -44,15 +44,14 @@
     DEFAULT_DD,
   } from './Timeline/DragDropManager';
   import { dropzone } from '$lib/attachments/droppable';
-  import {
-    removeOperationSourcesFromCurrentOpCommand,
-    type OperationId,
-  } from '$lib/state/undo/undo';
+  import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
+  import { type OperationId } from '$lib/state/operation';
   import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
 
   const dispatch = createEventDispatcher();
 
-  export let timelineId: TimelineId | null = null;
+  export let timeline: Timeline | null = null;
+  export let timelineId: TimelineId | null = null; // Keep for backward compatibility
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -133,25 +132,22 @@
   // TIMELINE ITEMS - Operation-based system
   // ============================================================================
 
-  // Resolve the active timeline (or use the provided timelineId)
-  $: resolvedTimelineId = timelineId ?? $activeTimelineId ?? null;
-  $: activeTimeline = resolvedTimelineId ? $timelinesStore.timelines[resolvedTimelineId] : null;
+  // Use the provided timeline object or resolve from timelineId (for backward compatibility)
+  $: activeTimeline = timeline || (timelineId ? $timelinesStore.timelines[timelineId] : null);
   $: timelineSource = activeTimeline?.source ?? null;
 
-  // Reactive timeline items from operation system
-  $: timelineItems =
-    timelineSource?.kind === 'operation' ? $operationTimelineItems : ([] as TimelineItem[]);
+  // Reactive timeline items from the timeline object's items property
+  $: timelineItemsStore = activeTimeline?.items;
+  $: timelineItems = timelineItemsStore ? $timelineItemsStore : ([] as TimelineItem[]);
 
   // Reactive duration from operation system
   $: currentDuration = timelineSource?.kind === 'operation' ? $operationDuration : 0;
 
   // Loading state for operation waveforms
-  $: isLoadingWaveforms =
-    timelineSource?.kind === 'operation' ? $operationWaveformsLoading : false;
+  $: isLoadingWaveforms = timelineSource?.kind === 'operation' ? $operationWaveformsLoading : false;
 
   // Hierarchy information for drag operations
-  $: timelineHierarchy =
-    timelineSource?.kind === 'operation' ? $operationTimelineHierarchy : null;
+  $: timelineHierarchy = timelineSource?.kind === 'operation' ? $operationTimelineHierarchy : null;
 
   // Check if we have no active samples
   $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;

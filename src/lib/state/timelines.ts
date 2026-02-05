@@ -248,3 +248,88 @@ export function createOperationTimelineItems(
     }
   );
 }
+
+/**
+ * Create a Timeline for a given operation ID
+ */
+export function createTimelineStateForOp(operationId: OperationId): Timeline {
+  const timelineId = createTimelineId();
+  const operationIdReadable = writable(operationId);
+
+  return {
+    id: timelineId,
+    source: { kind: 'operation', operationId },
+    view: defaultTimelineViewState(),
+    items: createOperationTimelineItems(operationIdReadable),
+  };
+}
+
+/**
+ * Toggle timeline visibility for a specific operation ID
+ * If no timeline exists for this operation, create one
+ * If timeline exists, remove it (toggle off)
+ */
+export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
+  const currentState = get(timelinesStore);
+
+  // Check if there's already a timeline for this operation
+  const existingTimelineId = Object.keys(currentState.timelines).find(timelineId => {
+    const timeline = currentState.timelines[timelineId];
+    return (
+      timeline &&
+      timeline.source.kind === 'operation' &&
+      timeline.source.operationId === operationId
+    );
+  });
+
+  if (existingTimelineId) {
+    // Timeline exists - remove it (toggle off)
+    logger.waveform.info(`Hiding timeline for operation: ${operationId}`);
+
+    timelinesStore.update(state => {
+      const newTimelines = { ...state.timelines };
+      delete newTimelines[existingTimelineId];
+
+      return {
+        ...state,
+        timelines: newTimelines,
+      };
+    });
+  } else {
+    // No timeline exists - create one (toggle on)
+    logger.waveform.info(`Showing timeline for operation: ${operationId}`);
+
+    const newTimeline = createTimelineStateForOp(operationId);
+
+    timelinesStore.update(state => ({
+      ...state,
+      timelines: {
+        ...state.timelines,
+        [newTimeline.id]: newTimeline,
+      },
+    }));
+  }
+}
+
+/**
+ * Check if an operation has a visible timeline
+ */
+export function isOperationTimelineVisible(operationId: OperationId): boolean {
+  const currentState = get(timelinesStore);
+
+  return Object.values(currentState.timelines).some(
+    timeline =>
+      timeline &&
+      timeline.source.kind === 'operation' &&
+      timeline.source.operationId === operationId
+  );
+}
+
+/**
+ * Derived store that provides an array of all operation timelines
+ */
+export const operationTimelines = derived(timelinesStore, $timelinesStore => {
+  return Object.values($timelinesStore.timelines).filter(
+    timeline => timeline && timeline.source.kind === 'operation'
+  );
+});

@@ -15,6 +15,7 @@
   import { opPlaybackService } from './state/opPlaybackService';
   import { TIMELINE_RESIZE } from './config/timelineConfig';
   import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
+  import { operationTimelines } from './state/timelines';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -123,10 +124,26 @@
         >
           <div class="timeline-container">
             <PlottedInfo />
-            <Plotted
-              bind:this={timelineComponent}
-              on:selectionChange={handleTimelineSelectionChange}
-            />
+            {#each $operationTimelines as timeline (timeline.id)}
+              <div class="timeline-wrapper">
+                <div class="timeline-header">
+                  <span class="timeline-operation-name">
+                    {timeline.source.kind === 'operation' ? 
+                      `Operation: ${timeline.source.operationId}` : 
+                      'Timeline'}
+                  </span>
+                </div>
+                <Plotted
+                  {timeline}
+                  on:selectionChange={handleTimelineSelectionChange}
+                />
+              </div>
+            {:else}
+              <div class="no-timelines">
+                <p>No operation timelines visible</p>
+                <small>Use the eye button on operations to show their timelines</small>
+              </div>
+            {/each}
             <!-- <Export></Export> -->
           </div>
         </Pane>
