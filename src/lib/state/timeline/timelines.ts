@@ -3,10 +3,17 @@ import { persisted } from 'svelte-persisted-store';
 import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
 import type { OperationDef, OperationId } from '../operation';
 import { logger } from '../logging';
-import { operationWaveforms, waveformCache, type Waveform } from '../waveformCache';
+import {
+  operationWaveforms,
+  waveformCache,
+  type Waveform,
+  type WaveformSpec,
+} from '../waveformCache';
+import { durationCache } from '../durationCache';
 import { listen } from '@tauri-apps/api/event';
 import type { OpTimelineProgressEvent } from '../opPlaybackService';
 import { buildGraphForTimeline } from '../opPlaybackService';
+import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
 // Timeline progress listener for updating individual timeline views
 let timelineProgressUnlisten: (() => void) | null = null;
@@ -289,24 +296,24 @@ const timelineStoreSerializer = {
         }
       }
 
-      return { 
+      return {
         timelines,
-        activeTimelineId: serialized.activeTimelineId || null
+        activeTimelineId: serialized.activeTimelineId || null,
       };
     } catch (error) {
       logger.timeline?.error('Failed to parse timeline store:', error);
-      return { 
+      return {
         timelines: {},
-        activeTimelineId: null
+        activeTimelineId: null,
       };
     }
   },
 
   stringify: (value: TimelinesState): string => {
     try {
-      const serialized: SerializableTimelinesState = { 
+      const serialized: SerializableTimelinesState = {
         timelines: {},
-        activeTimelineId: value.activeTimelineId
+        activeTimelineId: value.activeTimelineId,
       };
 
       for (const [timelineId, timeline] of Object.entries(value.timelines)) {
@@ -323,9 +330,9 @@ const timelineStoreSerializer = {
       return JSON.stringify(serialized);
     } catch (error) {
       logger.timeline?.error('Failed to stringify timeline store:', error);
-      return JSON.stringify({ 
+      return JSON.stringify({
         timelines: {},
-        activeTimelineId: null
+        activeTimelineId: null,
       });
     }
   },
@@ -333,9 +340,9 @@ const timelineStoreSerializer = {
 
 export const timelinesStore = persisted<TimelinesState>(
   'timelines:v1',
-  { 
+  {
     timelines: {},
-    activeTimelineId: null
+    activeTimelineId: null,
   },
   {
     serializer: timelineStoreSerializer,
@@ -361,65 +368,107 @@ function createTimelineWaveformStore(timelineId: TimelineId) {
   });
 
   async function load(filePaths: string[], timelineWidth: number) {
-    // Set loading state
-    update(state => ({ ...state, loading: true, loadingWaveforms: true, error: null }));
+    logger.waveform.operation(
+      `Loading timeline "${timelineId}" (${filePaths.length} files, ${timelineWidth}px timeline)`
+    );
+
+    update(state => ({
+      ...state,
+      filePaths,
+      loading: true,
+      loadingWaveforms: false,
+      error: null,
+    }));
 
     try {
-      // Load durations first (these determine layout)
+      // STEP 1: Load durations FIRST (from duration cache)
+      logger.waveform.operation(`Step 1: Loading durations for ${filePaths.length} files`);
+      const durationsMap = await durationCache.getBatch(filePaths);
+
+      // Convert to our format and compute total
       const durations = new Map<string, number>();
       let totalDuration = 0;
 
-      // TODO: Load durations from duration cache
-      // For now, use placeholder durations
-      for (const filePath of filePaths) {
-        const duration = 30; // Placeholder - should come from duration cache
-        durations.set(filePath, duration);
-        totalDuration += duration;
-      }
-
-      // Update with durations loaded (layout is now stable)
-      update(state => ({
-        ...state,
-        filePaths,
-        durations,
-        totalDuration,
-        pxPerSecond: timelineWidth / totalDuration,
-        loading: false,
-      }));
-
-      // Load waveforms asynchronously (visual only, doesn't affect layout)
-      const waveforms = new Map<string, Waveform>();
-
-      for (const filePath of filePaths) {
-        try {
-          const waveform = await waveformCache.getOrFetch(filePath, {
-            width: Math.round((durations.get(filePath) || 0) * (timelineWidth / totalDuration)),
-            height: 100, // Default height
-            normalize: true,
-          });
-          waveforms.set(filePath, waveform);
-
-          // Update progressively as waveforms load
-          update(state => ({
-            ...state,
-            waveforms: new Map(state.waveforms.set(filePath, waveform)),
-          }));
-        } catch (error) {
-          logger.waveform.warning(`Failed to load waveform for ${filePath}:`, error);
+      for (const [filePath, duration] of durationsMap.entries()) {
+        if (duration && duration > 0) {
+          durations.set(filePath, duration);
+          totalDuration += duration;
+        } else {
+          logger.waveform.warning(`No valid duration for ${filePath}, skipping from layout`);
         }
       }
 
-      // All waveforms loaded
-      update(state => ({ ...state, loadingWaveforms: false }));
+      if (totalDuration === 0) {
+        throw new Error('No valid durations found for any files');
+      }
+
+      // STEP 2: Compute layout metrics
+      const pxPerSecond = timelineWidth / totalDuration;
+      logger.waveform.operation(
+        `Step 2: Layout computed - total: ${totalDuration.toFixed(2)}s, ${pxPerSecond.toFixed(2)}px/sec`
+      );
+
+      // Update state with durations (layout is now stable)
+      update(state => ({
+        ...state,
+        durations,
+        totalDuration,
+        pxPerSecond,
+        loading: false,
+        loadingWaveforms: true,
+      }));
+
+      // STEP 3: Request waveforms with computed widths
+      logger.waveform.operation(`Step 3: Requesting waveforms with computed widths`);
+
+      // Request waveforms for each file with its computed width
+      const waveformPromises = filePaths.map(async filePath => {
+        const duration = durations.get(filePath);
+        if (!duration) return null;
+
+        const widthPx = Math.max(1, Math.floor(duration * pxPerSecond));
+
+        try {
+          const waveform = await waveformCache.getOrFetch(filePath, {
+            width: widthPx,
+            height: WAVEFORM_CONFIG.DEFAULT_HEIGHT, // Timeline default height
+            normalize: true,
+          });
+
+          // Update waveforms progressively
+          update(state => {
+            const newWaveforms = new Map(state.waveforms);
+            newWaveforms.set(filePath, waveform);
+            return { ...state, waveforms: newWaveforms };
+          });
+
+          return { filePath, waveform };
+        } catch (error) {
+          logger.waveform.error(`Failed to load waveform for ${filePath}:`, error);
+          return null;
+        }
+      });
+
+      await Promise.allSettled(waveformPromises);
+
+      update(state => ({
+        ...state,
+        loadingWaveforms: false,
+      }));
+
+      logger.waveform.operation(
+        `Timeline "${timelineId}" loaded: ${durations.size} durations, waveforms loading complete`
+      );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.waveform.error(`Failed to load timeline waveforms for ${timelineId}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       update(state => ({
         ...state,
         loading: false,
         loadingWaveforms: false,
         error: errorMessage,
       }));
+
+      logger.waveform.error(`Failed to load timeline waveforms for ${timelineId}: ${errorMessage}`);
     }
   }
 
@@ -950,9 +999,9 @@ export const operationTimelines = derived(timelinesStore, $timelinesStore => {
 export function setActiveTimeline(timelineId: TimelineId | null): void {
   timelinesStore.update(state => ({
     ...state,
-    activeTimelineId: timelineId
+    activeTimelineId: timelineId,
   }));
-  
+
   if (timelineId) {
     logger.timeline?.info(`Set active timeline: ${timelineId}`);
   } else {
