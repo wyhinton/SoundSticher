@@ -40,7 +40,7 @@ mod sample_cache;
 mod sample_playback;
 mod sorting;
 mod state;
-mod timeline_playback;
+mod timeline_playback_commands;
 mod util;
 mod waveform;
 
@@ -414,12 +414,6 @@ pub fn run() {
             sample_playback::play_sample_preview,
             sorting::update_sorting,
             state::get_app_state,
-            timeline_playback::get_current_play_progress,
-            timeline_playback::pause_timeline_audio,
-            timeline_playback::play_timeline_audio,
-            timeline_playback::set_timeline_play_position,
-            timeline_playback::set_volume,
-            timeline_playback::stop_timeline_audio,
             update_logging_config,
             waveform::clear_waveform_cache,
             waveform::get_waveform_cache_stats,

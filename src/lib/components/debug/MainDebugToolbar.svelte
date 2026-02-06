@@ -14,7 +14,7 @@
   import { timelineDebugMode } from '../../state/state.svelte';
   import { type DurationResponse } from '$lib/state/durationCache';
   import UndoRedoControls from '../UndoRedoControls.svelte';
-  import TimelineOverlay from '../TimelineOverlay.svelte';
+  import TimelineOverlay from './TimelineDebugOverlay.svelte';
   import { useSampleCache } from '../../state/opPlaybackService';
 
   // Visibility state

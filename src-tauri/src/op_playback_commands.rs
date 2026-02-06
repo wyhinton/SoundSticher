@@ -21,9 +21,7 @@ use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
 use dashmap::DashMap;
-
-/// Timeline identifier type
-pub type TimelineId = String;
+use crate::timeline_playback_commands::{TimelineId};
 
 /// Serializable audio spec for debugging
 #[derive(Debug, Clone, Serialize)]
