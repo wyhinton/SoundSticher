@@ -217,6 +217,8 @@ async function initProgressListener(): Promise<void> {
     // Only update global state if this is for the "active" timeline or no specific timeline
     // This maintains backward compatibility for legacy single-timeline usage
     if (!timelineId || timelineId === 'global') {
+      console.log(`%cHERE LINE :220 %c`, 'color: yellow; font-weight: bold', '');
+
       // Add detailed progress logging
       if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
         logger.opPlayback.info(
@@ -379,13 +381,13 @@ export async function buildGraphForTimeline(
   }
 }
 
-/**
- * Build a playback graph from operations (legacy - uses global timeline)
- */
-export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
-  // For backward compatibility, use a default timeline ID
-  return buildGraphForTimeline('global', request);
-}
+// /**
+//  * Build a playback graph from operations (legacy - uses global timeline)
+//  */
+// export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
+//   // For backward compatibility, use a default timeline ID
+//   return buildGraphForTimeline('global', request);
+// }
 
 /**
  * Build a graph from file paths for a specific timeline
@@ -478,43 +480,6 @@ export async function playTimeline(timelineId: string, startSeconds?: number): P
     logger.opPlayback.success(`Playback started for timeline '${timelineId}'`);
   } catch (error) {
     logger.opPlayback.error(`Failed to start playback for timeline '${timelineId}':`, error);
-    throw error;
-  }
-}
-
-/**
- * Start playback (legacy - uses global timeline behavior)
- */
-export async function play(startSeconds?: number): Promise<void> {
-  const currentState = get(internalState);
-  const actualStartSeconds = startSeconds ?? currentState.positionSeconds;
-
-  logger.opPlayback.info(
-    `Starting playback at ${actualStartSeconds.toFixed(2)}s (${startSeconds !== undefined ? 'explicit' : 'current position'})`
-  );
-  logger.opPlayback.info(
-    `Current state - position: ${currentState.positionSeconds.toFixed(2)}s, progress: ${(currentState.progress * 100).toFixed(1)}%, isPaused: ${currentState.isPaused}`
-  );
-
-  try {
-    const result = await invokeWithPerf('op_playback_play', {
-      timelineId: 'global',
-      startSeconds: actualStartSeconds,
-    });
-
-    if (!result.ok) {
-      throw new Error(`Failed to start playback: ${result.error.message}`);
-    }
-
-    internalState.update(s => ({
-      ...s,
-      isPlaying: true,
-      isPaused: false,
-    }));
-
-    logger.opPlayback.success(`Playback started at ${actualStartSeconds.toFixed(2)}s`);
-  } catch (error) {
-    logger.opPlayback.error('Failed to start playback:', error);
     throw error;
   }
 }
@@ -710,50 +675,50 @@ export async function seekTimeline(timelineId: string, positionSeconds: number):
   }
 }
 
-/**
- * Seek to a position (legacy - uses global timeline)
- */
-export async function seek(positionSeconds: number): Promise<void> {
-  logger.opPlayback.info(`Seeking to ${positionSeconds.toFixed(2)}s`);
+// /**
+//  * Seek to a position (legacy - uses global timeline)
+//  */
+// export async function seek(positionSeconds: number): Promise<void> {
+//   logger.opPlayback.info(`Seeking to ${positionSeconds.toFixed(2)}s`);
 
-  try {
-    const result = await invokeWithPerf('op_playback_seek', {
-      timelineId: 'global',
-      positionSeconds,
-    });
+//   try {
+//     const result = await invokeWithPerf('op_playback_seek', {
+//       timelineId: 'global',
+//       positionSeconds,
+//     });
 
-    if (!result.ok) {
-      throw new Error(`Failed to seek: ${result.error.message}`);
-    }
+//     if (!result.ok) {
+//       throw new Error(`Failed to seek: ${result.error.message}`);
+//     }
 
-    const state = get(internalState);
-    const progress = state.durationSeconds > 0 ? positionSeconds / state.durationSeconds : 0;
+//     const state = get(internalState);
+//     const progress = state.durationSeconds > 0 ? positionSeconds / state.durationSeconds : 0;
 
-    logger.opPlayback.info(
-      `Seek - calculated progress: ${(progress * 100).toFixed(1)}%, clamped position: ${Math.max(0, positionSeconds).toFixed(2)}s`
-    );
+//     logger.opPlayback.info(
+//       `Seek - calculated progress: ${(progress * 100).toFixed(1)}%, clamped position: ${Math.max(0, positionSeconds).toFixed(2)}s`
+//     );
 
-    internalState.update(s => ({
-      ...s,
-      progress: Math.max(0, Math.min(1, progress)),
-      positionSeconds: Math.max(0, positionSeconds),
-    }));
+//     internalState.update(s => ({
+//       ...s,
+//       progress: Math.max(0, Math.min(1, progress)),
+//       positionSeconds: Math.max(0, positionSeconds),
+//     }));
 
-    logger.opPlayback.success(`Seeked to ${positionSeconds.toFixed(2)}s`);
-  } catch (error) {
-    logger.opPlayback.error('Failed to seek:', error);
-    throw error;
-  }
-}
+//     logger.opPlayback.success(`Seeked to ${positionSeconds.toFixed(2)}s`);
+//   } catch (error) {
+//     logger.opPlayback.error('Failed to seek:', error);
+//     throw error;
+//   }
+// }
 
-/**
- * Seek to a normalized progress position (0.0 to 1.0)
- */
-export async function seekToProgress(progress: number): Promise<void> {
-  const state = get(internalState);
-  const positionSeconds = progress * state.durationSeconds;
-  await seek(positionSeconds);
-}
+// /**
+//  * Seek to a normalized progress position (0.0 to 1.0)
+//  */
+// export async function seekToProgress(progress: number): Promise<void> {
+//   const state = get(internalState);
+//   const positionSeconds = progress * state.durationSeconds;
+//   await seek(positionSeconds);
+// }
 
 /**
  * Set playback volume
@@ -805,33 +770,33 @@ export async function setTimelineLoop(timelineId: string, enabled: boolean): Pro
   }
 }
 
-/**
- * Set loop mode (legacy - uses global timeline)
- */
-export async function setLoop(enabled: boolean): Promise<void> {
-  logger.opPlayback.info(`Setting loop mode to ${enabled}`);
+// /**
+//  * Set loop mode (legacy - uses global timeline)
+//  */
+// export async function setLoop(enabled: boolean): Promise<void> {
+//   logger.opPlayback.info(`Setting loop mode to ${enabled}`);
 
-  try {
-    const result = await invokeWithPerf('op_playback_set_loop', {
-      timelineId: 'global',
-      loopPlayback: enabled,
-    });
+//   try {
+//     const result = await invokeWithPerf('op_playback_set_loop', {
+//       timelineId: 'global',
+//       loopPlayback: enabled,
+//     });
 
-    if (!result.ok) {
-      throw new Error(`Failed to set loop mode: ${result.error.message}`);
-    }
+//     if (!result.ok) {
+//       throw new Error(`Failed to set loop mode: ${result.error.message}`);
+//     }
 
-    internalState.update(s => ({
-      ...s,
-      loopEnabled: enabled,
-    }));
+//     internalState.update(s => ({
+//       ...s,
+//       loopEnabled: enabled,
+//     }));
 
-    logger.opPlayback.success(`Loop mode set to ${enabled}`);
-  } catch (error) {
-    logger.opPlayback.error('Failed to set loop mode:', error);
-    throw error;
-  }
-}
+//     logger.opPlayback.success(`Loop mode set to ${enabled}`);
+//   } catch (error) {
+//     logger.opPlayback.error('Failed to set loop mode:', error);
+//     throw error;
+//   }
+// }
 
 /**
  * Get current progress for a specific timeline
@@ -947,32 +912,32 @@ export async function clearGraph(): Promise<void> {
   }
 }
 
-/**
- * Toggle play/pause
- */
-export async function togglePlayPause(): Promise<void> {
-  const state = get(internalState);
+// /**
+//  * Toggle play/pause
+//  */
+// export async function togglePlayPause(): Promise<void> {
+//   const state = get(internalState);
 
-  if (!state.hasGraph) {
-    logger.opPlayback.warning('No playback graph available');
-    return;
-  }
+//   if (!state.hasGraph) {
+//     logger.opPlayback.warning('No playback graph available');
+//     return;
+//   }
 
-  logger.opPlayback.info(
-    `Toggle play/pause - Current state: playing=${state.isPlaying}, paused=${state.isPaused}, position=${state.positionSeconds.toFixed(2)}s`
-  );
+//   logger.opPlayback.info(
+//     `Toggle play/pause - Current state: playing=${state.isPlaying}, paused=${state.isPaused}, position=${state.positionSeconds.toFixed(2)}s`
+//   );
 
-  if (state.isPlaying && !state.isPaused) {
-    logger.opPlayback.info('Currently playing -> pausing');
-    await pause();
-  } else if (state.isPaused) {
-    logger.opPlayback.info('Currently paused -> resuming');
-    await resume();
-  } else {
-    logger.opPlayback.info('Currently stopped -> playing from current position');
-    await play();
-  }
-}
+//   if (state.isPlaying && !state.isPaused) {
+//     logger.opPlayback.info('Currently playing -> pausing');
+//     await pause();
+//   } else if (state.isPaused) {
+//     logger.opPlayback.info('Currently paused -> resuming');
+//     await resume();
+//   } else {
+//     logger.opPlayback.info('Currently stopped -> playing from current position');
+//     await play();
+//   }
+// }
 
 // ============================================================================
 // NAMESPACE EXPORT
@@ -989,17 +954,16 @@ export const opPlaybackService = {
   isPaused: opIsPaused,
 
   // Legacy single-timeline control functions
-  buildGraph,
+  // buildGraph,
   buildGraphFromFiles,
   // play,
   // pause,
   // resume,
-  // stop,
   // seek,
-  seekToProgress,
+  // seekToProgress,
   setVolume,
-  setLoop,
-  togglePlayPause,
+  // setLoop,
+  // togglePlayPause,
   clearGraph,
 
   // New timeline-aware control functions

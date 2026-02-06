@@ -108,6 +108,19 @@ export interface PerformanceState {
   test_operation: PerformanceMetric[];
   test_render_single_operation: PerformanceMetric[];
   test_scheduler: PerformanceMetric[];
+  // New timeline playback commands
+  timeline_build_playback: PerformanceMetric[];
+  timeline_build_from_request: PerformanceMetric[];
+  timeline_play: PerformanceMetric[];
+  timeline_pause: PerformanceMetric[];
+  timeline_resume: PerformanceMetric[];
+  timeline_stop: PerformanceMetric[];
+  timeline_seek: PerformanceMetric[];
+  timeline_set_loop: PerformanceMetric[];
+  timeline_set_volume: PerformanceMetric[];
+  timeline_get_progress: PerformanceMetric[];
+  timeline_clear: PerformanceMetric[];
+  timeline_clear_all: PerformanceMetric[];
   toggle_audio_file_active: PerformanceMetric[];
   update_inputs: PerformanceMetric[];
   update_sorting: PerformanceMetric[];
@@ -162,6 +175,19 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   test_operation: [],
   test_render_single_operation: [],
   test_scheduler: [],
+  // New timeline playback commands
+  timeline_build_playback: [],
+  timeline_build_from_request: [],
+  timeline_play: [],
+  timeline_pause: [],
+  timeline_resume: [],
+  timeline_stop: [],
+  timeline_seek: [],
+  timeline_set_loop: [],
+  timeline_set_volume: [],
+  timeline_get_progress: [],
+  timeline_clear: [],
+  timeline_clear_all: [],
   toggle_audio_file_active: [],
   update_inputs: [],
   update_sorting: [],

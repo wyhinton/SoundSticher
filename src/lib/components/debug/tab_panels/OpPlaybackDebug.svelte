@@ -31,6 +31,7 @@
   let isRefreshing = true;
   let refreshInterval: number;
   let lastUpdate = 0;
+  let sessionHistory: Array<{ timestamp: number; sessionIds: string[] }> = [];
 
   async function fetchPlaybackState() {
     if (!isRefreshing) return;
@@ -40,6 +41,25 @@
       playbackState = state;
       error = null;
       lastUpdate = Date.now();
+
+      // Track session history for debugging "global" timeline appearance
+      const currentSessionIds = Object.keys(state.sessions);
+      const lastEntry = sessionHistory[sessionHistory.length - 1];
+      if (
+        !lastEntry ||
+        JSON.stringify(currentSessionIds.sort()) !== JSON.stringify(lastEntry.sessionIds.sort())
+      ) {
+        sessionHistory = [...sessionHistory.slice(-9), { timestamp: lastUpdate, sessionIds: currentSessionIds }];
+        
+        // Log warning if "global" timeline is present
+        if (state.sessions['global']) {
+          console.warn('⚠️ WARNING: "global" timeline session detected in playback state!', {
+            timestamp: new Date(lastUpdate).toISOString(),
+            globalSession: state.sessions['global'],
+            allSessions: Object.keys(state.sessions),
+          });
+        }
+      }
     } catch (err) {
       error = `Failed to fetch playback state: ${err}`;
       console.error('Failed to fetch playback state:', err);
@@ -301,6 +321,24 @@
       <h4><i class="fa fa-code"></i> Raw Playback State</h4>
       <PrismWrapper data={playbackState} maxHeight="400px" fontSize="10px" />
     </div>
+
+    <!-- Session History for Debugging -->
+    {#if sessionHistory.length > 0}
+      <div class="session-history">
+        <h4><i class="fa fa-history"></i> Session History (Last 10 Updates)</h4>
+        <div class="history-list">
+          {#each sessionHistory as entry, idx}
+            <div class="history-entry {entry.sessionIds.includes('global') ? 'has-global' : ''}">
+              <span class="history-time">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+              <span class="history-count">Sessions: {entry.sessionIds.length}</span>
+              <span class="history-ids">
+                {entry.sessionIds.map(id => (id === 'global' ? `🚨 ${id}` : id)).join(', ')}
+              </span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   {:else}
     <div class="loading-state">
       <i class="fa fa-spinner fa-spin"></i>
@@ -687,6 +725,63 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .session-history {
+    background-color: rgba(255, 255, 255, 0.03);
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 16px;
+  }
+
+  .session-history h4 {
+    margin: 0 0 8px 0;
+    color: #d1d5db;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .history-entry {
+    display: flex;
+    gap: 12px;
+    padding: 4px 6px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid rgba(107, 114, 128, 0.3);
+    font-size: 11px;
+    border-radius: 2px;
+  }
+
+  .history-entry.has-global {
+    background-color: rgba(239, 68, 68, 0.1);
+    border-left-color: rgba(239, 68, 68, 0.5);
+  }
+
+  .history-time {
+    color: rgba(156, 163, 175, 0.7);
+    font-weight: 600;
+    min-width: 80px;
+  }
+
+  .history-count {
+    color: rgba(191, 191, 191, 0.7);
+    font-weight: 500;
+  }
+
+  .history-ids {
+    color: #9ca3af;
+    flex: 1;
+    word-break: break-all;
   }
 
   @media (max-width: 768px) {

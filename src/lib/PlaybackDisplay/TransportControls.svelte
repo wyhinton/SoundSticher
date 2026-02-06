@@ -1,11 +1,11 @@
 <script lang="ts">
   import {
-    opPlaybackService,
-    opPlaybackState,
-    opPlaybackProgress,
-    opIsPlaying,
-    opIsPaused,
-  } from '$lib/state/opPlaybackService';
+    timelinePlaybackService,
+    timelinePlaybackState,
+    isTimelinePlaying,
+    isTimelinePaused,
+  } from '$lib/state/timelinePlaybackService';
+  import { opPlaybackState } from '$lib/state/opPlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
   import { getActiveTimelineId, getActiveTimeline } from '$lib/state/timeline/timelines';
 
@@ -21,16 +21,16 @@
   // Reactive current duration based on operation system
   $: currentDuration = $operationDuration;
 
-  // Reactive play state
-  $: isCurrentlyPlaying = $opIsPlaying && !$opIsPaused;
+  // Reactive play state - use new timeline service
+  $: isCurrentlyPlaying = $isTimelinePlaying && !$isTimelinePaused;
 
-  // Reactive pause state
-  $: isCurrentlyPaused = $opIsPaused;
+  // Reactive pause state - use new timeline service
+  $: isCurrentlyPaused = $isTimelinePaused;
 
-  // Reactive loop state
+  // Reactive loop state (still from opPlaybackState for now)
   $: isLoopEnabled = $opPlaybackState.loopEnabled;
 
-  // Transport control functions
+  // Transport control functions using new timeline playback service
   async function handlePlay() {
     try {
       const timelineId = getActiveTimelineId();
@@ -38,7 +38,7 @@
         console.error('No active timeline - cannot play. Please select a timeline first.');
         return;
       }
-      await opPlaybackService.playTimeline(timelineId, playHeadPosition);
+      await timelinePlaybackService.playTimeline(timelineId, playHeadPosition);
     } catch (error) {
       console.error('Error playing audio:', error);
     }
@@ -51,7 +51,7 @@
         console.error('No active timeline - cannot pause. Please select a timeline first.');
         return;
       }
-      await opPlaybackService.pauseTimeline(timelineId);
+      await timelinePlaybackService.pauseTimeline();
     } catch (error) {
       console.error('Error pausing audio:', error);
     }
@@ -64,7 +64,7 @@
         console.error('No active timeline - cannot resume. Please select a timeline first.');
         return;
       }
-      await opPlaybackService.resumeTimeline(timelineId);
+      await timelinePlaybackService.resumeTimeline();
     } catch (error) {
       console.error('Error resuming audio:', error);
     }
@@ -77,7 +77,7 @@
         console.error('No active timeline - cannot stop. Please select a timeline first.');
         return;
       }
-      await opPlaybackService.stopTimeline(timelineId);
+      await timelinePlaybackService.stopTimeline();
     } catch (error) {
       console.error('Error stopping audio:', error);
     }
@@ -90,7 +90,7 @@
         console.error('No active timeline - cannot seek. Please select a timeline first.');
         return;
       }
-      await opPlaybackService.seekTimeline(timelineId, 0);
+      await timelinePlaybackService.seekTimeline(timelineId, 0);
     } catch (error) {
       console.error('Error skipping to start:', error);
     }
@@ -103,7 +103,7 @@
         console.error('No active timeline - cannot seek');
         return;
       }
-      await opPlaybackService.seekTimeline(timelineId, currentDuration);
+      await timelinePlaybackService.seekTimeline(timelineId, currentDuration);
     } catch (error) {
       console.error('Error skipping to end:', error);
     }
@@ -116,7 +116,7 @@
         console.error('No active timeline - cannot toggle loop');
         return;
       }
-      await opPlaybackService.setTimelineLoop(timelineId, !$opPlaybackState.loopEnabled);
+      await timelinePlaybackService.setTimelineLoop(timelineId, !$opPlaybackState.loopEnabled);
     } catch (error) {
       console.error('Error toggling loop:', error);
     }

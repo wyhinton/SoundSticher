@@ -188,7 +188,7 @@ impl Default for OpPlaybackState {
 }
 
 /// The type of playback operation
-#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum OpType {
     /// A simple sample-based operation (default)
@@ -199,7 +199,7 @@ pub enum OpType {
 }
 
 /// Child input for a merge operation
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MergeInputRequest {
     /// File path to load samples from
@@ -216,7 +216,7 @@ pub struct MergeInputRequest {
 }
 
 /// Request to add an operation to the playback graph
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddOpRequest {
     /// Unique name for this operation
@@ -255,7 +255,7 @@ pub struct AddOpResponse {
 }
 
 /// Request to build a playback graph from multiple operations
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildGraphRequest {
     /// Operations to add to the graph

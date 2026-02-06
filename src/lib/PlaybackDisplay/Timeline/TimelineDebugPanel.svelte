@@ -6,6 +6,7 @@
     appState,
     toggleShowFullSvgPath,
   } from '../../state/state.svelte';
+  import { timelinesStore } from '../../state/timeline/timelines';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
 
@@ -77,6 +78,14 @@
       clearInterval(refreshInterval);
     }
   });
+
+  function clearAllTimelines() {
+    timelinesStore.set({
+      timelines: {},
+      activeTimelineId: null,
+    });
+    console.log('✓ Cleared all timelines from frontend store');
+  }
 </script>
 
 <div class="debug">
@@ -85,6 +94,7 @@
       <input type="checkbox" checked={showFullSvgPath} on:change={() => toggleShowFullSvgPath()} />
       Show full SVG path
     </label>
+    <button on:click={clearAllTimelines} class="clear-btn">Clear All Timelines</button>
   </div>
   <div>
     <b>Drag:</b>
@@ -241,6 +251,27 @@
 
   .controls-row input[type='checkbox'] {
     margin: 0;
+  }
+
+  .clear-btn {
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: #cc3333;
+    color: #fff;
+    border: 1px solid #ff6666;
+    border-radius: 2px;
+    font-size: 10px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  .clear-btn:hover {
+    background: #ff4444;
+    border-color: #ffaaaa;
+  }
+
+  .clear-btn:active {
+    background: #990000;
   }
 
   .debug .item {

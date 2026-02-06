@@ -11,7 +11,12 @@ import {
 } from '../waveformCache';
 import { durationCache } from '../durationCache';
 import { listen } from '@tauri-apps/api/event';
-import type { OpTimelineProgressEvent } from '../opPlaybackService';
+import type {
+  OpTimelineProgressEvent,
+  BuildGraphRequest,
+  AddOpRequest,
+  MergeInputRequest,
+} from '../opPlaybackService';
 import { buildGraphForTimeline } from '../opPlaybackService';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
@@ -705,7 +710,54 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
       logger.opPlayback.info(
         `Building backend graph for timeline ${timelineId}, operation ${operationId}`
       );
-      await buildGraphForTimeline(timelineId, operationId);
+
+      // Get the operation definition from app state
+      const currentAppState = get(appState);
+      const operation = currentAppState.operations?.defs?.[operationId];
+
+      if (!operation) {
+        logger.opPlayback.error(`Operation ${operationId} not found in app state`);
+        return;
+      }
+
+      // Convert the operation to AddOpRequest format
+      // For now, we'll create a simple request - this may need to be expanded
+      // based on the complexity of the operation
+      const operations: AddOpRequest[] = [];
+
+      if (operation.kind === 'sample') {
+        // Handle sample operation
+        const fileSource = operation.sources.find(s => s.type === 'file');
+        if (fileSource && fileSource.type === 'file') {
+          operations.push({
+            name: `${operation.name}_sample`,
+            opType: 'sample',
+            filePath: fileSource.fileId,
+            startTime: 0,
+            gain: 1.0,
+          });
+        }
+      } else if (operation.kind === 'merge') {
+        // For merge operations, we'll need more complex handling
+        // For now, create a basic merge operation
+        operations.push({
+          name: `${operation.name}_merge`,
+          opType: 'merge',
+          startTime: 0,
+          gain: 1.0,
+          inputs: [], // This would need proper implementation
+        });
+      }
+
+      // Create the build graph request
+      const request: BuildGraphRequest = {
+        operations,
+        sampleRate: 44100,
+        channels: 2,
+        loopPlayback: true,
+      };
+
+      await buildGraphForTimeline(timelineId, request);
       logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
     } catch (error) {
       logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);

@@ -3,9 +3,137 @@ import { initializeGroupsSubscription } from './groups';
 import { initializeOperationsSubscription } from './operation';
 import { initializeStatusPublishers } from './status-publishers';
 import { undo, redo, canUndo, canRedo } from './undo/undo';
-import { opPlaybackService } from './opPlaybackService';
+import { timelinePlaybackService } from './timelinePlaybackService';
 import { initializeAutoRenderSubscription } from './autoRender';
+import { timelinesStore } from './timeline/timelines';
+import { get } from 'svelte/store';
+import { appState } from './state.svelte';
+import {
+  buildGraphForTimeline,
+  type BuildGraphRequest,
+  type AddOpRequest,
+  type MergeInputRequest,
+} from './opPlaybackService';
+import { logger } from './logging';
 // import { subscribeForTimelineStoreSerialization } from './timeline/persistentTimeline';
+
+/**
+ * Build backend playback graphs for all existing timelines in the store
+ * This ensures that timelines can be played immediately after initialization
+ */
+async function buildBackendGraphsForAllTimelines(): Promise<void> {
+  const currentTimelinesState = get(timelinesStore);
+  const currentAppState = get(appState);
+
+  if (!currentAppState.operations?.defs) {
+    logger.opPlayback.info('No operations available, skipping timeline graph building');
+    return;
+  }
+
+  const timelineIds = Object.keys(currentTimelinesState.timelines);
+  if (timelineIds.length === 0) {
+    logger.opPlayback.info('No timelines to build backend graphs for');
+    return;
+  }
+
+  logger.opPlayback.info(`Building backend graphs for ${timelineIds.length} timelines`);
+
+  // Build graphs for all timelines in parallel
+  const buildPromises = timelineIds.map(async timelineId => {
+    const timeline = currentTimelinesState.timelines[timelineId];
+
+    if (!timeline || timeline.source.kind !== 'operation') {
+      logger.opPlayback.warning(`Skipping timeline ${timelineId}: not an operation-based timeline`);
+      return;
+    }
+
+    const operationId = timeline.source.operationId;
+    const operation = currentAppState.operations?.defs?.[operationId];
+
+    if (!operation) {
+      logger.opPlayback.error(`Operation ${operationId} not found for timeline ${timelineId}`);
+      return;
+    }
+
+    try {
+      logger.opPlayback.info(
+        `Building backend graph for timeline ${timelineId}, operation ${operationId}`
+      );
+
+      // Convert the operation to AddOpRequest format
+      const operations: AddOpRequest[] = [];
+
+      if (operation.kind === 'sample') {
+        // Handle sample operation
+        const fileSource = operation.sources.find(s => s.type === 'file');
+        if (fileSource && fileSource.type === 'file') {
+          operations.push({
+            name: `${operation.name}_sample`,
+            opType: 'sample',
+            filePath: fileSource.fileId,
+            startTime: 0,
+            gain: 1.0,
+          });
+        }
+      } else if (operation.kind === 'merge') {
+        // Handle merge operation - for now create a basic merge
+        const mergeInputs: MergeInputRequest[] = [];
+        let currentOffset = 0;
+
+        // Process each source in the merge operation
+        for (const source of operation.sources) {
+          if (source.type === 'operation') {
+            const sourceOp = currentAppState.operations?.defs?.[source.operationId];
+            if (sourceOp && sourceOp.kind === 'sample') {
+              const fileSource = sourceOp.sources.find(s => s.type === 'file');
+              if (fileSource && fileSource.type === 'file') {
+                mergeInputs.push({
+                  filePath: fileSource.fileId,
+                  offset: currentOffset,
+                  gain: 1.0,
+                });
+                // Estimate duration for offset calculation (this could be improved)
+                currentOffset += 30; // placeholder duration
+              }
+            }
+          }
+        }
+
+        if (mergeInputs.length > 0) {
+          operations.push({
+            name: `${operation.name}_merge`,
+            opType: 'merge',
+            startTime: 0,
+            gain: 1.0,
+            inputs: mergeInputs,
+          });
+        }
+      }
+
+      if (operations.length === 0) {
+        logger.opPlayback.warning(`No valid operations generated for timeline ${timelineId}`);
+        return;
+      }
+
+      // Create the build graph request
+      const request: BuildGraphRequest = {
+        operations,
+        sampleRate: 44100,
+        channels: 2,
+        loopPlayback: true,
+      };
+
+      await buildGraphForTimeline(timelineId, request);
+      logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
+    } catch (error) {
+      logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);
+    }
+  });
+
+  // Wait for all graphs to be built
+  await Promise.allSettled(buildPromises);
+  logger.opPlayback.info('Finished building backend graphs for all timelines');
+}
 
 /**
  * Initialize all frontend systems and services
@@ -27,6 +155,14 @@ export function initializeFrontend(): () => void {
   // Initialize waveform service (handles loading waveforms when operation changes)
   const cleanupWaveformService = initWaveformService();
 
+  // Build backend playback graphs for all existing timelines
+  buildBackendGraphsForAllTimelines().catch(error => {
+    logger.opPlayback.error(
+      'Failed to build backend graphs for timelines during initialization:',
+      error
+    );
+  });
+
   // Setup keyboard shortcuts
   const handleKeyPress = (ev: KeyboardEvent) => {
     // Handle spacebar for play/pause
@@ -35,10 +171,10 @@ export function initializeFrontend(): () => void {
       if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) {
         return;
       }
-
       ev.preventDefault(); // Prevent default scrolling
-      // Use the operation playback service
-      opPlaybackService.togglePlayPause().catch((err: Error) => {
+      // Use the timeline playback service for the active timeline
+
+      timelinePlaybackService.togglePlayPauseActiveTimeline().catch((err: Error) => {
         console.error('Error toggling playback:', err);
       });
       return;
