@@ -394,6 +394,7 @@ pub fn run() {
             op_playback_commands::op_playback_set_loop,
             op_playback_commands::op_playback_set_volume,
             op_playback_commands::op_playback_stop,
+            op_playback_commands::get_op_playback_state,
             // Artifact registry commands
             artifact_registry_commands::get_artifact_registry_records,
             artifact_registry_commands::get_artifact_registry_stats,

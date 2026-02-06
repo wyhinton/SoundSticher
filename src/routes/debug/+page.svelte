@@ -50,6 +50,8 @@
     clearUndoRedoHistory,
   } from '$lib/state/undo/undo';
   import TimelineStoreDebug from '$lib/components/debug/tab_panels/TimelineStoreDebug.svelte';
+  import OpPlaybackDebug from '$lib/components/debug/tab_panels/OpPlaybackDebug.svelte';
+  import PerformanceDebugTable from '$lib/components/debug/tab_panels/PerformanceDebugTable.svelte';
 
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {
@@ -256,6 +258,7 @@
     { id: 'invoke-history', label: 'Invoke History', icon: 'fa-history' },
     { id: 'undo-redo', label: 'Undo/Redo', icon: 'fa-undo' },
     { id: 'timeline-store', label: 'Timeline Store', icon: 'fa-clock' },
+    { id: 'op-playback', label: 'Op Playback', icon: 'fa-play-circle' },
     { id: 'export', label: 'Export State', icon: 'fa-download' },
     { id: 'logging', label: 'Logging', icon: 'fa-terminal' },
     { id: 'listeners', label: 'Listeners', icon: 'fa-ear-listen' },
@@ -682,6 +685,11 @@
     <!-- Timeline Store Tab -->
     <div slot="timeline-store">
       <TimelineStoreDebug />
+    </div>
+
+    <!-- Op Playback Tab -->
+    <div slot="op-playback">
+      <OpPlaybackDebug />
     </div>
 
     <!-- Export State Tab -->
