@@ -6,6 +6,7 @@ import {
   buildGraph as buildGraphInternal,
   buildGraphFromFiles as buildGraphFromFilesInternal,
 } from './playbackGraphUtils';
+import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
 
 /**
  * Response after building a graph
@@ -282,10 +283,61 @@ export async function buildGraphForTimeline(
     `Building graph for timeline '${timelineId}' with ${request.operations.length} operations`
   );
 
+  // Track build time
+  let buildStartTime: number;
+
   try {
+    // Create typed event channel with automatic logging and status publishing
+
+    const onBuildGraphEvent =
+      createTypedEventChannelWithLoggingAndStatusMessages<OpPlaybackBuildGraphEvent>(
+        'BuildGraphForTimeline',
+        {
+          source: `build-graph-${timelineId}`,
+          startedMessage: data =>
+            `Building graph for timeline '${timelineId}' (${(data as any).operationCount} operations)...`,
+          progressMessage: data => {
+            const progressData = data as any;
+            return `Building: ${progressData.operationName} (${progressData.operationIndex + 1}/${progressData.totalOperations}) for timeline '${timelineId}'`;
+          },
+          finishedMessage: data => {
+            const buildTimeMs = Date.now() - buildStartTime;
+            const buildTimeSec = (buildTimeMs / 1000).toFixed(2);
+            const finishedData = data as any;
+            const audioDuration = finishedData.totalDurationSeconds.toFixed(1);
+            return `Built ${finishedData.operationCount} ops in ${buildTimeSec}s → ${audioDuration}s audio for timeline '${timelineId}'`;
+          },
+          getProgress: data => {
+            const progressData = data as any;
+            return progressData.operationIndex
+              ? (progressData.operationIndex + 1) / progressData.totalOperations
+              : 0;
+          },
+          autoClearSuccess: 2000,
+        },
+        {
+          onStarted: data => {
+            // Record build start time
+            buildStartTime = Date.now();
+            logger.opPlayback.info(`Started building graph for timeline '${timelineId}'`);
+          },
+          onProgress: data => {
+            const progressData = data as any;
+            const buildProgress = (progressData.operationIndex + 1) / progressData.totalOperations;
+            logger.opPlayback.info(
+              `Building timeline '${timelineId}': ${progressData.operationName} (${(buildProgress * 100).toFixed(1)}%)`
+            );
+          },
+          onFinished: data => {
+            logger.opPlayback.info(`Finished building graph for timeline '${timelineId}'`);
+          },
+        }
+      );
+
     const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', {
       timelineId,
       request,
+      onEvent: onBuildGraphEvent,
     });
 
     if (!result.ok) {
@@ -312,6 +364,17 @@ export async function buildGraphForTimeline(
     return result.value;
   } catch (error) {
     logger.opPlayback.error(`Failed to build graph for timeline '${timelineId}':`, error);
+
+    // Error status is handled by re-importing for this specific case
+    const { publishStatus, clearSource } = await import('./status');
+    clearSource(`build-graph-${timelineId}`);
+    publishStatus({
+      source: `build-graph-${timelineId}`,
+      level: 'error',
+      message: `Failed to build graph for timeline '${timelineId}': ${error instanceof Error ? error.message : 'Unknown error'}`,
+      sticky: true,
+    });
+
     throw error;
   }
 }
@@ -488,6 +551,31 @@ export async function pause(): Promise<void> {
 }
 
 /**
+ * Pause playback for a specific timeline
+ */
+export async function pauseTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Pausing playback for timeline '${timelineId}'`);
+
+  try {
+    const result = await invokeWithPerf('op_playback_pause', { timelineId });
+
+    if (!result.ok) {
+      throw new Error(`Failed to pause timeline '${timelineId}': ${result.error.message}`);
+    }
+
+    internalState.update(s => ({
+      ...s,
+      isPaused: true,
+    }));
+
+    logger.opPlayback.success(`Timeline '${timelineId}' paused`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to pause timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
  * Resume playback
  */
 export async function resume(): Promise<void> {
@@ -519,6 +607,31 @@ export async function resume(): Promise<void> {
 }
 
 /**
+ * Resume playback for a specific timeline
+ */
+export async function resumeTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Resuming playback for timeline '${timelineId}'`);
+
+  try {
+    const result = await invokeWithPerf('op_playback_resume', { timelineId });
+
+    if (!result.ok) {
+      throw new Error(`Failed to resume timeline '${timelineId}': ${result.error.message}`);
+    }
+
+    internalState.update(s => ({
+      ...s,
+      isPaused: false,
+    }));
+
+    logger.opPlayback.success(`Timeline '${timelineId}' resumed`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to resume timeline '${timelineId}':`, error);
+    throw error;
+  }
+}
+
+/**
  * Stop playback
  */
 export async function stop(): Promise<void> {
@@ -542,6 +655,34 @@ export async function stop(): Promise<void> {
     logger.opPlayback.success('Playback stopped');
   } catch (error) {
     logger.opPlayback.error('Failed to stop playback:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stop playback for a specific timeline
+ */
+export async function stopTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Stopping playback for timeline '${timelineId}'`);
+
+  try {
+    const result = await invokeWithPerf('op_playback_stop', { timelineId });
+
+    if (!result.ok) {
+      throw new Error(`Failed to stop timeline '${timelineId}': ${result.error.message}`);
+    }
+
+    internalState.update(s => ({
+      ...s,
+      isPlaying: false,
+      isPaused: false,
+      progress: 0,
+      positionSeconds: 0,
+    }));
+
+    logger.opPlayback.success(`Timeline '${timelineId}' stopped`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to stop timeline '${timelineId}':`, error);
     throw error;
   }
 }
@@ -850,11 +991,11 @@ export const opPlaybackService = {
   // Legacy single-timeline control functions
   buildGraph,
   buildGraphFromFiles,
-  play,
-  pause,
-  resume,
-  stop,
-  seek,
+  // play,
+  // pause,
+  // resume,
+  // stop,
+  // seek,
   seekToProgress,
   setVolume,
   setLoop,
@@ -865,6 +1006,9 @@ export const opPlaybackService = {
   buildGraphForTimeline,
   buildGraphFromFilesForTimeline,
   playTimeline,
+  pauseTimeline,
+  resumeTimeline,
+  stopTimeline,
   seekTimeline,
   setTimelineLoop,
   getTimelineProgress,

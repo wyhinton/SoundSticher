@@ -33,7 +33,12 @@
   // Transport control functions
   async function handlePlay() {
     try {
-      await opPlaybackService.play(playHeadPosition);
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot play. Please select a timeline first.');
+        return;
+      }
+      await opPlaybackService.playTimeline(timelineId, playHeadPosition);
     } catch (error) {
       console.error('Error playing audio:', error);
     }
@@ -41,7 +46,12 @@
 
   async function handlePause() {
     try {
-      await opPlaybackService.pause();
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot pause. Please select a timeline first.');
+        return;
+      }
+      await opPlaybackService.pauseTimeline(timelineId);
     } catch (error) {
       console.error('Error pausing audio:', error);
     }
@@ -49,7 +59,12 @@
 
   async function handleResume() {
     try {
-      await opPlaybackService.resume();
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot resume. Please select a timeline first.');
+        return;
+      }
+      await opPlaybackService.resumeTimeline(timelineId);
     } catch (error) {
       console.error('Error resuming audio:', error);
     }
@@ -57,7 +72,12 @@
 
   async function handleStop() {
     try {
-      await opPlaybackService.stop();
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot stop. Please select a timeline first.');
+        return;
+      }
+      await opPlaybackService.stopTimeline(timelineId);
     } catch (error) {
       console.error('Error stopping audio:', error);
     }
@@ -65,7 +85,12 @@
 
   async function handleSkipToStart() {
     try {
-      await opPlaybackService.seek(0);
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot seek. Please select a timeline first.');
+        return;
+      }
+      await opPlaybackService.seekTimeline(timelineId, 0);
     } catch (error) {
       console.error('Error skipping to start:', error);
     }
@@ -73,7 +98,12 @@
 
   async function handleSkipToEnd() {
     try {
-      await opPlaybackService.seek(currentDuration);
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot seek');
+        return;
+      }
+      await opPlaybackService.seekTimeline(timelineId, currentDuration);
     } catch (error) {
       console.error('Error skipping to end:', error);
     }
@@ -81,7 +111,12 @@
 
   async function toggleLoop() {
     try {
-      await opPlaybackService.setLoop(!$opPlaybackState.loopEnabled);
+      const timelineId = getActiveTimelineId();
+      if (!timelineId) {
+        console.error('No active timeline - cannot toggle loop');
+        return;
+      }
+      await opPlaybackService.setTimelineLoop(timelineId, !$opPlaybackState.loopEnabled);
     } catch (error) {
       console.error('Error toggling loop:', error);
     }
