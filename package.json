@@ -25,6 +25,7 @@
     "stash": "git stash push --include-untracked",
     "sync:logging": "node scripts/sync-logging-config.js",
     "sync:performance": "node scripts/sync-performance-types.js",
+    "commands": "node scripts/extract_command_line_numbers.js",
     "sync": "svelte-kit sync",
     "tauri": "tauri",
     "type-check": "svelte-check --tsconfig ./tsconfig.json --threshold warning",

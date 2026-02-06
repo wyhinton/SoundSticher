@@ -23,7 +23,7 @@ export const TAURI_COMMANDS: CommandMap = {
     "file_name": "artifact_registry_commands.rs"
   },
   "clear_artifact_registry_debug": {
-    "line_number": 297,
+    "line_number": 295,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\artifacts_service.rs",
     "file_name": "artifacts_service.rs"
   },
@@ -73,7 +73,7 @@ export const TAURI_COMMANDS: CommandMap = {
     "file_name": "artifacts_service.rs"
   },
   "get_artifact_details_debug": {
-    "line_number": 414,
+    "line_number": 411,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\artifacts_service.rs",
     "file_name": "artifacts_service.rs"
   },
@@ -173,57 +173,62 @@ export const TAURI_COMMANDS: CommandMap = {
     "file_name": "commands.rs"
   },
   "op_playback_build_graph": {
-    "line_number": 215,
+    "line_number": 247,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_build_graph_legacy": {
-    "line_number": 429,
+    "line_number": 456,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
-  "op_playback_clear_graph": {
-    "line_number": 1486,
+  "op_playback_clear_all_timelines": {
+    "line_number": 1530,
+    "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
+    "file_name": "op_playback_commands.rs"
+  },
+  "op_playback_clear_timeline": {
+    "line_number": 1492,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_get_progress": {
-    "line_number": 1416,
+    "line_number": 1411,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_pause": {
-    "line_number": 1051,
+    "line_number": 984,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_play": {
-    "line_number": 872,
+    "line_number": 892,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_resume": {
-    "line_number": 1100,
+    "line_number": 1038,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_seek": {
-    "line_number": 1205,
+    "line_number": 1152,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_set_loop": {
-    "line_number": 1456,
+    "line_number": 1461,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_set_volume": {
-    "line_number": 1422,
+    "line_number": 1424,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
   "op_playback_stop": {
-    "line_number": 1172,
+    "line_number": 1108,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\op_playback_commands.rs",
     "file_name": "op_playback_commands.rs"
   },
@@ -253,12 +258,12 @@ export const TAURI_COMMANDS: CommandMap = {
     "file_name": "artifact_registry_commands.rs"
   },
   "refresh_artifacts_existence": {
-    "line_number": 327,
+    "line_number": 325,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\artifacts_service.rs",
     "file_name": "artifacts_service.rs"
   },
   "remove_artifacts_by_operation_debug": {
-    "line_number": 365,
+    "line_number": 363,
     "file_path": "C:\\Users\\Primary User\\Desktop\\TAURI_APPS\\SKV2\\tauri-v2-sveltekit-template\\src-tauri\\src\\artifacts_service.rs",
     "file_name": "artifacts_service.rs"
   },
