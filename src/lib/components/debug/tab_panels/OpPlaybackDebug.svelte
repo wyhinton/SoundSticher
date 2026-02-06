@@ -34,7 +34,7 @@
 
   async function fetchPlaybackState() {
     if (!isRefreshing) return;
-    
+
     try {
       const state = await invoke<OpPlaybackStateDebugInfo>('get_op_playback_state');
       playbackState = state;
@@ -86,22 +86,24 @@
 
   // Computed values for display
   $: hasActiveSessions = playbackState && playbackState.totalSessions > 0;
-  $: activeSession = playbackState?.activeTimeline ? playbackState.sessions[playbackState.activeTimeline] : null;
+  $: activeSession = playbackState?.activeTimeline
+    ? playbackState.sessions[playbackState.activeTimeline]
+    : null;
 </script>
 
 <div class="op-playback-debug">
   <div class="controls-header">
     <h3><i class="fa fa-play-circle"></i> Operation Playback State</h3>
     <div class="controls">
-      <button 
+      <button
         class="btn btn-sm {isRefreshing ? 'btn-danger' : 'btn-success'}"
         on:click={toggleRefresh}
       >
         <i class="fa {isRefreshing ? 'fa-pause' : 'fa-play'}"></i>
         {isRefreshing ? 'Pause' : 'Resume'} Auto-refresh (100ms)
       </button>
-      
-      <button 
+
+      <button
         class="btn btn-sm btn-secondary"
         on:click={fetchPlaybackState}
         disabled={isRefreshing}
@@ -133,7 +135,7 @@
           <div class="card-label">Total Sessions</div>
           <div class="card-value">{playbackState.totalSessions}</div>
         </div>
-        
+
         <div class="overview-card">
           <div class="card-label">Is Playing</div>
           <div class="card-value {playbackState.isPlaying ? 'status-active' : 'status-inactive'}">
@@ -141,7 +143,7 @@
             {playbackState.isPlaying ? 'Yes' : 'No'}
           </div>
         </div>
-        
+
         <div class="overview-card">
           <div class="card-label">Is Paused</div>
           <div class="card-value {playbackState.isPaused ? 'status-warning' : 'status-inactive'}">
@@ -149,10 +151,12 @@
             {playbackState.isPaused ? 'Yes' : 'No'}
           </div>
         </div>
-        
+
         <div class="overview-card">
           <div class="card-label">Active Timeline</div>
-          <div class="card-value {playbackState.activeTimeline ? 'status-active' : 'status-inactive'}">
+          <div
+            class="card-value {playbackState.activeTimeline ? 'status-active' : 'status-inactive'}"
+          >
             {playbackState.activeTimeline || 'None'}
           </div>
         </div>
@@ -179,7 +183,11 @@
             </div>
             <div class="detail-item">
               <span class="detail-label">Loop Mode:</span>
-              <span class="detail-value {activeSession.loopPlayback ? 'status-active' : 'status-inactive'}">
+              <span
+                class="detail-value {activeSession.loopPlayback
+                  ? 'status-active'
+                  : 'status-inactive'}"
+              >
                 <i class="fa {activeSession.loopPlayback ? 'fa-repeat' : 'fa-arrow-right'}"></i>
                 {activeSession.loopPlayback ? 'Enabled' : 'Disabled'}
               </span>
@@ -198,12 +206,11 @@
           <div class="progress-section">
             <div class="progress-label">Playback Progress</div>
             <div class="progress-bar">
-              <div 
-                class="progress-fill" 
-                style="width: {activeSession.progress * 100}%"
-              ></div>
+              <div class="progress-fill" style="width: {activeSession.progress * 100}%"></div>
               <div class="progress-text">
-                {activeSession.seekSeconds.toFixed(1)}s / {activeSession.durationSeconds.toFixed(1)}s
+                {activeSession.seekSeconds.toFixed(1)}s / {activeSession.durationSeconds.toFixed(
+                  1
+                )}s
               </div>
             </div>
           </div>
@@ -233,7 +240,11 @@
         <h4><i class="fa fa-list"></i> All Sessions ({playbackState.totalSessions})</h4>
         <div class="sessions-grid">
           {#each Object.entries(playbackState.sessions) as [timelineId, session]}
-            <div class="session-card {timelineId === playbackState.activeTimeline ? 'active-session-card' : ''}">
+            <div
+              class="session-card {timelineId === playbackState.activeTimeline
+                ? 'active-session-card'
+                : ''}"
+            >
               <div class="session-header">
                 <div class="session-title">
                   {timelineId}
@@ -242,7 +253,7 @@
                   {/if}
                 </div>
               </div>
-              
+
               <div class="session-stats">
                 <div class="stat">
                   <span class="stat-label">Duration:</span>
@@ -258,7 +269,9 @@
                 </div>
                 <div class="stat">
                   <span class="stat-label">Loop:</span>
-                  <span class="stat-value {session.loopPlayback ? 'status-active' : 'status-inactive'}">
+                  <span
+                    class="stat-value {session.loopPlayback ? 'status-active' : 'status-inactive'}"
+                  >
                     {session.loopPlayback ? 'On' : 'Off'}
                   </span>
                 </div>
@@ -266,10 +279,7 @@
 
               <div class="session-progress">
                 <div class="mini-progress-bar">
-                  <div 
-                    class="mini-progress-fill" 
-                    style="width: {session.progress * 100}%"
-                  ></div>
+                  <div class="mini-progress-fill" style="width: {session.progress * 100}%"></div>
                 </div>
               </div>
             </div>
@@ -641,7 +651,8 @@
     transition: width 0.1s ease;
   }
 
-  .empty-state, .loading-state {
+  .empty-state,
+  .loading-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -651,13 +662,15 @@
     text-align: center;
   }
 
-  .empty-state i, .loading-state i {
+  .empty-state i,
+  .loading-state i {
     font-size: 48px;
     margin-bottom: 16px;
     opacity: 0.3;
   }
 
-  .empty-state p, .loading-state p {
+  .empty-state p,
+  .loading-state p {
     margin: 8px 0;
     font-style: italic;
   }
@@ -680,21 +693,21 @@
     .overview-grid {
       grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .detail-grid {
       grid-template-columns: 1fr;
     }
-    
+
     .sessions-grid {
       grid-template-columns: 1fr;
     }
-    
+
     .controls-header {
       flex-direction: column;
       gap: 12px;
       align-items: stretch;
     }
-    
+
     .controls {
       justify-content: center;
     }

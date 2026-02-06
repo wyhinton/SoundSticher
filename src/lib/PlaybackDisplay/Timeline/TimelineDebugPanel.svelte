@@ -126,7 +126,7 @@
       none
     {/if}
   </div>
-  
+
   <!-- OpPlaybackState Debug Info -->
   <div class="op-playback-section">
     <b>Op Playback State:</b>
@@ -135,20 +135,23 @@
     {:else if opPlaybackState}
       <div class="op-playback-info">
         <div>
-          <b>Sessions:</b> {opPlaybackState.totalSessions} |
-          <b>Active:</b> {opPlaybackState.activeTimeline || 'None'} |
-          <b>Playing:</b> {opPlaybackState.isPlaying ? 'Yes' : 'No'} |
-          <b>Paused:</b> {opPlaybackState.isPaused ? 'Yes' : 'No'}
+          <b>Sessions:</b>
+          {opPlaybackState.totalSessions} |
+          <b>Active:</b>
+          {opPlaybackState.activeTimeline || 'None'} |
+          <b>Playing:</b>
+          {opPlaybackState.isPlaying ? 'Yes' : 'No'} |
+          <b>Paused:</b>
+          {opPlaybackState.isPaused ? 'Yes' : 'No'}
         </div>
         {#if opPlaybackState.activeTimeline && opPlaybackState.sessions[opPlaybackState.activeTimeline]}
           {@const activeSession = opPlaybackState.sessions[opPlaybackState.activeTimeline]}
           <div class="active-session-info">
-            <b>Active Session:</b> 
-            Progress: {(activeSession.progress * 100).toFixed(1)}% |
-            Seek: {activeSession.seekSeconds.toFixed(2)}s |
-            Duration: {activeSession.durationSeconds.toFixed(2)}s |
-            Ops: {activeSession.operationCount} |
-            Loop: {activeSession.loopPlayback ? 'On' : 'Off'}
+            <b>Active Session:</b>
+            Progress: {(activeSession.progress * 100).toFixed(1)}% | Seek: {activeSession.seekSeconds.toFixed(
+              2
+            )}s | Duration: {activeSession.durationSeconds.toFixed(2)}s | Ops: {activeSession.operationCount}
+            | Loop: {activeSession.loopPlayback ? 'On' : 'Off'}
           </div>
         {/if}
       </div>
@@ -156,7 +159,7 @@
       <span style="color: yellow;">Loading...</span>
     {/if}
   </div>
-  
+
   {#if timelineItems && timelineItems.length > 0}
     <div><b>Items ({timelineItems.length}):</b></div>
     {#each timelineItems as item, i}
