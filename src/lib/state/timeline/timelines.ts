@@ -673,6 +673,7 @@ export function createOperationTimelineItems(
  */
 export function createTimelineStateForOp(operationId: OperationId): Timeline {
   const timelineId = createTimelineId();
+  console.log(timelineId);
   const operationIdReadable = writable(operationId);
   const waveformState = createTimelineWaveformStore(timelineId);
 

@@ -278,7 +278,7 @@ export async function buildGraphForTimeline(
 ): Promise<BuildGraphResponse> {
   // Ensure progress listener is initialized
   await initProgressListener();
-
+  console.log(timelineId);
   logger.opPlayback.info(
     `Building graph for timeline '${timelineId}' with ${request.operations.length} operations`
   );
