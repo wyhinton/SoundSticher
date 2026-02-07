@@ -15,6 +15,8 @@ import {
   type MergeInputRequest,
 } from './opPlaybackService';
 import { logger } from './logging';
+import { durationCache } from './durationCache';
+import type { OperationDef } from './operation';
 // import { subscribeForTimelineStoreSerialization } from './timeline/persistentTimeline';
 
 /**
@@ -57,58 +59,168 @@ async function buildBackendGraphsForAllTimelines(): Promise<void> {
 
     try {
       logger.opPlayback.info(
-        `Building backend graph for timeline ${timelineId}, operation ${operationId}`
+        `Building backend graph for timeline ${timelineId}, operation ${operationId} (${operation.kind})`
       );
 
-      // Convert the operation to AddOpRequest format
-      const operations: AddOpRequest[] = [];
+      const operationDefs = currentAppState.operations?.defs;
+      if (!operationDefs) {
+        logger.opPlayback.error('No operation definitions available');
+        return;
+      }
 
-      if (operation.kind === 'sample') {
-        // Handle sample operation
-        const fileSource = operation.sources.find(s => s.type === 'file');
-        if (fileSource && fileSource.type === 'file') {
-          operations.push({
-            name: `${operation.name}_sample`,
-            opType: 'sample',
-            filePath: fileSource.fileId,
-            startTime: 0,
-            gain: 1.0,
-          });
-        }
-      } else if (operation.kind === 'merge') {
-        // Handle merge operation - for now create a basic merge
-        const mergeInputs: MergeInputRequest[] = [];
-        let currentOffset = 0;
+      // Get durations from cache for accurate timing
+      const durationsMap = new Map<string, number>();
 
-        // Process each source in the merge operation
-        for (const source of operation.sources) {
-          if (source.type === 'operation') {
-            const sourceOp = currentAppState.operations?.defs?.[source.operationId];
-            if (sourceOp && sourceOp.kind === 'sample') {
-              const fileSource = sourceOp.sources.find(s => s.type === 'file');
-              if (fileSource && fileSource.type === 'file') {
-                mergeInputs.push({
-                  filePath: fileSource.fileId,
-                  offset: currentOffset,
-                  gain: 1.0,
-                });
-                // Estimate duration for offset calculation (this could be improved)
-                currentOffset += 30; // placeholder duration
+      // Recursive function to collect all file paths from an operation
+      function collectFilePaths(op: OperationDef): string[] {
+        const paths: string[] = [];
+
+        if (op.kind === 'sample') {
+          const fileSource = op.sources.find(s => s.type === 'file');
+          if (fileSource && fileSource.type === 'file') {
+            paths.push(fileSource.fileId);
+          }
+        } else if (op.kind === 'merge') {
+          for (const source of op.sources) {
+            if (source.type === 'operation' && operationDefs) {
+              const sourceOp = operationDefs[source.operationId];
+              if (sourceOp) {
+                paths.push(...collectFilePaths(sourceOp));
               }
             }
           }
         }
 
-        if (mergeInputs.length > 0) {
-          operations.push({
-            name: `${operation.name}_merge`,
-            opType: 'merge',
-            startTime: 0,
-            gain: 1.0,
-            inputs: mergeInputs,
-          });
+        return paths;
+      }
+
+      // Collect all file paths and load their durations
+      const filePaths = collectFilePaths(operation);
+      if (filePaths.length > 0) {
+        try {
+          const durations = await durationCache.getBatch(filePaths);
+          for (const [filePath, duration] of durations.entries()) {
+            if (duration && duration > 0) {
+              durationsMap.set(filePath, duration);
+            }
+          }
+        } catch (error) {
+          logger.opPlayback.warning(
+            `Failed to load durations for timeline ${timelineId}, using placeholder durations`
+          );
         }
       }
+
+      // Recursive function to convert operations to AddOpRequest (same as buildPlaybackGraphFromMergeOp)
+      function convertOperationToAddOpRequest(
+        op: OperationDef,
+        opId: string,
+        startTime: number
+      ): { operations: AddOpRequest[]; totalDuration: number } {
+        const result: AddOpRequest[] = [];
+        let totalDuration = 0;
+
+        if (op.kind === 'sample') {
+          // Handle sample operation
+          const fileSource = op.sources.find(s => s.type === 'file');
+          if (fileSource && fileSource.type === 'file') {
+            const duration = durationsMap.get(fileSource.fileId);
+
+            if (!duration) {
+              logger.opPlayback.warning(
+                `No duration cached for ${fileSource.fileId}, skipping from playback graph`
+              );
+              return { operations: result, totalDuration: 0 };
+            }
+
+            result.push({
+              name: `${op.name}_sample`,
+              opType: 'sample',
+              filePath: fileSource.fileId,
+              startTime: startTime,
+              endTime: startTime + duration,
+              gain: 1.0,
+            });
+
+            totalDuration = duration;
+          }
+        } else if (op.kind === 'merge') {
+          // Handle merge operation - create separate operations for each source
+          let currentOffset = startTime;
+          const mergeInputs: MergeInputRequest[] = [];
+
+          for (let i = 0; i < op.sources.length; i++) {
+            const source = op.sources[i];
+            if (!source || source.type !== 'operation') {
+              logger.opPlayback.warning(
+                `Unsupported source type "${source?.type}" in MergeOp, skipping`
+              );
+              continue;
+            }
+
+            const sourceOp = operationDefs?.[source.operationId];
+            if (!sourceOp) {
+              logger.opPlayback.warning(
+                `Referenced operation id="${source.operationId}" not found`
+              );
+              continue;
+            }
+
+            if (sourceOp.kind === 'sample') {
+              // For sample operations, add them as merge inputs
+              const fileSource = sourceOp.sources.find(s => s.type === 'file');
+              if (fileSource && fileSource.type === 'file') {
+                const duration = durationsMap.get(fileSource.fileId);
+
+                if (!duration) {
+                  logger.opPlayback.warning(
+                    `No duration cached for ${fileSource.fileId}, skipping from merge`
+                  );
+                  continue;
+                }
+
+                mergeInputs.push({
+                  filePath: fileSource.fileId,
+                  offset: currentOffset - startTime, // Offset relative to merge start
+                  gain: 1.0,
+                });
+
+                currentOffset += duration;
+              }
+            } else if (sourceOp.kind === 'merge') {
+              // For nested merge operations, recursively convert them
+              const nestedResult = convertOperationToAddOpRequest(
+                sourceOp,
+                sourceOp.id,
+                currentOffset
+              );
+
+              result.push(...nestedResult.operations);
+              currentOffset += nestedResult.totalDuration;
+            }
+          }
+
+          // If we have merge inputs, create a merge operation
+          if (mergeInputs.length > 0) {
+            result.push({
+              name: `${op.name}_merge`,
+              opType: 'merge',
+              startTime: startTime,
+              endTime: currentOffset,
+              gain: 1.0,
+              inputs: mergeInputs,
+            });
+          }
+
+          totalDuration = currentOffset - startTime;
+        }
+
+        return { operations: result, totalDuration };
+      }
+
+      // Convert the selected operation using the recursive approach
+      const conversionResult = convertOperationToAddOpRequest(operation, operationId, 0);
+      const operations = conversionResult.operations;
 
       if (operations.length === 0) {
         logger.opPlayback.warning(`No valid operations generated for timeline ${timelineId}`);
@@ -124,7 +236,9 @@ async function buildBackendGraphsForAllTimelines(): Promise<void> {
       };
 
       await buildGraphForTimeline(timelineId, request);
-      logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
+      logger.opPlayback.info(
+        `Successfully built backend graph for timeline ${timelineId}: ${operations.length} ops, ${conversionResult.totalDuration.toFixed(2)}s`
+      );
     } catch (error) {
       logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);
     }

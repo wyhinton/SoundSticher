@@ -150,6 +150,9 @@ pub struct TimelineSource {
 
     /// Whether playback is finished
     finished: bool,
+
+    /// Debug: fill_buffer call count
+    fill_count: u64,
 }
 
 impl TimelineSource {
@@ -166,6 +169,7 @@ impl TimelineSource {
             context: PlaybackContext::with_block_size(spec, BLOCK_SIZE),
             loop_playback: false,
             finished: false,
+            fill_count: 0,
         }
     }
 
@@ -219,22 +223,38 @@ impl TimelineSource {
 
     /// Fill the internal buffer by rendering from the graph
     fn fill_buffer(&mut self) {
+        self.fill_count += 1;
         let duration = self.graph.duration();
 
-        // TODO: Add proper timeline logging integration
-        #[cfg(debug_assertions)]
-        {
-            println!(
-                "Timeline: Filling buffer at position: {:.3}s",
-                self.position.to_seconds(self.spec.sample_rate)
+        // Log every ~86 fills (~1 second at 44100Hz with 512-sample blocks)
+        #[allow(clippy::manual_is_multiple_of)]
+        let should_log = self.fill_count <= 3 || self.fill_count % 86 == 0;
+
+        if should_log {
+            eprintln!(
+                "🎵 [fill_buffer] #{}: position={:.3}s/{:.3}s, finished={}",
+                self.fill_count,
+                self.position.to_seconds(self.spec.sample_rate),
+                duration.to_seconds(self.spec.sample_rate),
+                self.finished
             );
         }
 
         // Check if we've reached the end
         if self.position >= duration {
             if self.loop_playback {
+                if should_log {
+                    eprintln!(
+                        "🎵 [fill_buffer] #{}: Reached end, looping back to start",
+                        self.fill_count
+                    );
+                }
                 self.position = SampleTime::new(0);
             } else {
+                eprintln!(
+                    "🎵 [fill_buffer] #{}: Reached end, finished (no loop)",
+                    self.fill_count
+                );
                 self.finished = true;
                 self.buffer.fill(0.0);
                 self.buffer_len = 0;
@@ -247,6 +267,10 @@ impl TimelineSource {
         let frames_to_render = (remaining_samples as usize).min(BLOCK_SIZE);
 
         if frames_to_render == 0 {
+            eprintln!(
+                "🎵 [fill_buffer] #{}: frames_to_render=0, finishing",
+                self.fill_count
+            );
             self.finished = !self.loop_playback;
             self.buffer.fill(0.0);
             self.buffer_len = 0;
@@ -263,6 +287,24 @@ impl TimelineSource {
         // Get active events at current position
         let active_events = timeline.get_active_events(self.position);
 
+        if should_log {
+            eprintln!(
+                "🎵 [fill_buffer] #{}: active_events={}, frames_to_render={}",
+                self.fill_count,
+                active_events.len(),
+                frames_to_render
+            );
+        }
+
+        if active_events.is_empty() && self.fill_count <= 5 {
+            eprintln!(
+                "🎵 [fill_buffer] #{}: ⚠️ NO active events at position {:.3}s! Total timeline events={}",
+                self.fill_count,
+                self.position.to_seconds(self.spec.sample_rate),
+                timeline.len()
+            );
+        }
+
         // Render each active operation and accumulate
         for event in active_events {
             if let Some(op) = registry.get_mut(event.id) {
@@ -278,10 +320,35 @@ impl TimelineSource {
                 };
 
                 // Now accumulate scratch into mix (separate borrow)
-                if let Ok(rendered_count) = rendered {
-                    let gain = event.gain;
-                    self.context.accumulate_scratch_to_mix(rendered_count, gain);
+                match rendered {
+                    Ok(rendered_count) => {
+                        let gain = event.gain;
+                        self.context.accumulate_scratch_to_mix(rendered_count, gain);
+                        if should_log && self.fill_count <= 5 {
+                            // Check if scratch had non-zero data
+                            let mix = self.context.mix_buffer();
+                            let non_zero = mix[..rendered_count]
+                                .iter()
+                                .filter(|s| s.abs() > 0.0001)
+                                .count();
+                            eprintln!(
+                                "🎵 [fill_buffer] #{}: op {:?} rendered {} samples, gain={:.2}, non_zero_in_mix={}",
+                                self.fill_count, event.id, rendered_count, gain, non_zero
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "🎵 [fill_buffer] #{}: ERROR rendering op {:?}: {:?}",
+                            self.fill_count, event.id, e
+                        );
+                    }
                 }
+            } else if should_log {
+                eprintln!(
+                    "🎵 [fill_buffer] #{}: op {:?} not found in registry!",
+                    self.fill_count, event.id
+                );
             }
         }
 
@@ -290,6 +357,22 @@ impl TimelineSource {
         self.buffer[..samples].copy_from_slice(&self.context.mix_buffer()[..samples]);
         self.buffer_len = samples;
         self.buffer_pos = 0;
+
+        // Debug: check output buffer for non-zero samples
+        if should_log && self.fill_count <= 5 {
+            let non_zero = self.buffer[..samples]
+                .iter()
+                .filter(|s| s.abs() > 0.0001)
+                .count();
+            let max_abs = self.buffer[..samples]
+                .iter()
+                .map(|s| s.abs())
+                .fold(0.0f32, f32::max);
+            eprintln!(
+                "🎵 [fill_buffer] #{}: output buffer: {} samples, {} non-zero, max_abs={:.6}",
+                self.fill_count, samples, non_zero, max_abs
+            );
+        }
 
         // Advance position
         self.position = self.position.add_samples(frames_to_render as u64);

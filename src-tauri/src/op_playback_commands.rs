@@ -935,6 +935,8 @@ pub fn op_playback_play(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
+    eprintln!("🎬 [op_playback_play] ENTER timeline='{}', start_seconds={:?}", timeline_id, start_seconds);
+
     let session = state.get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
     
@@ -944,7 +946,22 @@ pub fn op_playback_play(
     let total_duration = session.duration_seconds();
     let op_count = session.op_ids.len();
     let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
+
+    // Diagnostic: check if graph actually has content
+    let graph_duration_samples = graph.duration().samples();
+    let graph_is_empty = graph.is_empty();
+    let timeline_events_count = graph.timeline.read().unwrap().len();
+    let registry_ops_count = graph.registry.read().unwrap().len();
+    eprintln!(
+        "🎬 [op_playback_play] Graph diagnostics: duration_samples={}, duration_secs={:.3}, is_empty={}, timeline_events={}, registry_ops={}, session_op_count={}, op_names=[{}]",
+        graph_duration_samples, total_duration, graph_is_empty, timeline_events_count, registry_ops_count, op_count, op_names.join(", ")
+    );
+
     drop(session); // Release the reference
+
+    if graph_is_empty || graph_duration_samples == 0 {
+        eprintln!("🎬 [op_playback_play] WARNING: Graph is empty or has zero duration! No audio will play.");
+    }
 
     if let Ok(logger) = logging_service.lock() {
         log_info!(
@@ -959,7 +976,10 @@ pub fn op_playback_play(
     }
 
     // Stop any current playback
+    eprintln!("🎬 [op_playback_play] Stopping current playback...");
     stop_current_playback(&state);
+    eprintln!("🎬 [op_playback_play] Current playback stopped. is_playing={}, is_paused={}", 
+        state.is_playing.load(Ordering::Relaxed), state.is_paused.load(Ordering::Relaxed));
 
     // Determine start position
     let session_ref = state.get_session(&timeline_id)
@@ -992,10 +1012,14 @@ pub fn op_playback_play(
     };
     drop(session_ref);
 
+    eprintln!("🎬 [op_playback_play] Start position: {:?} samples ({:.3}s)", start_position, start_position.to_seconds(spec.sample_rate));
+
     // Set this timeline as active
     state.set_active_timeline(Some(timeline_id.clone()));
     state.is_playing.store(true, Ordering::Relaxed);
     state.is_paused.store(false, Ordering::Relaxed);
+
+    eprintln!("🎬 [op_playback_play] State set: active_timeline='{}', is_playing=true, is_paused=false. Spawning playback thread...", timeline_id);
 
     // Clone what we need for the playback thread
     let state_clone = state.inner().clone();
@@ -1003,18 +1027,21 @@ pub fn op_playback_play(
     let timeline_id_clone = timeline_id.clone();
 
     thread::spawn(move || {
+        eprintln!("🎬 [op_playback_play] Playback thread started for timeline '{}'", timeline_id_clone);
         start_playback_from_position(
             state_clone,
             app_clone,
-            timeline_id_clone,
+            timeline_id_clone.clone(),
             graph,
             spec,
             loop_playback,
             start_position,
             false, // not paused
         );
+        eprintln!("🎬 [op_playback_play] Playback thread for '{}' returned from start_playback_from_position", timeline_id_clone);
     });
 
+    eprintln!("🎬 [op_playback_play] EXIT - playback thread spawned for timeline '{}'", timeline_id);
     Ok(())
 }
 
@@ -1307,6 +1334,13 @@ pub fn op_playback_seek(
 }
 
 /// Helper function to start playback from a specific position
+///
+/// IMPORTANT: The OutputStream MUST stay alive for the entire duration of playback.
+/// If it is dropped, rodio immediately stops all audio output. Because OutputStream
+/// is NOT Send (cannot be moved between threads), we keep it alive on the CURRENT
+/// thread and run the progress loop here as well. The caller is responsible for
+/// calling this from a dedicated thread (not the main thread).
+#[allow(clippy::too_many_arguments)]
 fn start_playback_from_position(
     state: Arc<OpPlaybackState>,
     app: AppHandle,
@@ -1317,20 +1351,59 @@ fn start_playback_from_position(
     position: SampleTime,
     was_paused: bool,
 ) {
-    // Create audio output
+    eprintln!(
+        "🔊 [start_playback] ENTER timeline='{}', position={} samples ({:.3}s), loop={}, paused={}, spec={}Hz/{}ch",
+        timeline_id, position.samples(), position.to_seconds(spec.sample_rate), loop_playback, was_paused, spec.sample_rate, spec.channels
+    );
+
+    // Diagnostic: verify graph has content at the start position
+    {
+        let timeline_lock = graph.timeline.read().unwrap();
+        let active_events = timeline_lock.get_active_events(position);
+        let total_events = timeline_lock.len();
+        let duration = timeline_lock.duration();
+        eprintln!(
+            "🔊 [start_playback] Graph state: total_events={}, active_events_at_position={}, total_duration={} samples ({:.3}s)",
+            total_events, active_events.len(), duration.samples(), duration.to_seconds(spec.sample_rate)
+        );
+        for (i, evt) in active_events.iter().enumerate() {
+            eprintln!(
+                "🔊 [start_playback]   Active event[{}]: id={:?}, start={}, end={}, gain={:.2}, muted={}, solo={}",
+                i, evt.id, evt.start.samples(), evt.end.samples(), evt.gain, evt.muted, evt.solo
+            );
+        }
+        if active_events.is_empty() && total_events > 0 {
+            eprintln!("🔊 [start_playback] WARNING: No active events at start position! Listing all events:");
+            for (i, evt) in timeline_lock.events().iter().enumerate() {
+                eprintln!(
+                    "🔊 [start_playback]   Event[{}]: id={:?}, start={} ({:.3}s), end={} ({:.3}s), gain={:.2}, muted={}",
+                    i, evt.id, evt.start.samples(), evt.start.to_seconds(spec.sample_rate),
+                    evt.end.samples(), evt.end.to_seconds(spec.sample_rate), evt.gain, evt.muted
+                );
+            }
+        }
+    }
+
+    // Create audio output - OutputStream is NOT Send, so it must stay on THIS thread
     let (_stream, stream_handle) = match OutputStream::try_default() {
-        Ok(output) => output,
+        Ok(output) => {
+            eprintln!("🔊 [start_playback] OutputStream created successfully on thread {:?}", thread::current().id());
+            output
+        }
         Err(e) => {
-            eprintln!("Error creating audio output stream: {}", e);
+            eprintln!("🔊 [start_playback] ERROR creating audio output stream: {}", e);
             state.is_playing.store(false, Ordering::Relaxed);
             return;
         }
     };
 
     let sink = match Sink::try_new(&stream_handle) {
-        Ok(sink) => Arc::new(sink),
+        Ok(sink) => {
+            eprintln!("🔊 [start_playback] Sink created successfully");
+            Arc::new(sink)
+        }
         Err(e) => {
-            eprintln!("Error creating sink: {}", e);
+            eprintln!("🔊 [start_playback] ERROR creating sink: {}", e);
             state.is_playing.store(false, Ordering::Relaxed);
             return;
         }
@@ -1343,106 +1416,210 @@ fn start_playback_from_position(
         .start_position(position)
         .build(graph.clone());
 
+    eprintln!(
+        "🔊 [start_playback] TimelineSource built: position={:.3}s, finished={}, duration_samples={}",
+        source.position_seconds(), source.is_finished(), source.duration_samples().samples()
+    );
+
+    // Diagnostic: peek at the first few samples to verify we're producing audio data
+    {
+        let mut test_source = TimelineSourceBuilder::new()
+            .spec(spec)
+            .looping(loop_playback)
+            .start_position(position)
+            .build(graph.clone());
+        
+        let mut sample_count = 0;
+        let mut non_zero_count = 0;
+        let mut max_abs_sample: f32 = 0.0;
+        let peek_count = 1024; // Check first 1024 samples
+        
+        for _ in 0..peek_count {
+            if let Some(sample) = test_source.next() {
+                sample_count += 1;
+                if sample.abs() > 0.0001 {
+                    non_zero_count += 1;
+                }
+                if sample.abs() > max_abs_sample {
+                    max_abs_sample = sample.abs();
+                }
+            } else {
+                break;
+            }
+        }
+        eprintln!(
+            "🔊 [start_playback] Sample peek: checked {} samples, {} non-zero, max_abs={:.6}",
+            sample_count, non_zero_count, max_abs_sample
+        );
+        if non_zero_count == 0 {
+            eprintln!("🔊 [start_playback] ⚠️ WARNING: All peeked samples are ZERO/SILENT! Audio source may be empty or broken.");
+        }
+    }
+
     sink.append(source);
     sink.set_volume(1.0);
 
     if was_paused {
+        eprintln!("🔊 [start_playback] Starting in PAUSED state");
         sink.pause();
     } else {
+        eprintln!("🔊 [start_playback] Starting PLAYBACK - calling sink.play()");
         sink.play();
     }
 
+    eprintln!(
+        "🔊 [start_playback] Sink state after start: empty={}, volume={:.2}, is_paused={}",
+        sink.empty(), sink.volume(), sink.is_paused()
+    );
+
+    // Store the sink in shared state so other commands (pause/resume/stop) can control it
     *state.sink.lock().unwrap() = Some(Arc::clone(&sink));
 
-    // Progress tracking loop
-    spawn_progress_loop(state, timeline_id, app);
+    eprintln!(
+        "🔊 [start_playback] Sink stored in state. Running progress loop on THIS thread (OutputStream stays alive here)..."
+    );
+
+    // Run the progress loop on THIS thread (not a new one!)
+    // This is critical because OutputStream is NOT Send and must remain on the thread
+    // where it was created. This thread will block until playback is done.
+    run_progress_loop(&state, &timeline_id, &app);
+
+    eprintln!("🔊 [start_playback] EXIT - progress loop ended for timeline '{}'. OutputStream will be dropped now.", timeline_id);
+    // `_stream` (OutputStream) is dropped here when this function returns
 }
 
-/// Spawn the progress tracking loop for a timeline
-fn spawn_progress_loop(state: Arc<OpPlaybackState>, timeline_id: TimelineId, app: AppHandle) {
-    thread::spawn(move || {
-        let mut tracking_start = Instant::now();
-        let mut pause_start: Option<Instant> = None;
-        let mut total_pause_duration = Duration::from_secs(0);
+/// Run the progress tracking loop for a timeline (blocks the current thread)
+///
+/// This runs on the same thread as the OutputStream to keep it alive.
+fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app: &AppHandle) {
+    eprintln!(
+        "🔊 [progress_loop] Started for timeline '{}'. OutputStream is alive on thread {:?}.",
+        timeline_id, thread::current().id()
+    );
 
-        loop {
-            // Check if we should stop
-            if !state.is_playing.load(Ordering::Relaxed) {
-                break;
-            }
+    let mut tracking_start = Instant::now();
+    let mut pause_start: Option<Instant> = None;
+    let mut total_pause_duration = Duration::from_secs(0);
+    let mut loop_iteration: u64 = 0;
 
-            // Check if this timeline is still the active one
-            if state.get_active_timeline().as_ref() != Some(&timeline_id) {
-                break;
-            }
+    loop {
+        loop_iteration += 1;
 
-            // Get session info
-            let session = if let Some(s) = state.get_session(&timeline_id) {
-                s
+        // Log every ~1 second (60 iterations at 16ms sleep)
+        if loop_iteration % 60 == 1 {
+            let sink_state = state.sink.lock().unwrap();
+            let sink_info = if let Some(ref s) = *sink_state {
+                format!("empty={}, volume={:.2}, paused={}", s.empty(), s.volume(), s.is_paused())
             } else {
-                break;
+                "NONE (sink removed from state!)".to_string()
             };
-
-            let total_duration_seconds = session.duration_seconds();
-            let loop_playback = session.loop_playback;
-            drop(session);
-
-            // Check if sink is empty and not looping
-            let sink = state.sink.lock().unwrap();
-            if let Some(ref sink) = *sink {
-                if sink.empty() && !loop_playback {
-                    drop(sink);
-                    break;
-                }
-            }
-            drop(sink);
-
-            if state.is_paused.load(Ordering::Relaxed) {
-                // Mark pause start if we just entered pause state
-                if pause_start.is_none() {
-                    pause_start = Some(Instant::now());
-                }
-                thread::sleep(Duration::from_millis(50));
-                continue;
-            } else if let Some(pause_started_at) = pause_start.take() {
-                // We just resumed from pause
-                let pause_duration = pause_started_at.elapsed();
-                total_pause_duration += pause_duration;
-                // Reset tracking_start to now so we measure from resume point
-                tracking_start = Instant::now();
-            }
-
-            // Get session reference again for updating progress
-            if let Some(session) = state.get_session(&timeline_id) {
-                let seek_start = *session.seek_seconds.lock().unwrap();
-                let total_elapsed = tracking_start.elapsed();
-                let current_position = seek_start + total_elapsed.as_secs_f32();
-
-                // Calculate progress (handle looping)
-                let progress = if total_duration_seconds > 0.0 {
-                    if loop_playback {
-                        (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
-                    } else {
-                        (current_position / total_duration_seconds as f32).min(1.0)
-                    }
-                } else {
-                    0.0
-                };
-
-                *session.progress.lock().unwrap() = progress;
-                *session.seek_seconds.lock().unwrap() = current_position;
-
-                emit_logged!(app, "op-timeline-progress", serde_json::json!({
-                    "timelineId": timeline_id,
-                    "progress": progress
-                }));
-            }
-
-            thread::sleep(Duration::from_millis(16)); // ~60 FPS
+            drop(sink_state);
+            eprintln!(
+                "🔊 [progress_loop] iter={} timeline='{}': is_playing={}, is_paused={}, sink=[{}]",
+                loop_iteration, timeline_id,
+                state.is_playing.load(Ordering::Relaxed),
+                state.is_paused.load(Ordering::Relaxed),
+                sink_info
+            );
         }
 
-        state.is_playing.store(false, Ordering::Relaxed);
-    });
+        // Check if we should stop
+        if !state.is_playing.load(Ordering::Relaxed) {
+            eprintln!("🔊 [progress_loop] is_playing=false, breaking for timeline '{}' at iter={}", timeline_id, loop_iteration);
+            break;
+        }
+
+        // Check if this timeline is still the active one
+        if state.get_active_timeline().as_ref() != Some(timeline_id) {
+            eprintln!("🔊 [progress_loop] timeline '{}' is no longer active (active={:?}), breaking at iter={}", 
+                timeline_id, state.get_active_timeline(), loop_iteration);
+            break;
+        }
+
+        // Get session info
+        let session = if let Some(s) = state.get_session(timeline_id) {
+            s
+        } else {
+            eprintln!("🔊 [progress_loop] session not found for timeline '{}', breaking at iter={}", timeline_id, loop_iteration);
+            break;
+        };
+
+        let total_duration_seconds = session.duration_seconds();
+        let loop_playback = session.loop_playback;
+        drop(session);
+
+        // Check if sink is empty and not looping
+        {
+            let sink_guard = state.sink.lock().unwrap();
+            let should_break = match *sink_guard {
+                Some(ref sink) => {
+                    if sink.empty() && !loop_playback {
+                        eprintln!("🔊 [progress_loop] Sink empty and not looping for timeline '{}', breaking at iter={}", timeline_id, loop_iteration);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                None => {
+                    eprintln!("🔊 [progress_loop] Sink is NONE in state for timeline '{}', breaking at iter={}", timeline_id, loop_iteration);
+                    true
+                }
+            };
+            drop(sink_guard);
+            if should_break {
+                break;
+            }
+        }
+
+        if state.is_paused.load(Ordering::Relaxed) {
+            // Mark pause start if we just entered pause state
+            if pause_start.is_none() {
+                pause_start = Some(Instant::now());
+            }
+            thread::sleep(Duration::from_millis(50));
+            continue;
+        } else if let Some(pause_started_at) = pause_start.take() {
+            // We just resumed from pause
+            let pause_duration = pause_started_at.elapsed();
+            total_pause_duration += pause_duration;
+            // Reset tracking_start to now so we measure from resume point
+            tracking_start = Instant::now();
+        }
+
+        // Get session reference again for updating progress
+        if let Some(session) = state.get_session(timeline_id) {
+            let seek_start = *session.seek_seconds.lock().unwrap();
+            let total_elapsed = tracking_start.elapsed();
+            let current_position = seek_start + total_elapsed.as_secs_f32();
+
+            // Calculate progress (handle looping)
+            let progress = if total_duration_seconds > 0.0 {
+                if loop_playback {
+                    (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
+                } else {
+                    (current_position / total_duration_seconds as f32).min(1.0)
+                }
+            } else {
+                0.0
+            };
+
+            *session.progress.lock().unwrap() = progress;
+            *session.seek_seconds.lock().unwrap() = current_position;
+
+            emit_logged!(app, "op-timeline-progress", serde_json::json!({
+                "timelineId": timeline_id,
+                "progress": progress
+            }));
+        }
+
+        thread::sleep(Duration::from_millis(16)); // ~60 FPS
+    }
+
+    eprintln!(
+        "🔊 [progress_loop] Ended for timeline '{}' at iter={}.",
+        timeline_id, loop_iteration
+    );
+    state.is_playing.store(false, Ordering::Relaxed);
 }
 
 /// Get current playback progress for a specific timeline
@@ -1640,15 +1817,24 @@ pub fn get_op_playback_state(
 // Helper functions
 
 fn stop_current_playback(state: &OpPlaybackState) {
+    eprintln!("🛑 [stop_current_playback] ENTER: is_playing={}, is_paused={}, has_sink={}", 
+        state.is_playing.load(Ordering::Relaxed),
+        state.is_paused.load(Ordering::Relaxed),
+        state.sink.lock().unwrap().is_some()
+    );
     state.is_playing.store(false, Ordering::Relaxed);
     state.is_paused.store(false, Ordering::Relaxed);
 
     let mut sink = state.sink.lock().unwrap();
     if let Some(ref s) = *sink {
+        eprintln!("🛑 [stop_current_playback] Stopping and clearing sink (empty={}, volume={:.2})", s.empty(), s.volume());
         s.stop();
         s.clear();
+    } else {
+        eprintln!("🛑 [stop_current_playback] No sink to stop");
     }
     *sink = None;
+    eprintln!("🛑 [stop_current_playback] EXIT");
 }
 
 fn count_graph_ops(request: &BuildGraphRequest) -> Result<usize, String> {
