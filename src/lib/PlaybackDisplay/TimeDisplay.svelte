@@ -1,33 +1,20 @@
 <script lang="ts">
   import { formatMilliseconds } from '../utils/format';
-  import { opPlaybackState, opIsPlaying, opIsPaused } from '../state/opPlaybackService';
-  import { operationDuration } from '../state/waveformCache';
 
   export let compact: boolean = false;
-
-  let playHeadPosition = 0;
-
-  // Update playhead position from operation playback state
-  $: playHeadPosition = $opPlaybackState.positionSeconds;
-
-  // Reactive current duration from operation system
-  $: currentDuration = $operationDuration;
-
-  // Reactive total length from operation system
-  $: totalLength = $opPlaybackState.durationSeconds;
-
-  // Reactive play state from operation system
-  $: isCurrentlyPlaying = $opIsPlaying && !$opIsPaused;
+  export let currentPositionSeconds: number = 0;
+  export let totalDurationSeconds: number = 0;
+  export let isPlaying: boolean = false;
 </script>
 
 <!-- Current Time Display -->
 <div class="time-display" class:compact>
-  <div class="current-time" class:playing={isCurrentlyPlaying}>
-    {formatMilliseconds(playHeadPosition * 1000)}
+  <div class="current-time" class:playing={isPlaying}>
+    {formatMilliseconds(currentPositionSeconds * 1000)}
   </div>
   <div class="time-separator">/</div>
   <div class="total-time">
-    {totalLength > 0 ? formatMilliseconds(totalLength * 1000) : '0:00.000'}
+    {totalDurationSeconds > 0 ? formatMilliseconds(totalDurationSeconds * 1000) : '0:00.000'}
   </div>
 </div>
 

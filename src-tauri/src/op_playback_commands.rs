@@ -1482,6 +1482,11 @@ fn start_playback_from_position(
     // Run the progress loop on THIS thread (not a new one!)
     // This is critical because OutputStream is NOT Send and must remain on the thread
     // where it was created. This thread will block until playback is done.
+    let graph_duration_seconds = graph.duration().to_seconds(spec.sample_rate);
+    eprintln!(
+        "🔊 [start_playback] About to run progress loop with: total_duration={:.3}s, start_position={:.3}s",
+        graph_duration_seconds, position.to_seconds(spec.sample_rate)
+    );
     run_progress_loop(&state, &timeline_id, &app);
 
     eprintln!("🔊 [start_playback] EXIT - progress loop ended for timeline '{}'. OutputStream will be dropped now.", timeline_id);
@@ -1501,6 +1506,10 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
     let mut pause_start: Option<Instant> = None;
     let mut total_pause_duration = Duration::from_secs(0);
     let mut loop_iteration: u64 = 0;
+    let mut last_logged_iteration: u64 = 0;
+    let mut last_logged_progress: f32 = 0.0;
+    let mut last_logged_elapsed: f32 = 0.0;
+    let mut first_progress_update = true;
 
     loop {
         loop_iteration += 1;
@@ -1574,6 +1583,7 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
         if state.is_paused.load(Ordering::Relaxed) {
             // Mark pause start if we just entered pause state
             if pause_start.is_none() {
+                eprintln!("🔊 [progress_loop] PAUSED at iter={}, pausing progress tracking", loop_iteration);
                 pause_start = Some(Instant::now());
             }
             thread::sleep(Duration::from_millis(50));
@@ -1582,8 +1592,13 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
             // We just resumed from pause
             let pause_duration = pause_started_at.elapsed();
             total_pause_duration += pause_duration;
+            eprintln!(
+                "🔊 [progress_loop] RESUMED at iter={}, pause_duration={:.3}s, total_pause_duration={:.3}s",
+                loop_iteration, pause_duration.as_secs_f32(), total_pause_duration.as_secs_f32()
+            );
             // Reset tracking_start to now so we measure from resume point
             tracking_start = Instant::now();
+            first_progress_update = true; // Log first update after resume
         }
 
         // Get session reference again for updating progress
@@ -1603,6 +1618,28 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
                 0.0
             };
 
+            // Log detailed progress info periodically or on first update
+            if first_progress_update || loop_iteration - last_logged_iteration >= 60 {
+                let progress_delta = (progress - last_logged_progress).abs();
+                let elapsed_delta = (total_elapsed.as_secs_f32() - last_logged_elapsed).abs();
+                
+                eprintln!(
+                    "🔊 [progress_loop] PROGRESS UPDATE @ iter={}: \n  \
+                    total_duration={:.3}s, seek_start={:.3}s, total_elapsed={:.3}s, \n  \
+                    current_position={:.3}s, progress={:.4} ({:.1}%), \n  \
+                    since_last_log: elapsed_delta={:.3}s, progress_delta={:.4}",
+                    loop_iteration,
+                    total_duration_seconds, seek_start, total_elapsed.as_secs_f32(),
+                    current_position, progress, progress * 100.0,
+                    elapsed_delta, progress_delta
+                );
+
+                last_logged_iteration = loop_iteration;
+                last_logged_progress = progress;
+                last_logged_elapsed = total_elapsed.as_secs_f32();
+                first_progress_update = false;
+            }
+
             *session.progress.lock().unwrap() = progress;
             *session.seek_seconds.lock().unwrap() = current_position;
 
@@ -1616,8 +1653,8 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
     }
 
     eprintln!(
-        "🔊 [progress_loop] Ended for timeline '{}' at iter={}.",
-        timeline_id, loop_iteration
+        "🔊 [progress_loop] Ended for timeline '{}' at iter={}. Total pause duration: {:.3}s",
+        timeline_id, loop_iteration, total_pause_duration.as_secs_f32()
     );
     state.is_playing.store(false, Ordering::Relaxed);
 }

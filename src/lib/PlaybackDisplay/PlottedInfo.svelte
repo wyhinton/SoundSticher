@@ -4,7 +4,13 @@
   import TransportControls from './TransportControls.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
   import { type Timeline } from '../state/timeline/timelines';
+  import { timelinePlayhead } from '../state/timeline/timelines';
   import TimeDisplay from './TimeDisplay.svelte';
+  import {
+    timelinePlaybackState,
+    isTimelinePlaying,
+    isTimelinePaused,
+  } from '../state/timelinePlaybackService';
 
   export let timeline: Timeline;
 
@@ -26,6 +32,17 @@
   $: timelineItemsStore = timeline.items;
   $: timelineItems = $timelineItemsStore;
   $: transportDisabled = (timelineItems?.length || 0) === 0;
+
+  // Timeline-specific playback state for TimeDisplay
+  $: playheadStore = timelinePlayhead(timeline.id);
+  $: currentPositionSeconds = $playheadStore;
+  $: totalDurationSeconds = waveformState?.totalDuration ?? 0;
+
+  // Check if THIS timeline is the active one playing
+  $: isThisTimelineActive = $timelinePlaybackState.activeTimelineId === timeline.id;
+  $: isPlaying = isThisTimelineActive && $isTimelinePlaying;
+  $: isPaused = isThisTimelineActive && $isTimelinePaused;
+  $: isCurrentlyPlaying = isPlaying && !isPaused;
 </script>
 
 <div class="d-flex text-success">
@@ -50,7 +67,12 @@
 
   <div class="d-flex gap-1">
     <TransportControls disabled={transportDisabled} timelineId={timeline.id} />
-    <TimeDisplay compact={true} />
+    <TimeDisplay
+      compact={true}
+      {currentPositionSeconds}
+      {totalDurationSeconds}
+      isPlaying={isCurrentlyPlaying}
+    />
   </div>
   <TimelineInfo></TimelineInfo>
 </div>
