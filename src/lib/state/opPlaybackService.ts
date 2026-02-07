@@ -597,34 +597,6 @@ export async function resumeTimeline(timelineId: string): Promise<void> {
 }
 
 /**
- * Stop playback
- */
-export async function stop(): Promise<void> {
-  logger.opPlayback.info('Stopping playback');
-
-  try {
-    const result = await invokeWithPerf('op_playback_stop');
-
-    if (!result.ok) {
-      throw new Error(`Failed to stop playback: ${result.error.message}`);
-    }
-
-    internalState.update(s => ({
-      ...s,
-      isPlaying: false,
-      isPaused: false,
-      progress: 0,
-      positionSeconds: 0,
-    }));
-
-    logger.opPlayback.success('Playback stopped');
-  } catch (error) {
-    logger.opPlayback.error('Failed to stop playback:', error);
-    throw error;
-  }
-}
-
-/**
  * Stop playback for a specific timeline
  */
 export async function stopTimeline(timelineId: string): Promise<void> {
