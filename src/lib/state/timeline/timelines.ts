@@ -119,7 +119,6 @@ export interface TimelineWaveformState {
 export interface Timeline {
   id: TimelineId;
   source: TimelineSource;
-  view: TimelineViewState;
   items: Readable<TimelineItem[]>;
   waveformState?: {
     subscribe: (this: void, run: (value: TimelineWaveformState) => void) => () => void;
@@ -184,7 +183,6 @@ export function defaultTimelineViewState(): TimelineViewState {
 export interface SerializableTimeline {
   id: TimelineId;
   source: TimelineSource;
-  view: TimelineViewState;
   items: TimelineItem[]; // plain array instead of Readable
 }
 
@@ -203,7 +201,6 @@ function serializeTimeline(timeline: Timeline): SerializableTimeline {
   return {
     id: timeline.id,
     source: timeline.source,
-    view: timeline.view,
     items: currentItems,
   };
 }
@@ -214,7 +211,7 @@ function serializeTimeline(timeline: Timeline): SerializableTimeline {
  */
 function deserializeTimeline(serialized: SerializableTimeline): Timeline {
   console.log('DESERIALIZNG');
-  const { id, source, view } = serialized;
+  const { id, source } = serialized;
 
   // Create waveform store for this timeline
   const waveformState = createTimelineWaveformStore(id);
@@ -254,7 +251,6 @@ function deserializeTimeline(serialized: SerializableTimeline): Timeline {
   return {
     id,
     source,
-    view,
     items,
     waveformState,
   };
@@ -347,6 +343,39 @@ export const timelinePlaybackState = writable<Record<TimelineId, { playheadTime:
  */
 export function timelinePlayhead(timelineId: TimelineId) {
   return derived(timelinePlaybackState, $state => $state[timelineId]?.playheadTime ?? 0);
+}
+
+/**
+ * Separate persisted store for timeline view states (zoom, scroll, selection, etc.)
+ * This is kept separate from Timeline objects to allow view state to persist independently
+ */
+export const timelineViewStates = persisted<Record<TimelineId, TimelineViewState>>(
+  'timeline-views:v1',
+  {}
+);
+
+/**
+ * Get the view state for a specific timeline, or return default if not found
+ */
+export function getTimelineViewState(timelineId: TimelineId): TimelineViewState {
+  const viewStates = get(timelineViewStates);
+  return viewStates[timelineId] || defaultTimelineViewState();
+}
+
+/**
+ * Update the view state for a specific timeline
+ */
+export function updateTimelineViewState(
+  timelineId: TimelineId,
+  update: Partial<TimelineViewState>
+): void {
+  timelineViewStates.update(states => ({
+    ...states,
+    [timelineId]: {
+      ...getTimelineViewState(timelineId),
+      ...update,
+    },
+  }));
 }
 
 /**
@@ -764,10 +793,15 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
   loadWaveformData();
   // buildBackendGraph();
 
+  // Initialize view state for this timeline
+  timelineViewStates.update(states => ({
+    ...states,
+    [timelineId]: defaultTimelineViewState(),
+  }));
+
   return {
     id: timelineId,
     source: { kind: 'operation', operationId },
-    view: defaultTimelineViewState(),
     items: createOperationTimelineItems(operationIdReadable, waveformState),
     waveformState,
   };
@@ -803,6 +837,13 @@ export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
         ...state,
         timelines: newTimelines,
       };
+    });
+
+    // Also clean up the view state for this timeline
+    timelineViewStates.update(states => {
+      const newStates = { ...states };
+      delete newStates[existingTimelineId];
+      return newStates;
     });
   } else {
     console.log(`%cHERE LINE :808 %c`, 'color: yellow; font-weight: bold', '');

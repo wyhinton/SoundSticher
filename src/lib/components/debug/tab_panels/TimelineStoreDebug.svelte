@@ -19,11 +19,6 @@
     id: timeline.id,
     sourceKind: timeline.source.kind,
     isActive: false, // No active timeline concept in simplified version
-    zoom: timeline.view.zoom,
-    scrollX: timeline.view.scrollX,
-    playheadTime: timeline.view.playheadTime,
-    hasSelection: !!timeline.view.selection,
-    visibleTracksCount: timeline.view.visibleTracks.length,
     isDocked: false, // No layout concept in simplified version
     isFloating: false, // No layout concept in simplified version
     // Add source-specific info
@@ -242,7 +237,6 @@
                     </div>
                     <div class="view-item">
                       <span class="view-label">Tracks:</span>
-                      <span class="view-value">{timeline.visibleTracksCount}</span>
                     </div>
                     {#if timeline.hasSelection}
                       <div class="view-item">
