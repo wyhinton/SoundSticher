@@ -9,7 +9,7 @@ import { timelinesStore } from './timeline/timelines';
 import { get } from 'svelte/store';
 import { appState } from './state.svelte';
 import {
-  buildGraphForTimeline,
+  buildTimelineForOp,
   type BuildGraphRequest,
   type AddOpRequest,
   type MergeInputRequest,
@@ -235,7 +235,7 @@ async function buildBackendGraphsForAllTimelines(): Promise<void> {
         loopPlayback: true,
       };
 
-      await buildGraphForTimeline(timelineId, request);
+      await buildTimelineForOp(timelineId, request);
       logger.opPlayback.info(
         `Successfully built backend graph for timeline ${timelineId}: ${operations.length} ops, ${conversionResult.totalDuration.toFixed(2)}s`
       );

@@ -17,7 +17,7 @@ import type {
   AddOpRequest,
   MergeInputRequest,
 } from '../opPlaybackService';
-import { buildGraphForTimeline } from '../opPlaybackService';
+import { buildTimelineForOp } from '../opPlaybackService';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
 // Timeline progress listener for updating individual timeline views

@@ -274,7 +274,7 @@ function cleanupEventListeners(): void {
 /**
  * Build a playback graph for a specific timeline
  */
-export async function buildGraphForTimeline(
+export async function buildTimelineForOp(
   timelineId: string,
   request: BuildGraphRequest
 ): Promise<BuildGraphResponse> {
@@ -428,7 +428,7 @@ export async function buildGraphFromFilesForTimeline(
     loopPlayback: options.loopPlayback,
   };
 
-  return buildGraphForTimeline(timelineId, request);
+  return buildTimelineForOp(timelineId, request);
 }
 
 /**
@@ -939,7 +939,7 @@ export const opPlaybackService = {
   clearGraph,
 
   // New timeline-aware control functions
-  buildGraphForTimeline,
+  buildGraphForTimeline: buildTimelineForOp,
   buildGraphFromFilesForTimeline,
   playTimeline,
   pauseTimeline,
