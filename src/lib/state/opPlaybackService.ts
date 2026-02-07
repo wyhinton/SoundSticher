@@ -336,9 +336,15 @@ export async function buildTimelineForOp(
         }
       );
 
-    const result = await invokeWithPerf<BuildGraphResponse>('op_playback_build_graph', {
-      timelineId,
+    // Wrap the request in a TimelineSource::Operation variant
+    const source = {
+      type: 'operation',
       request,
+    };
+
+    const result = await invokeWithPerf<BuildGraphResponse>('timeline_build_playback', {
+      timelineId,
+      source,
       onEvent: onBuildGraphEvent,
     });
 

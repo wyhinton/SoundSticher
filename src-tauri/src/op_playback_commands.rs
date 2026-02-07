@@ -10,7 +10,9 @@ use crate::playback::op_playback::{
 use crate::playback_ops::merge_playback::MergePlaybackOp;
 use crate::playback_ops::sample_playback::SamplePlayableOp;
 use crate::sample_cache::SampleCacheService;
+use crate::timeline_playback_commands::TimelineId;
 use crate::{emit_logged, log_debug, log_info, send_channel_event};
+use dashmap::DashMap;
 use rodio::{OutputStream, Sink};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -20,8 +22,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
-use dashmap::DashMap;
-use crate::timeline_playback_commands::{TimelineId};
 
 /// Serializable audio spec for debugging
 #[derive(Debug, Clone, Serialize)]
@@ -97,25 +97,30 @@ pub enum OpPlaybackBuildGraphEvent {
 pub struct PlaybackSession {
     /// The playback graph for this timeline
     pub graph: Arc<PlaybackGraph>,
-    
+
     /// Audio specification
     pub spec: AudioSpec,
-    
+
     /// Current playback progress (normalized 0.0-1.0)
     pub progress: Mutex<f32>,
-    
+
     /// Current seek position in seconds
     pub seek_seconds: Mutex<f32>,
-    
+
     /// Whether this timeline loops
     pub loop_playback: bool,
-    
+
     /// Mapping of operation names to their IDs in this timeline's graph
     pub op_ids: HashMap<String, PlaybackOpId>,
 }
 
 impl PlaybackSession {
-    pub fn new(graph: Arc<PlaybackGraph>, spec: AudioSpec, loop_playback: bool, op_ids: HashMap<String, PlaybackOpId>) -> Self {
+    pub fn new(
+        graph: Arc<PlaybackGraph>,
+        spec: AudioSpec,
+        loop_playback: bool,
+        op_ids: HashMap<String, PlaybackOpId>,
+    ) -> Self {
         Self {
             graph,
             spec,
@@ -125,7 +130,7 @@ impl PlaybackSession {
             op_ids,
         }
     }
-    
+
     pub fn duration_seconds(&self) -> f64 {
         self.graph.duration().to_seconds(self.spec.sample_rate)
     }
@@ -135,16 +140,16 @@ impl PlaybackSession {
 pub struct AppTimelinePlaybackState {
     /// All timeline sessions
     sessions: DashMap<TimelineId, PlaybackSession>,
-    
+
     /// Which timeline is currently audible (only one can play at a time)
     active_timeline: RwLock<Option<TimelineId>>,
-    
+
     /// Single audio sink (hardware constraint)
     sink: Mutex<Option<Arc<Sink>>>,
-    
+
     /// Whether audio is currently playing
     is_playing: AtomicBool,
-    
+
     /// Whether playback is paused
     is_paused: AtomicBool,
 }
@@ -160,7 +165,10 @@ impl AppTimelinePlaybackState {
         }
     }
 
-    pub fn get_session(&self, timeline_id: &TimelineId) -> Option<dashmap::mapref::one::Ref<TimelineId, PlaybackSession>> {
+    pub fn get_session(
+        &self,
+        timeline_id: &TimelineId,
+    ) -> Option<dashmap::mapref::one::Ref<TimelineId, PlaybackSession>> {
         self.sessions.get(timeline_id)
     }
 
@@ -168,7 +176,10 @@ impl AppTimelinePlaybackState {
         self.sessions.insert(timeline_id, session);
     }
 
-    pub fn remove_session(&self, timeline_id: &TimelineId) -> Option<(TimelineId, PlaybackSession)> {
+    pub fn remove_session(
+        &self,
+        timeline_id: &TimelineId,
+    ) -> Option<(TimelineId, PlaybackSession)> {
         self.sessions.remove(timeline_id)
     }
 
@@ -282,6 +293,14 @@ pub struct BuildGraphResponse {
 }
 
 /// Build a playback graph for a specific timeline
+///
+/// This command delegates to `TimelinePlaybackManager` which:
+/// 1. Selects the appropriate builder (OpGraphPlaybackBuilder)
+/// 2. Builds the session (pure — no state mutation)
+/// 3. Registers the session in `AppTimelinePlaybackState`
+///
+/// The builder is reusable and side-effect free. Only the manager
+/// decides where sessions live.
 #[tauri::command]
 pub async fn op_playback_build_graph(
     timeline_id: TimelineId,
@@ -291,199 +310,57 @@ pub async fn op_playback_build_graph(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<OpPlaybackBuildGraphEvent>,
 ) -> Result<BuildGraphResponse, String> {
+    use crate::playback::timeline_manager::{TimelinePlaybackManager, TimelineSource};
+
     let state = state.inner().clone();
     let sample_cache = sample_cache.inner().clone();
     let logging_service = logging_service.inner().clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        if let Ok(logger) = logging_service.lock() {
-            log_info!(
-                logger,
-                LogSystem::Playback,
-                "op_build_graph",
-                &format!(
-                    "Building playback graph for timeline '{}' with {} operations",
-                    timeline_id, request.operations.len()
-                )
-            );
-        }
+        let manager = TimelinePlaybackManager::new(state, sample_cache, logging_service);
+        let source = TimelineSource::Operation { request };
 
-        let total_graph_ops = count_graph_ops(&request)?;
-        
-        // Emit started event
-        send_channel_event!(
-            on_event,
-            OpPlaybackBuildGraphEvent::Started {
-                timeline_id: timeline_id.clone(),
-                operation_count: total_graph_ops
-            }
-        );
-
-        let sample_rate = request.sample_rate.unwrap_or(44100);
-        let channels = request.channels.unwrap_or(2);
-        let spec = AudioSpec::new(sample_rate, channels);
-        let loop_playback = request.loop_playback.unwrap_or(true);
-
-        // Create new graph
-        let graph = Arc::new(PlaybackGraph::new(spec));
-        let mut op_ids = HashMap::new();
-
-        for (index, op_request) in request.operations.iter().enumerate() {
-            // Create the playable operation based on type
-            let op: Box<dyn PlayableOp> = match op_request.op_type {
-                OpType::Sample => {
-                    // Get samples (either from file or directly provided)
-                    let samples_arc: Arc<Vec<f32>> = if let Some(ref samples) = op_request.samples {
-                        Arc::new(samples.clone())
-                    } else if let Some(ref file_path) = op_request.file_path {
-                        // Load samples from file using cache
-                        let path = std::path::PathBuf::from(file_path);
-                        let buffer = sample_cache.get_or_load(path, sample_rate, channels)?;
-                        Arc::clone(&buffer.data)
-                    } else {
-                        return Err(format!(
-                            "Sample operation '{}' must have either 'samples' or 'filePath'",
-                            op_request.name
-                        ));
-                    };
-
-                    Box::new(SamplePlayableOp::from_arc(samples_arc, spec))
-                }
-                OpType::Merge => {
-                    // Build a merge operation from child inputs
-                    let inputs = op_request.inputs.as_ref().ok_or_else(|| {
-                        format!(
-                            "Merge operation '{}' must have 'inputs' array",
-                            op_request.name
-                        )
-                    })?;
-
-                    if inputs.is_empty() {
-                        return Err(format!(
-                            "Merge operation '{}' must have at least one input",
-                            op_request.name
-                        ));
-                    }
-
-                    let mut builder = MergePlaybackOp::builder(spec);
-
-                    for (i, input) in inputs.iter().enumerate() {
-                        // Get samples for this input
-                        let samples_arc: Arc<Vec<f32>> = if let Some(ref samples) = input.samples {
-                            Arc::new(samples.clone())
-                        } else if let Some(ref file_path) = input.file_path {
-                            let path = std::path::PathBuf::from(file_path);
-                            let buffer = sample_cache.get_or_load(path, sample_rate, channels)?;
-                            Arc::clone(&buffer.data)
-                        } else {
-                            return Err(format!(
-                                "Merge input {} in operation '{}' must have either 'samples' or 'filePath'",
-                                i, op_request.name
-                            ));
-                        };
-
-                        let child_op = SamplePlayableOp::from_arc(samples_arc, spec);
-
-                        let offset = SampleTime::from_seconds(input.offset, sample_rate);
-                        builder = builder.add_input(Box::new(child_op), offset);
-                    }
-
-                    Box::new(builder.build())
+        manager.build_timeline(timeline_id, source, |e| {
+            // Convert TimelinePlaybackEvent → OpPlaybackBuildGraphEvent for backward compat
+            let op_event = match e {
+                crate::playback::timeline_manager::TimelinePlaybackEvent::BuildStarted {
+                    timeline_id,
+                    operation_count,
+                } => OpPlaybackBuildGraphEvent::Started {
+                    timeline_id,
+                    operation_count,
+                },
+                crate::playback::timeline_manager::TimelinePlaybackEvent::BuildProgress {
+                    timeline_id,
+                    operation_name,
+                    operation_index,
+                    total_operations,
+                    duration_seconds,
+                } => OpPlaybackBuildGraphEvent::Progress {
+                    timeline_id,
+                    operation_name,
+                    operation_index,
+                    total_operations,
+                    duration_seconds,
+                },
+                crate::playback::timeline_manager::TimelinePlaybackEvent::BuildFinished {
+                    timeline_id,
+                    operation_count,
+                    total_duration_seconds,
+                    sample_rate,
+                    channels,
+                } => OpPlaybackBuildGraphEvent::Finished {
+                    timeline_id,
+                    operation_count,
+                    total_duration_seconds,
+                    sample_rate,
+                    channels,
+                },
+                crate::playback::timeline_manager::TimelinePlaybackEvent::BuildError { .. } => {
+                    return; // Errors are propagated via Result, not events
                 }
             };
-
-            let op_duration = op.duration().unwrap_or(SampleTime::new(0));
-            let op_duration_seconds = op_duration.to_seconds(sample_rate);
-
-            // Calculate timeline positions
-            let start = SampleTime::from_seconds(op_request.start_time, sample_rate);
-            let end = if let Some(end_time) = op_request.end_time {
-                SampleTime::from_seconds(end_time, sample_rate)
-            } else {
-                start + op_duration
-            };
-
-            // Schedule the operation
-            let op_id = graph.schedule_op(op, start, end).map_err(|e| {
-                format!(
-                    "Failed to schedule operation '{}': {:?}",
-                    op_request.name, e
-                )
-            })?;
-
-            // Apply gain if specified
-            if let Some(gain) = op_request.gain {
-                graph.timeline.write().unwrap().set_gain(op_id, gain);
-            }
-
-            op_ids.insert(op_request.name.clone(), op_id);
-
-            // Emit progress event
-            send_channel_event!(
-                on_event,
-                OpPlaybackBuildGraphEvent::Progress {
-                    timeline_id: timeline_id.clone(),
-                    operation_name: op_request.name.clone(),
-                    operation_index: index,
-                    total_operations: total_graph_ops,
-                    duration_seconds: op_duration_seconds,
-                }
-            );
-
-            if let Ok(logger) = logging_service.lock() {
-                log_debug!(
-                    logger,
-                    LogSystem::Playback,
-                    "op_build_graph",
-                    &format!(
-                        "Added operation '{}' to timeline '{}' (id={:?}, start={:.2}s, end={:.2}s, duration={:.2}s)",
-                        op_request.name,
-                        timeline_id,
-                        op_id,
-                        op_request.start_time,
-                        end.to_seconds(sample_rate),
-                        op_duration_seconds
-                    )
-                );
-            }
-        }
-
-        let total_duration = graph.duration();
-        let total_duration_seconds = total_duration.to_seconds(sample_rate);
-
-        // Create and store the session
-        let session = PlaybackSession::new(graph, spec, loop_playback, op_ids);
-        state.insert_session(timeline_id.clone(), session);
-
-        // Emit finished event
-        send_channel_event!(
-            on_event,
-            OpPlaybackBuildGraphEvent::Finished {
-                timeline_id: timeline_id.clone(),
-                operation_count: request.operations.len(),
-                total_duration_seconds,
-                sample_rate,
-                channels,
-            }
-        );
-
-        if let Ok(logger) = logging_service.lock() {
-            log_info!(
-                logger,
-                LogSystem::Playback,
-                "op_build_graph",
-                &format!(
-                    "Timeline '{}' built successfully: {} operations, {:.2}s total duration",
-                    timeline_id, total_graph_ops, total_duration_seconds
-                )
-            );
-        }
-
-        Ok(BuildGraphResponse {
-            operation_count: request.operations.len(),
-            total_duration_seconds,
-            sample_rate,
-            channels,
+            let _ = send_channel_event!(on_event, op_event);
         })
     })
     .await
@@ -935,11 +812,15 @@ pub fn op_playback_play(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    eprintln!("🎬 [op_playback_play] ENTER timeline='{}', start_seconds={:?}", timeline_id, start_seconds);
+    eprintln!(
+        "🎬 [op_playback_play] ENTER timeline='{}', start_seconds={:?}",
+        timeline_id, start_seconds
+    );
 
-    let session = state.get_session(&timeline_id)
+    let session = state
+        .get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
-    
+
     let loop_playback = session.loop_playback;
     let spec = session.spec;
     let graph = session.graph.clone();
@@ -978,13 +859,17 @@ pub fn op_playback_play(
     // Stop any current playback
     eprintln!("🎬 [op_playback_play] Stopping current playback...");
     stop_current_playback(&state);
-    eprintln!("🎬 [op_playback_play] Current playback stopped. is_playing={}, is_paused={}", 
-        state.is_playing.load(Ordering::Relaxed), state.is_paused.load(Ordering::Relaxed));
+    eprintln!(
+        "🎬 [op_playback_play] Current playback stopped. is_playing={}, is_paused={}",
+        state.is_playing.load(Ordering::Relaxed),
+        state.is_paused.load(Ordering::Relaxed)
+    );
 
     // Determine start position
-    let session_ref = state.get_session(&timeline_id)
+    let session_ref = state
+        .get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
-    
+
     let start_position = if let Some(start) = start_seconds {
         if let Ok(logger) = logging_service.lock() {
             log_info!(
@@ -1012,7 +897,11 @@ pub fn op_playback_play(
     };
     drop(session_ref);
 
-    eprintln!("🎬 [op_playback_play] Start position: {:?} samples ({:.3}s)", start_position, start_position.to_seconds(spec.sample_rate));
+    eprintln!(
+        "🎬 [op_playback_play] Start position: {:?} samples ({:.3}s)",
+        start_position,
+        start_position.to_seconds(spec.sample_rate)
+    );
 
     // Set this timeline as active
     state.set_active_timeline(Some(timeline_id.clone()));
@@ -1027,7 +916,10 @@ pub fn op_playback_play(
     let timeline_id_clone = timeline_id.clone();
 
     thread::spawn(move || {
-        eprintln!("🎬 [op_playback_play] Playback thread started for timeline '{}'", timeline_id_clone);
+        eprintln!(
+            "🎬 [op_playback_play] Playback thread started for timeline '{}'",
+            timeline_id_clone
+        );
         start_playback_from_position(
             state_clone,
             app_clone,
@@ -1041,7 +933,10 @@ pub fn op_playback_play(
         eprintln!("🎬 [op_playback_play] Playback thread for '{}' returned from start_playback_from_position", timeline_id_clone);
     });
 
-    eprintln!("🎬 [op_playback_play] EXIT - playback thread spawned for timeline '{}'", timeline_id);
+    eprintln!(
+        "🎬 [op_playback_play] EXIT - playback thread spawned for timeline '{}'",
+        timeline_id
+    );
     Ok(())
 }
 
@@ -1053,7 +948,7 @@ pub fn op_playback_pause(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let active_timeline = state.get_active_timeline();
-    
+
     if let Some(timeline_id) = active_timeline {
         if let Some(session) = state.get_session(&timeline_id) {
             let progress = *session.progress.lock().unwrap();
@@ -1088,10 +983,14 @@ pub fn op_playback_pause(
         if let Some(timeline_id) = state.get_active_timeline() {
             if let Some(session) = state.get_session(&timeline_id) {
                 let progress = *session.progress.lock().unwrap();
-                emit_logged!(app, "op-timeline-progress", serde_json::json!({
-                    "timelineId": timeline_id,
-                    "progress": progress
-                }));
+                emit_logged!(
+                    app,
+                    "op-timeline-progress",
+                    serde_json::json!({
+                        "timelineId": timeline_id,
+                        "progress": progress
+                    })
+                );
             }
         }
     }
@@ -1106,7 +1005,7 @@ pub fn op_playback_resume(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let active_timeline = state.get_active_timeline();
-    
+
     if let Some(timeline_id) = active_timeline {
         if let Some(session) = state.get_session(&timeline_id) {
             let progress = *session.progress.lock().unwrap();
@@ -1177,7 +1076,7 @@ pub fn op_playback_stop(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let active_timeline = state.get_active_timeline();
-    
+
     if let Some(timeline_id) = active_timeline {
         if let Some(session) = state.get_session(&timeline_id) {
             let progress = *session.progress.lock().unwrap();
@@ -1205,11 +1104,15 @@ pub fn op_playback_stop(
 
     stop_current_playback(&state);
     state.set_active_timeline(None);
-    
-    emit_logged!(app, "op-timeline-progress", serde_json::json!({
-        "timelineId": null,
-        "progress": 0.0
-    }));
+
+    emit_logged!(
+        app,
+        "op-timeline-progress",
+        serde_json::json!({
+            "timelineId": null,
+            "progress": 0.0
+        })
+    );
 
     Ok(())
 }
@@ -1222,9 +1125,10 @@ pub fn op_playback_seek(
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let session = state.get_session(&timeline_id)
+    let session = state
+        .get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
-        
+
     let total_duration = session.duration_seconds();
     let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
     let spec = session.spec;
@@ -1255,17 +1159,21 @@ pub fn op_playback_seek(
     drop(session);
 
     // Emit progress
-    emit_logged!(app, "op-timeline-progress", serde_json::json!({
-        "timelineId": timeline_id,
-        "progress": progress
-    }));
+    emit_logged!(
+        app,
+        "op-timeline-progress",
+        serde_json::json!({
+            "timelineId": timeline_id,
+            "progress": progress
+        })
+    );
 
     // If this is the currently active timeline and playback is active (playing or paused),
     // we need to handle seeking. When paused, we still restart playback so that when
     // the user resumes, it plays from the new seek position.
-    let is_active_and_playing = state.get_active_timeline().as_ref() == Some(&timeline_id) 
+    let is_active_and_playing = state.get_active_timeline().as_ref() == Some(&timeline_id)
         && state.is_playing.load(Ordering::Relaxed);
-    
+
     if is_active_and_playing {
         let seek_duration = Duration::from_secs_f64(position_seconds);
 
@@ -1392,11 +1300,17 @@ fn start_playback_from_position(
     // Create audio output - OutputStream is NOT Send, so it must stay on THIS thread
     let (_stream, stream_handle) = match OutputStream::try_default() {
         Ok(output) => {
-            eprintln!("🔊 [start_playback] OutputStream created successfully on thread {:?}", thread::current().id());
+            eprintln!(
+                "🔊 [start_playback] OutputStream created successfully on thread {:?}",
+                thread::current().id()
+            );
             output
         }
         Err(e) => {
-            eprintln!("🔊 [start_playback] ERROR creating audio output stream: {}", e);
+            eprintln!(
+                "🔊 [start_playback] ERROR creating audio output stream: {}",
+                e
+            );
             state.is_playing.store(false, Ordering::Relaxed);
             return;
         }
@@ -1433,12 +1347,12 @@ fn start_playback_from_position(
             .looping(loop_playback)
             .start_position(position)
             .build(graph.clone());
-        
+
         let mut sample_count = 0;
         let mut non_zero_count = 0;
         let mut max_abs_sample: f32 = 0.0;
         let peek_count = 1024; // Check first 1024 samples
-        
+
         for _ in 0..peek_count {
             if let Some(sample) = test_source.next() {
                 sample_count += 1;
@@ -1474,7 +1388,9 @@ fn start_playback_from_position(
 
     eprintln!(
         "🔊 [start_playback] Sink state after start: empty={}, volume={:.2}, is_paused={}",
-        sink.empty(), sink.volume(), sink.is_paused()
+        sink.empty(),
+        sink.volume(),
+        sink.is_paused()
     );
 
     // Store the sink in shared state so other commands (pause/resume/stop) can control it
@@ -1510,17 +1426,25 @@ fn start_playback_from_position(
 /// during iteration. Only `progress` is updated in the session so that pause/stop
 /// can read the current progress. When pausing, we snapshot the current position
 /// so that resume can pick up from there.
-fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &TimelineId, app: &AppHandle) {
+fn run_progress_loop(
+    state: &Arc<AppTimelinePlaybackState>,
+    timeline_id: &TimelineId,
+    app: &AppHandle,
+) {
     eprintln!(
         "🔊 [progress_loop] Started for timeline '{}'. OutputStream is alive on thread {:?}.",
-        timeline_id, thread::current().id()
+        timeline_id,
+        thread::current().id()
     );
 
     // Capture the initial seek offset ONCE - this is the position we started from
     let initial_seek_offset: f32 = if let Some(session) = state.get_session(timeline_id) {
         *session.seek_seconds.lock().unwrap()
     } else {
-        eprintln!("🔊 [progress_loop] session not found at start for timeline '{}'", timeline_id);
+        eprintln!(
+            "🔊 [progress_loop] session not found at start for timeline '{}'",
+            timeline_id
+        );
         return;
     };
 
@@ -1548,14 +1472,20 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
         if loop_iteration % 60 == 1 {
             let sink_state = state.sink.lock().unwrap();
             let sink_info = if let Some(ref s) = *sink_state {
-                format!("empty={}, volume={:.2}, paused={}", s.empty(), s.volume(), s.is_paused())
+                format!(
+                    "empty={}, volume={:.2}, paused={}",
+                    s.empty(),
+                    s.volume(),
+                    s.is_paused()
+                )
             } else {
                 "NONE (sink removed from state!)".to_string()
             };
             drop(sink_state);
             eprintln!(
                 "🔊 [progress_loop] iter={} timeline='{}': is_playing={}, is_paused={}, sink=[{}]",
-                loop_iteration, timeline_id,
+                loop_iteration,
+                timeline_id,
                 state.is_playing.load(Ordering::Relaxed),
                 state.is_paused.load(Ordering::Relaxed),
                 sink_info
@@ -1564,7 +1494,10 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
 
         // Check if we should stop
         if !state.is_playing.load(Ordering::Relaxed) {
-            eprintln!("🔊 [progress_loop] is_playing=false, breaking for timeline '{}' at iter={}", timeline_id, loop_iteration);
+            eprintln!(
+                "🔊 [progress_loop] is_playing=false, breaking for timeline '{}' at iter={}",
+                timeline_id, loop_iteration
+            );
             break;
         }
 
@@ -1579,7 +1512,10 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
         let session = if let Some(s) = state.get_session(timeline_id) {
             s
         } else {
-            eprintln!("🔊 [progress_loop] session not found for timeline '{}', breaking at iter={}", timeline_id, loop_iteration);
+            eprintln!(
+                "🔊 [progress_loop] session not found for timeline '{}', breaking at iter={}",
+                timeline_id, loop_iteration
+            );
             break;
         };
 
@@ -1628,12 +1564,12 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
             // We just resumed from pause - reset the wall clock
             let pause_duration = pause_started_at.elapsed();
             total_pause_duration += pause_duration;
-            
+
             // Check if seek happened while paused - if seek_seconds changed, use it
             if let Some(session) = state.get_session(timeline_id) {
                 let current_seek_seconds = *session.seek_seconds.lock().unwrap();
                 let expected_position = initial_seek_offset + accumulated_before_pause;
-                
+
                 // If seek_seconds differs significantly from our tracked position, a seek happened
                 if (current_seek_seconds - expected_position).abs() > 0.01 {
                     eprintln!(
@@ -1646,7 +1582,7 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
                     accumulated_before_pause = current_seek_seconds - initial_seek_offset;
                 }
             }
-            
+
             eprintln!(
                 "🔊 [progress_loop] RESUMED at iter={}, pause_duration={:.3}s, total_pause_duration={:.3}s, accumulated_before_pause={:.3}s",
                 loop_iteration, pause_duration.as_secs_f32(), total_pause_duration.as_secs_f32(), accumulated_before_pause
@@ -1700,10 +1636,14 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
             *session.seek_seconds.lock().unwrap() = current_position;
         }
 
-        emit_logged!(app, "op-timeline-progress", serde_json::json!({
-            "timelineId": timeline_id,
-            "progress": progress
-        }));
+        emit_logged!(
+            app,
+            "op-timeline-progress",
+            serde_json::json!({
+                "timelineId": timeline_id,
+                "progress": progress
+            })
+        );
 
         thread::sleep(Duration::from_millis(16)); // ~60 FPS
     }
@@ -1715,11 +1655,11 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
         "🔊 [progress_loop] Ended for timeline '{}' at iter={}. Final position: {:.3}s. Total pause duration: {:.3}s",
         timeline_id, loop_iteration, final_position, total_pause_duration.as_secs_f32()
     );
-    
+
     if let Some(session) = state.get_session(timeline_id) {
         *session.seek_seconds.lock().unwrap() = final_position;
     }
-    
+
     state.is_playing.store(false, Ordering::Relaxed);
 }
 
@@ -1727,11 +1667,12 @@ fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &Timeli
 #[tauri::command]
 pub fn op_playback_get_progress(
     timeline_id: TimelineId,
-    state: State<'_, Arc<AppTimelinePlaybackState>>
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
 ) -> Result<f32, String> {
-    let session = state.get_session(&timeline_id)
+    let session = state
+        .get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
-        
+
     let progress = *session.progress.lock().unwrap();
     Ok(progress)
 }
@@ -1744,7 +1685,7 @@ pub fn op_playback_set_volume(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let active_timeline = state.get_active_timeline();
-    
+
     if let Some(timeline_id) = active_timeline {
         if let Some(session) = state.get_session(&timeline_id) {
             let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
@@ -1781,9 +1722,11 @@ pub fn op_playback_set_loop(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let mut session = state.sessions.get_mut(&timeline_id)
+    let mut session = state
+        .sessions
+        .get_mut(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
-    
+
     let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
 
     if let Ok(logger) = logging_service.lock() {
@@ -1866,7 +1809,6 @@ pub fn op_playback_clear_all_timelines(
     Ok(())
 }
 
-
 /// Get the current state of OpPlaybackState for debugging purposes
 #[tauri::command]
 pub fn get_op_playback_state(
@@ -1918,7 +1860,8 @@ pub fn get_op_playback_state(
 // Helper functions
 
 fn stop_current_playback(state: &AppTimelinePlaybackState) {
-    eprintln!("🛑 [stop_current_playback] ENTER: is_playing={}, is_paused={}, has_sink={}", 
+    eprintln!(
+        "🛑 [stop_current_playback] ENTER: is_playing={}, is_paused={}, has_sink={}",
         state.is_playing.load(Ordering::Relaxed),
         state.is_paused.load(Ordering::Relaxed),
         state.sink.lock().unwrap().is_some()
@@ -1928,7 +1871,11 @@ fn stop_current_playback(state: &AppTimelinePlaybackState) {
 
     let mut sink = state.sink.lock().unwrap();
     if let Some(ref s) = *sink {
-        eprintln!("🛑 [stop_current_playback] Stopping and clearing sink (empty={}, volume={:.2})", s.empty(), s.volume());
+        eprintln!(
+            "🛑 [stop_current_playback] Stopping and clearing sink (empty={}, volume={:.2})",
+            s.empty(),
+            s.volume()
+        );
         s.stop();
         s.clear();
     } else {

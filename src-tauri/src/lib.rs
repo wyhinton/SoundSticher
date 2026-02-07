@@ -398,7 +398,6 @@ pub fn run() {
             op_playback_commands::get_op_playback_state,
             // Timeline playback commands (new architecture)
             timeline_playback_commands::timeline_build_playback,
-            timeline_playback_commands::timeline_build_from_request,
             timeline_playback_commands::timeline_play,
             timeline_playback_commands::timeline_pause,
             timeline_playback_commands::timeline_resume,

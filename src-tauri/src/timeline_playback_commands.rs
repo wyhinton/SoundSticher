@@ -29,14 +29,6 @@ use crate::sample_cache::SampleCacheService;
 use crate::send_channel_event;
 
 pub type TimelineId = String;
-
-/// Build a timeline's playback graph
-///
-/// This command:
-/// 1. Creates a TimelinePlaybackManager
-/// 2. Delegates building to the manager
-/// 3. The manager uses OpPlaybackSessionBuilder for pure graph construction
-/// 4. The manager inserts the session into OpPlaybackState
 #[tauri::command]
 pub async fn timeline_build_playback(
     timeline_id: TimelineId,
@@ -46,47 +38,48 @@ pub async fn timeline_build_playback(
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<TimelinePlaybackEvent>,
 ) -> Result<BuildGraphResponse, String> {
-    let state = state.inner().clone();
-    let sample_cache = sample_cache.inner().clone();
-    let logging_service = logging_service.inner().clone();
+    let state = Arc::clone(state.inner());
+    let sample_cache = Arc::clone(sample_cache.inner());
+    let logging_service = Arc::clone(logging_service.inner());
 
     tauri::async_runtime::spawn_blocking(move || {
         let manager = TimelinePlaybackManager::new(state, sample_cache, logging_service);
 
-        manager.build_timeline(timeline_id, source, |e| {
-            let _ = send_channel_event!(on_event, e);
+        manager.build_timeline(timeline_id, source, |event| {
+            // best effort; channel closure shouldn't fail the build
+            let _ = send_channel_event!(on_event, event);
         })
     })
     .await
-    .map_err(|e| format!("Failed to execute build timeline task: {}", e))?
+    .map_err(|e| format!("timeline_build_playback panicked: {e}"))?
 }
 
-/// Build a timeline using legacy BuildOpPlaybackGraphRequest format
-///
-/// This is a convenience wrapper for building operation-based timelines
-/// using the familiar BuildOpPlaybackGraphRequest structure.
-#[tauri::command]
-pub async fn timeline_build_from_request(
-    timeline_id: TimelineId,
-    request: BuildOpPlaybackGraphRequest,
-    state: State<'_, Arc<AppTimelinePlaybackState>>,
-    sample_cache: State<'_, Arc<SampleCacheService>>,
-    logging_service: State<'_, Arc<Mutex<LoggingService>>>,
-    on_event: Channel<TimelinePlaybackEvent>,
-) -> Result<BuildGraphResponse, String> {
-    // Wrap the request in a TimelineSource::Operation
-    let source = TimelineSource::Operation { request };
+// /// Build a timeline using legacy BuildOpPlaybackGraphRequest format
+// ///
+// /// This is a convenience wrapper for building operation-based timelines
+// /// using the familiar BuildOpPlaybackGraphRequest structure.
+// #[tauri::command]
+// pub async fn timeline_build_from_request(
+//     timeline_id: TimelineId,
+//     request: BuildOpPlaybackGraphRequest,
+//     state: State<'_, Arc<AppTimelinePlaybackState>>,
+//     sample_cache: State<'_, Arc<SampleCacheService>>,
+//     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
+//     on_event: Channel<TimelinePlaybackEvent>,
+// ) -> Result<BuildGraphResponse, String> {
+//     // Wrap the request in a TimelineSource::Operation
+//     let source = TimelineSource::Operation { request };
 
-    timeline_build_playback(
-        timeline_id,
-        source,
-        state,
-        sample_cache,
-        logging_service,
-        on_event,
-    )
-    .await
-}
+//     timeline_build_playback(
+//         timeline_id,
+//         source,
+//         state,
+//         sample_cache,
+//         logging_service,
+//         on_event,
+//     )
+//     .await
+// }
 
 /// Play a timeline
 ///

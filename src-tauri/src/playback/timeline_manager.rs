@@ -1,17 +1,22 @@
-// TimelinePlaybackManager - Orchestrates timeline playback
+// TimelinePlaybackManager - Timeline-centric orchestration layer
 //
-// This module provides the central manager for timeline playback.
-// It decides when to build sessions and where to store th em,
-// delegating the actual building to OpPlaybackSessionBuilder.
+// This module is the **single choke point** for timeline lifecycle:
+//   - Figures out WHAT to build (source type → builder selection)
+//   - Calls the appropriate builder (via TimelinePlaybackBuilder trait)
+//   - Registers the session in AppTimelinePlaybackState
+//   - Handles replacement / coexistence
+//   - Emits high-level lifecycle events
+//
+// Builders are pure: they return a PlaybackSession without touching
+// global state.  Only this manager decides where sessions live.
 
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
-use crate::op_playback_commands::{
-    AppTimelinePlaybackState, BuildGraphResponse, BuildOpPlaybackGraphRequest, PlaybackSession,
+use crate::op_playback_commands::{AppTimelinePlaybackState, BuildGraphResponse, PlaybackSession};
+use crate::playback::builder::{
+    BuildContext, BuildPlaybackRequest, BuildResult, OpGraphPlaybackBuilder, TimelinePlaybackBuilder,
 };
-use crate::playback::session_builder::{
-    OpPlaybackSessionBuilder, SessionBuildEvent, SessionBuildRequest,
-};
+use crate::playback::session_builder::SessionBuildEvent;
 use crate::sample_cache::SampleCacheService;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -28,14 +33,16 @@ pub struct TimelineInfo {
     pub source: TimelineSource,
 }
 
-/// Source type for timeline audio
+/// Source type for timeline audio.
+///
+/// Each variant maps 1:1 to a builder via `TimelinePlaybackManager::select_builder`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum TimelineSource {
     /// Audio from an operation graph (the main use case)
     Operation {
         /// The build request for the operation graph
-        request: BuildOpPlaybackGraphRequest,
+        request: crate::op_playback_commands::BuildOpPlaybackGraphRequest,
     },
 
     /// Audio from a single file (future)
@@ -126,16 +133,17 @@ impl From<SessionBuildEvent> for TimelinePlaybackEvent {
 
 /// Central manager for timeline playback
 ///
-/// This manager:
-/// - Orchestrates session building via OpPlaybackSessionBuilder
-/// - Decides when/where to store sessions (OpPlaybackState)
-/// - Routes playback commands to the appropriate handler based on source type
+/// This manager is the **single canonical path** for timeline lifecycle:
+/// - Selects the appropriate builder based on source type
+/// - Delegates construction (pure, no side effects)
+/// - Owns session registration (the ONLY place sessions are inserted)
+/// - Provides a clear choke point for logging, metrics, and cleanup
 pub struct TimelinePlaybackManager {
     /// Session store (owns sessions and transport state)
     session_store: Arc<AppTimelinePlaybackState>,
-    /// Session builder (pure, no side effects)
-    builder: OpPlaybackSessionBuilder,
-    /// Logging service
+    /// Build context (shared services for all builders)
+    build_ctx: BuildContext,
+    /// Logging service (separate ref for manager-level logging)
     logging_service: Arc<Mutex<LoggingService>>,
 }
 
@@ -145,22 +153,26 @@ impl TimelinePlaybackManager {
         sample_cache: Arc<SampleCacheService>,
         logging_service: Arc<Mutex<LoggingService>>,
     ) -> Self {
-        let builder = OpPlaybackSessionBuilder::new(sample_cache, Arc::clone(&logging_service));
+        let build_ctx = BuildContext {
+            sample_cache,
+            logging_service: Arc::clone(&logging_service),
+        };
 
         Self {
             session_store,
-            builder,
+            build_ctx,
             logging_service,
         }
     }
 
-    /// Build a timeline from its source
+    /// Build a timeline from its source.
     ///
     /// This method:
-    /// - Determines the appropriate builder based on source type
-    /// - Builds the session
-    /// - Inserts it into the session store
-    /// - Returns the build response
+    /// 1. Selects the appropriate builder based on source type
+    /// 2. Converts the source into a `BuildPlaybackRequest`
+    /// 3. Calls the builder (pure — no state mutation)
+    /// 4. Registers the resulting session (the ONLY place this happens)
+    /// 5. Returns the build response metadata
     pub fn build_timeline<F>(
         &self,
         timeline_id: TimelineId,
@@ -175,14 +187,59 @@ impl TimelinePlaybackManager {
                 logger,
                 LogSystem::Playback,
                 "timeline_manager",
-                &format!("Building timeline '{}' from source", timeline_id)
+                &format!(
+                    "Building timeline '{}' from {:?} source",
+                    timeline_id,
+                    source_type_name(&source)
+                )
             );
         }
 
+        // 1. Select builder + convert source to request
+        let (builder, request) = self.select_builder_and_request(&source)?;
+
+        // 2. Build the session (pure — no state mutation)
+        let result = builder.build(&timeline_id, &request, &self.build_ctx, &|e| {
+            on_event(e.into())
+        })?;
+
+        let response = BuildGraphResponse {
+            operation_count: result.operation_count,
+            total_duration_seconds: result.total_duration_seconds,
+            sample_rate: result.sample_rate,
+            channels: result.channels,
+        };
+
+        // 3. Register the session (the ONLY place sessions are inserted)
+        self.register_session(timeline_id.clone(), result);
+
+        if let Ok(logger) = self.logging_service.lock() {
+            log_info!(
+                logger,
+                LogSystem::Playback,
+                "timeline_manager",
+                &format!(
+                    "Timeline '{}' registered ({:.2}s duration, {} ops)",
+                    timeline_id, response.total_duration_seconds, response.operation_count
+                )
+            );
+        }
+
+        Ok(response)
+    }
+
+    /// Select the right builder and convert the source into a builder request.
+    ///
+    /// This is the dispatch table — add new source types here.
+    fn select_builder_and_request(
+        &self,
+        source: &TimelineSource,
+    ) -> Result<(Box<dyn TimelinePlaybackBuilder>, BuildPlaybackRequest), String> {
         match source {
-            TimelineSource::Operation { request } => {
-                self.build_operation_timeline(timeline_id, request, on_event)
-            }
+            TimelineSource::Operation { request } => Ok((
+                Box::new(OpGraphPlaybackBuilder),
+                BuildPlaybackRequest::OpGraph(request.clone()),
+            )),
             TimelineSource::AudioFile { file_path } => Err(format!(
                 "AudioFile timeline source not yet implemented (file: {})",
                 file_path
@@ -194,67 +251,28 @@ impl TimelinePlaybackManager {
         }
     }
 
-    /// Build a timeline from an operation graph request
-    fn build_operation_timeline<F>(
-        &self,
-        timeline_id: TimelineId,
-        request: BuildOpPlaybackGraphRequest,
-        on_event: F,
-    ) -> Result<BuildGraphResponse, String>
-    where
-        F: Fn(TimelinePlaybackEvent),
-    {
-        if let Ok(logger) = self.logging_service.lock() {
-            log_info!(
-                logger,
-                LogSystem::Playback,
-                "timeline_manager",
-                &format!(
-                    "Building operation timeline '{}' with {} operations",
-                    timeline_id,
-                    request.operations.len()
-                )
-            );
+    /// Register a built session into the session store.
+    ///
+    /// This is the SINGLE place where sessions enter `AppTimelinePlaybackState`.
+    /// Future enhancements (replacement policies, cleanup hooks, metrics) go here.
+    fn register_session(&self, timeline_id: TimelineId, result: BuildResult) {
+        // If there was an existing session for this timeline, log replacement
+        if self.session_store.get_session(&timeline_id).is_some() {
+            if let Ok(logger) = self.logging_service.lock() {
+                log_info!(
+                    logger,
+                    LogSystem::Playback,
+                    "timeline_manager",
+                    &format!(
+                        "Replacing existing session for timeline '{}'",
+                        timeline_id
+                    )
+                );
+            }
         }
 
-        // Convert to internal request type
-        let session_request: SessionBuildRequest = request.clone().into();
-        let sample_rate = request.sample_rate.unwrap_or(44100);
-        let channels = request.channels.unwrap_or(2);
-
-        // Build the session (pure - no global state mutation)
-        let result = self
-            .builder
-            .build(&timeline_id, session_request, |e| on_event(e.into()))?;
-
-        // Create and store the session (this is the only place we mutate global state)
-        let session = PlaybackSession::new(
-            result.graph,
-            result.spec,
-            result.loop_playback,
-            result.op_ids,
-        );
         self.session_store
-            .insert_session(timeline_id.clone(), session);
-
-        if let Ok(logger) = self.logging_service.lock() {
-            log_info!(
-                logger,
-                LogSystem::Playback,
-                "timeline_manager",
-                &format!(
-                    "Timeline '{}' stored in session store ({:.2}s duration)",
-                    timeline_id, result.total_duration_seconds
-                )
-            );
-        }
-
-        Ok(BuildGraphResponse {
-            operation_count: request.operations.len(),
-            total_duration_seconds: result.total_duration_seconds,
-            sample_rate,
-            channels,
-        })
+            .insert_session(timeline_id, result.session);
     }
 
     /// Check if a timeline exists in the session store
@@ -270,5 +288,19 @@ impl TimelinePlaybackManager {
     /// Get reference to the session store for playback control
     pub fn session_store(&self) -> &Arc<AppTimelinePlaybackState> {
         &self.session_store
+    }
+
+    /// Get reference to the build context (useful for offline renders, tests, etc.)
+    pub fn build_context(&self) -> &BuildContext {
+        &self.build_ctx
+    }
+}
+
+/// Helper to get a human-readable source type name for logging
+fn source_type_name(source: &TimelineSource) -> &'static str {
+    match source {
+        TimelineSource::Operation { .. } => "Operation",
+        TimelineSource::AudioFile { .. } => "AudioFile",
+        TimelineSource::LiveInput { .. } => "LiveInput",
     }
 }
