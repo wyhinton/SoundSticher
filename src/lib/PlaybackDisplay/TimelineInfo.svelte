@@ -11,9 +11,9 @@
 
   let bufferingProgress = 0;
 
-  listen<number>('buffering-progress', e => {
-    bufferingProgress = e.payload;
-  });
+  // listen<number>('buffering-progress', e => {
+  //   bufferingProgress = e.payload;
+  // });
 
   $: activeSampleCount = $currentOperationSources.length;
 
