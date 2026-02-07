@@ -341,7 +341,9 @@ pub fn run() {
             app.manage(Arc::new(SampleCacheService::new()));
 
             // Initialize operation-based playback state
-            app.manage(Arc::new(op_playback_commands::OpPlaybackState::new()));
+            app.manage(Arc::new(
+                op_playback_commands::AppTimelinePlaybackState::new(),
+            ));
 
             #[cfg(debug_assertions)] // Only include this code on debug builds
             {

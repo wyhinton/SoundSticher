@@ -19,7 +19,9 @@ use tauri::AppHandle;
 use tauri::State;
 
 use crate::logging::LoggingService;
-use crate::op_playback_commands::{BuildGraphRequest, BuildGraphResponse, OpPlaybackState};
+use crate::op_playback_commands::{
+    AppTimelinePlaybackState, BuildGraphRequest, BuildGraphResponse,
+};
 use crate::playback::timeline_manager::{
     TimelinePlaybackEvent, TimelinePlaybackManager, TimelineSource,
 };
@@ -39,7 +41,7 @@ pub type TimelineId = String;
 pub async fn timeline_build_playback(
     timeline_id: TimelineId,
     source: TimelineSource,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     sample_cache: State<'_, Arc<SampleCacheService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<TimelinePlaybackEvent>,
@@ -67,7 +69,7 @@ pub async fn timeline_build_playback(
 pub async fn timeline_build_from_request(
     timeline_id: TimelineId,
     request: BuildGraphRequest,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     sample_cache: State<'_, Arc<SampleCacheService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<TimelinePlaybackEvent>,
@@ -94,7 +96,7 @@ pub async fn timeline_build_from_request(
 pub fn timeline_play(
     timeline_id: TimelineId,
     start_seconds: Option<f64>,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -106,7 +108,7 @@ pub fn timeline_play(
 /// Pause the currently active timeline
 #[tauri::command]
 pub fn timeline_pause(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -116,7 +118,7 @@ pub fn timeline_pause(
 /// Resume the currently active timeline
 #[tauri::command]
 pub fn timeline_resume(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     crate::op_playback_commands::op_playback_resume(state, logging)
@@ -125,7 +127,7 @@ pub fn timeline_resume(
 /// Stop playback and reset
 #[tauri::command]
 pub fn timeline_stop(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -137,7 +139,7 @@ pub fn timeline_stop(
 pub fn timeline_seek(
     timeline_id: TimelineId,
     position_seconds: f64,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -155,7 +157,7 @@ pub fn timeline_seek(
 pub fn timeline_set_loop(
     timeline_id: TimelineId,
     loop_playback: bool,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     crate::op_playback_commands::op_playback_set_loop(timeline_id, loop_playback, state, logging)
@@ -165,7 +167,7 @@ pub fn timeline_set_loop(
 #[tauri::command]
 pub fn timeline_set_volume(
     volume: f32,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     crate::op_playback_commands::op_playback_set_volume(volume, state, logging)
@@ -175,7 +177,7 @@ pub fn timeline_set_volume(
 #[tauri::command]
 pub fn timeline_get_progress(
     timeline_id: TimelineId,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
 ) -> Result<f32, String> {
     crate::op_playback_commands::op_playback_get_progress(timeline_id, state)
 }
@@ -184,7 +186,7 @@ pub fn timeline_get_progress(
 #[tauri::command]
 pub fn timeline_clear(
     timeline_id: TimelineId,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     crate::op_playback_commands::op_playback_clear_timeline(timeline_id, state, logging)
@@ -193,7 +195,7 @@ pub fn timeline_clear(
 /// Clear all timelines
 #[tauri::command]
 pub fn timeline_clear_all(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     crate::op_playback_commands::op_playback_clear_all_timelines(state, logging)

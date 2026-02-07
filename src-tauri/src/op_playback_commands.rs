@@ -132,7 +132,7 @@ impl PlaybackSession {
 }
 
 /// State for multi-timeline operation playback
-pub struct OpPlaybackState {
+pub struct AppTimelinePlaybackState {
     /// All timeline sessions
     sessions: DashMap<TimelineId, PlaybackSession>,
     
@@ -149,7 +149,7 @@ pub struct OpPlaybackState {
     is_paused: AtomicBool,
 }
 
-impl OpPlaybackState {
+impl AppTimelinePlaybackState {
     pub fn new() -> Self {
         Self {
             sessions: DashMap::new(),
@@ -181,7 +181,7 @@ impl OpPlaybackState {
     }
 }
 
-impl Default for OpPlaybackState {
+impl Default for AppTimelinePlaybackState {
     fn default() -> Self {
         Self::new()
     }
@@ -286,7 +286,7 @@ pub struct BuildGraphResponse {
 pub async fn op_playback_build_graph(
     timeline_id: TimelineId,
     request: BuildGraphRequest,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     sample_cache: State<'_, Arc<SampleCacheService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<OpPlaybackBuildGraphEvent>,
@@ -495,7 +495,7 @@ pub async fn op_playback_build_graph(
 pub async fn op_playback_build_graph_legacy(
     timeline_id: TimelineId,
     request: BuildGraphRequest,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     _sample_cache: State<'_, Arc<SampleCacheService>>, // Not used in legacy mode
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<OpPlaybackBuildGraphEvent>,
@@ -931,7 +931,7 @@ fn resample_audio(
 pub fn op_playback_play(
     timeline_id: TimelineId,
     start_seconds: Option<f64>,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -1048,7 +1048,7 @@ pub fn op_playback_play(
 /// Pause playback of the currently active timeline
 #[tauri::command]
 pub fn op_playback_pause(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -1102,7 +1102,7 @@ pub fn op_playback_pause(
 /// Resume playback of the currently active timeline
 #[tauri::command]
 pub fn op_playback_resume(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let active_timeline = state.get_active_timeline();
@@ -1172,7 +1172,7 @@ pub fn op_playback_resume(
 /// Stop playback and reset progress for all timelines
 #[tauri::command]
 pub fn op_playback_stop(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -1218,7 +1218,7 @@ pub fn op_playback_stop(
 pub fn op_playback_seek(
     timeline_id: TimelineId,
     position_seconds: f64,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
@@ -1347,7 +1347,7 @@ pub fn op_playback_seek(
 /// calling this from a dedicated thread (not the main thread).
 #[allow(clippy::too_many_arguments)]
 fn start_playback_from_position(
-    state: Arc<OpPlaybackState>,
+    state: Arc<AppTimelinePlaybackState>,
     app: AppHandle,
     timeline_id: TimelineId,
     graph: Arc<PlaybackGraph>,
@@ -1510,7 +1510,7 @@ fn start_playback_from_position(
 /// during iteration. Only `progress` is updated in the session so that pause/stop
 /// can read the current progress. When pausing, we snapshot the current position
 /// so that resume can pick up from there.
-fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app: &AppHandle) {
+fn run_progress_loop(state: &Arc<AppTimelinePlaybackState>, timeline_id: &TimelineId, app: &AppHandle) {
     eprintln!(
         "🔊 [progress_loop] Started for timeline '{}'. OutputStream is alive on thread {:?}.",
         timeline_id, thread::current().id()
@@ -1727,7 +1727,7 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
 #[tauri::command]
 pub fn op_playback_get_progress(
     timeline_id: TimelineId,
-    state: State<'_, Arc<OpPlaybackState>>
+    state: State<'_, Arc<AppTimelinePlaybackState>>
 ) -> Result<f32, String> {
     let session = state.get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
@@ -1740,7 +1740,7 @@ pub fn op_playback_get_progress(
 #[tauri::command]
 pub fn op_playback_set_volume(
     volume: f32,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let active_timeline = state.get_active_timeline();
@@ -1778,7 +1778,7 @@ pub fn op_playback_set_volume(
 pub fn op_playback_set_loop(
     timeline_id: TimelineId,
     loop_playback: bool,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let mut session = state.sessions.get_mut(&timeline_id)
@@ -1808,7 +1808,7 @@ pub fn op_playback_set_loop(
 #[tauri::command]
 pub fn op_playback_clear_timeline(
     timeline_id: TimelineId,
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     // Stop playback if this timeline is currently active
@@ -1845,7 +1845,7 @@ pub fn op_playback_clear_timeline(
 /// Clear all timeline playback sessions
 #[tauri::command]
 pub fn op_playback_clear_all_timelines(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
     let timeline_count = state.sessions.len();
@@ -1870,7 +1870,7 @@ pub fn op_playback_clear_all_timelines(
 /// Get the current state of OpPlaybackState for debugging purposes
 #[tauri::command]
 pub fn get_op_playback_state(
-    state: State<'_, Arc<OpPlaybackState>>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
 ) -> Result<OpPlaybackStateDebugInfo, String> {
     let active_timeline = state.get_active_timeline();
     let is_playing = state.is_playing.load(Ordering::Relaxed);
@@ -1917,7 +1917,7 @@ pub fn get_op_playback_state(
 
 // Helper functions
 
-fn stop_current_playback(state: &OpPlaybackState) {
+fn stop_current_playback(state: &AppTimelinePlaybackState) {
     eprintln!("🛑 [stop_current_playback] ENTER: is_playing={}, is_paused={}, has_sink={}", 
         state.is_playing.load(Ordering::Relaxed),
         state.is_paused.load(Ordering::Relaxed),

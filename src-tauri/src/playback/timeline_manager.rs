@@ -7,7 +7,7 @@
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
 use crate::op_playback_commands::{
-    BuildGraphRequest, BuildGraphResponse, OpPlaybackState, PlaybackSession,
+    AppTimelinePlaybackState, BuildGraphRequest, BuildGraphResponse, PlaybackSession,
 };
 use crate::playback::session_builder::{
     OpPlaybackSessionBuilder, SessionBuildEvent, SessionBuildRequest,
@@ -132,7 +132,7 @@ impl From<SessionBuildEvent> for TimelinePlaybackEvent {
 /// - Routes playback commands to the appropriate handler based on source type
 pub struct TimelinePlaybackManager {
     /// Session store (owns sessions and transport state)
-    session_store: Arc<OpPlaybackState>,
+    session_store: Arc<AppTimelinePlaybackState>,
     /// Session builder (pure, no side effects)
     builder: OpPlaybackSessionBuilder,
     /// Logging service
@@ -141,7 +141,7 @@ pub struct TimelinePlaybackManager {
 
 impl TimelinePlaybackManager {
     pub fn new(
-        session_store: Arc<OpPlaybackState>,
+        session_store: Arc<AppTimelinePlaybackState>,
         sample_cache: Arc<SampleCacheService>,
         logging_service: Arc<Mutex<LoggingService>>,
     ) -> Self {
@@ -268,7 +268,7 @@ impl TimelinePlaybackManager {
     }
 
     /// Get reference to the session store for playback control
-    pub fn session_store(&self) -> &Arc<OpPlaybackState> {
+    pub fn session_store(&self) -> &Arc<AppTimelinePlaybackState> {
         &self.session_store
     }
 }
