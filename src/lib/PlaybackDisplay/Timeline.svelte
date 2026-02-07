@@ -28,7 +28,6 @@
     type TimelineId,
     type Timeline,
     setActiveTimeline,
-    timelinePlayhead,
   } from '$lib/state/timeline/timelines';
   import {
     getIndicesToMoveOnDrag,
@@ -53,6 +52,7 @@
   import { type OperationId } from '$lib/state/operation';
   import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
   import timelinePlaybackService from '$lib/state/timelinePlaybackService';
+  import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
 
   const dispatch = createEventDispatcher();
 

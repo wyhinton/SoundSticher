@@ -4,13 +4,13 @@
   import TransportControls from './TransportControls.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
   import { type Timeline } from '../state/timeline/timelines';
-  import { timelinePlayhead } from '../state/timeline/timelines';
   import TimeDisplay from './TimeDisplay.svelte';
   import {
     timelinePlaybackState,
     isTimelinePlaying,
     isTimelinePaused,
   } from '../state/timelinePlaybackService';
+  import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
 
   export let timeline: Timeline;
 

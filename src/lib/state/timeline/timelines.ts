@@ -19,6 +19,7 @@ import type {
 } from '../opPlaybackService';
 import { buildTimelineForOp } from '../opPlaybackService';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
+import { timelinePlaybackState } from './timelinePlaybackState';
 
 // Timeline progress listener for updating individual timeline views
 let timelineProgressUnlisten: (() => void) | null = null;
@@ -58,7 +59,7 @@ async function initTimelineProgressListener(): Promise<void> {
 
         return {
           ...state,
-          [timelineId]: { playheadTime },
+          [timelineId]: { playheadTime, isPlaying: false, looping: true },
         };
       });
     }
@@ -329,21 +330,6 @@ export const timelinesStore = persisted<TimelinesState>(
     serializer: timelineStoreSerializer,
   }
 );
-
-/**
- * Non-persisted runtime store for playhead position tracking
- * This is NOT persisted to avoid waveform churn and serialization overhead
- * Playhead position updates every frame during playback, so persisting would be wasteful
- */
-export const timelinePlaybackState = writable<Record<TimelineId, { playheadTime: number }>>({});
-
-/**
- * Derived store to get playhead time for a specific timeline
- * Returns 0 if timeline is not found
- */
-export function timelinePlayhead(timelineId: TimelineId) {
-  return derived(timelinePlaybackState, $state => $state[timelineId]?.playheadTime ?? 0);
-}
 
 /**
  * Separate persisted store for timeline view states (zoom, scroll, selection, etc.)
