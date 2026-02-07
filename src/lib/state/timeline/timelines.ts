@@ -44,41 +44,22 @@ async function initTimelineProgressListener(): Promise<void> {
         `Timeline progress: '${timelineId}' -> ${(progress * 100).toFixed(1)}%`
       );
 
-      // Update the specific timeline's view state
-      timelinesStore.update(state => {
-        const timeline = state.timelines[timelineId];
-        if (!timeline) {
-          logger.opPlayback.warning(`Timeline '${timelineId}' not found for progress update`);
+      // Update the runtime playhead state (NOT the persisted timeline state)
+      timelinePlaybackState.update(state => {
+        const timeline = get(timelinesStore).timelines[timelineId];
+        if (!timeline || !timeline.waveformState) {
+          logger.opPlayback.warning(`Timeline '${timelineId}' not found or has no waveform state`);
           return state;
         }
 
         // Calculate playheadTime from progress and timeline duration
-        if (timeline.waveformState) {
-          const currentWaveformState = get(timeline.waveformState);
-          const playheadTime = progress * currentWaveformState.totalDuration;
+        const currentWaveformState = get(timeline.waveformState);
+        const playheadTime = progress * currentWaveformState.totalDuration;
 
-          // Update the timeline's view state with new playhead position
-          const updatedTimeline = {
-            ...timeline,
-            view: {
-              ...timeline.view,
-              playheadTime,
-            },
-          };
-
-          return {
-            ...state,
-            timelines: {
-              ...state.timelines,
-              [timelineId]: updatedTimeline,
-            },
-          };
-        } else {
-          logger.opPlayback.warning(
-            `Timeline '${timelineId}' has no waveform state for progress update`
-          );
-          return state;
-        }
+        return {
+          ...state,
+          [timelineId]: { playheadTime },
+        };
       });
     }
   );
@@ -119,7 +100,6 @@ export interface TrackSpec {
 export interface TimelineViewState {
   zoom: number;
   scrollX: number;
-  playheadTime: number;
   selection?: TimeRange;
   visibleTracks: TrackId[];
 }
@@ -181,7 +161,6 @@ export interface TimelineItemWithHierarchy {
 const DEFAULT_VIEW_STATE: TimelineViewState = {
   zoom: 1,
   scrollX: 0,
-  playheadTime: 0,
   visibleTracks: [],
 };
 
@@ -234,6 +213,7 @@ function serializeTimeline(timeline: Timeline): SerializableTimeline {
  * Recreates the reactive stores and waveform state
  */
 function deserializeTimeline(serialized: SerializableTimeline): Timeline {
+  console.log('DESERIALIZNG');
   const { id, source, view } = serialized;
 
   // Create waveform store for this timeline
@@ -355,10 +335,26 @@ export const timelinesStore = persisted<TimelinesState>(
 );
 
 /**
+ * Non-persisted runtime store for playhead position tracking
+ * This is NOT persisted to avoid waveform churn and serialization overhead
+ * Playhead position updates every frame during playback, so persisting would be wasteful
+ */
+export const timelinePlaybackState = writable<Record<TimelineId, { playheadTime: number }>>({});
+
+/**
+ * Derived store to get playhead time for a specific timeline
+ * Returns 0 if timeline is not found
+ */
+export function timelinePlayhead(timelineId: TimelineId) {
+  return derived(timelinePlaybackState, $state => $state[timelineId]?.playheadTime ?? 0);
+}
+
+/**
  * Create a timeline-scoped waveform store
  * This replaces the global operationWaveforms store for individual timelines
  */
 function createTimelineWaveformStore(timelineId: TimelineId) {
+  console.log('CREATING STORE');
   //THIS BECOMES PERISSTED AND
   const { subscribe, set, update } = writable<TimelineWaveformState>({
     timelineId,
@@ -705,68 +701,68 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
   };
 
   // Build the backend playback graph for this timeline
-  const buildBackendGraph = async () => {
-    try {
-      logger.opPlayback.info(
-        `Building backend graph for timeline ${timelineId}, operation ${operationId}`
-      );
+  // const buildBackendGraph = async () => {
+  //   try {
+  //     logger.opPlayback.info(
+  //       `Building backend graph for timeline ${timelineId}, operation ${operationId}`
+  //     );
 
-      // Get the operation definition from app state
-      const currentAppState = get(appState);
-      const operation = currentAppState.operations?.defs?.[operationId];
+  //     // Get the operation definition from app state
+  //     const currentAppState = get(appState);
+  //     const operation = currentAppState.operations?.defs?.[operationId];
 
-      if (!operation) {
-        logger.opPlayback.error(`Operation ${operationId} not found in app state`);
-        return;
-      }
+  //     if (!operation) {
+  //       logger.opPlayback.error(`Operation ${operationId} not found in app state`);
+  //       return;
+  //     }
 
-      // Convert the operation to AddOpRequest format
-      // For now, we'll create a simple request - this may need to be expanded
-      // based on the complexity of the operation
-      const operations: AddOpRequest[] = [];
+  //     // Convert the operation to AddOpRequest format
+  //     // For now, we'll create a simple request - this may need to be expanded
+  //     // based on the complexity of the operation
+  //     const operations: AddOpRequest[] = [];
 
-      if (operation.kind === 'sample') {
-        // Handle sample operation
-        const fileSource = operation.sources.find(s => s.type === 'file');
-        if (fileSource && fileSource.type === 'file') {
-          operations.push({
-            name: `${operation.name}_sample`,
-            opType: 'sample',
-            filePath: fileSource.fileId,
-            startTime: 0,
-            gain: 1.0,
-          });
-        }
-      } else if (operation.kind === 'merge') {
-        // For merge operations, we'll need more complex handling
-        // For now, create a basic merge operation
-        operations.push({
-          name: `${operation.name}_merge`,
-          opType: 'merge',
-          startTime: 0,
-          gain: 1.0,
-          inputs: [], // This would need proper implementation
-        });
-      }
+  //     if (operation.kind === 'sample') {
+  //       // Handle sample operation
+  //       const fileSource = operation.sources.find(s => s.type === 'file');
+  //       if (fileSource && fileSource.type === 'file') {
+  //         operations.push({
+  //           name: `${operation.name}_sample`,
+  //           opType: 'sample',
+  //           filePath: fileSource.fileId,
+  //           startTime: 0,
+  //           gain: 1.0,
+  //         });
+  //       }
+  //     } else if (operation.kind === 'merge') {
+  //       // For merge operations, we'll need more complex handling
+  //       // For now, create a basic merge operation
+  //       operations.push({
+  //         name: `${operation.name}_merge`,
+  //         opType: 'merge',
+  //         startTime: 0,
+  //         gain: 1.0,
+  //         inputs: [], // This would need proper implementation
+  //       });
+  //     }
 
-      // Create the build graph request
-      const request: BuildGraphRequest = {
-        operations,
-        sampleRate: 44100,
-        channels: 2,
-        loopPlayback: true,
-      };
+  //     // Create the build graph request
+  //     const request: BuildGraphRequest = {
+  //       operations,
+  //       sampleRate: 44100,
+  //       channels: 2,
+  //       loopPlayback: true,
+  //     };
 
-      await buildGraphForTimeline(timelineId, request);
-      logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
-    } catch (error) {
-      logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);
-    }
-  };
+  //     await buildGraphForTimeline(timelineId, request);
+  //     logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
+  //   } catch (error) {
+  //     logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);
+  //   }
+  // };
 
   // Trigger async loading and backend graph building (don't await to avoid blocking timeline creation)
   loadWaveformData();
-  buildBackendGraph();
+  // buildBackendGraph();
 
   return {
     id: timelineId,

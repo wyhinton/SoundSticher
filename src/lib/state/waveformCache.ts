@@ -497,7 +497,7 @@ function createOperationWaveformStore() {
         );
 
         // STEP 4: Build playback graph (uses durations, not waveforms)
-        await buildPlaybackGraphFromMergeOp();
+        // await buildPlaybackGraphFromMergeOp();
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         update(state => ({

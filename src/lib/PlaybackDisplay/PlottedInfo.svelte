@@ -49,7 +49,7 @@
   {/if}
 
   <div class="d-flex gap-1">
-    <TransportControls disabled={transportDisabled} />
+    <TransportControls disabled={transportDisabled} timelineId={timeline.id} />
     <TimeDisplay compact={true} />
   </div>
   <TimelineInfo></TimelineInfo>

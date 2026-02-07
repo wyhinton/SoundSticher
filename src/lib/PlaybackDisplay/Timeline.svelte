@@ -23,7 +23,13 @@
   import { D3TimelineManager } from './Timeline/D3TimelineManager';
   import { timelineDebugMode, type TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
-  import { timelinesStore, type TimelineId, type Timeline, setActiveTimeline } from '$lib/state/timeline/timelines';
+  import {
+    timelinesStore,
+    type TimelineId,
+    type Timeline,
+    setActiveTimeline,
+    timelinePlayhead,
+  } from '$lib/state/timeline/timelines';
   import {
     getIndicesToMoveOnDrag,
     type TimelineHierarchy,
@@ -32,7 +38,7 @@
   } from '../state/timeline/timelineGraph';
   import { type AudioFileTimelineItem } from '../state/state.svelte';
   // Import operation playback service
-  import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
+  import { opPlaybackService } from '../state/opPlaybackService';
 
   import {
     DragDropManager,
@@ -287,14 +293,24 @@
     }
   }
 
+  // Create timeline-specific playhead store derived from active timeline ID
+  $: timelinePlayheadStore = activeTimeline?.id ? timelinePlayhead(activeTimeline.id) : null;
+  $: timelinePlayheadTime = timelinePlayheadStore ? $timelinePlayheadStore : 0;
+
   // Update playhead position when it changes
   $: if (d3Manager) {
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
-  // Listen to operation playback progress
-  $: if ($opPlaybackProgress !== undefined) {
-    playHeadPosition = $opPlaybackProgress * currentDuration;
+  // Update playHeadPosition from timeline-specific playhead store (guaranteed to be a number)
+  $: {
+    const newPlayHeadPos = timelinePlayheadTime ?? 0;
+    if (newPlayHeadPos !== playHeadPosition) {
+      console.log(
+        `🎵 Timeline playhead update: ${playHeadPosition.toFixed(2)}s -> ${newPlayHeadPos.toFixed(2)}s`
+      );
+      playHeadPosition = newPlayHeadPos;
+    }
   }
 
   function handleClick(event: MouseEvent) {
@@ -313,7 +329,7 @@
     const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
-      if (timelineSource?.kind !== 'operation') {
+      if (timelineSource?.kind !== 'operation' || !activeTimeline?.id) {
         return;
       }
       // Click is in the x-axis area - set playhead position and clear selection
@@ -321,7 +337,9 @@
       const clickedTime = d3Manager.clickToTime(relativeX);
 
       // Use operation playback service for seeking
-      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      opPlaybackService
+        .seekTimeline(activeTimeline.id, clickedTime)
+        .catch((err: unknown) => console.error('Failed to seek:', err));
       return;
     }
 
@@ -332,14 +350,16 @@
         : null;
 
     if (clickedSegmentIndex === null) {
-      if (timelineSource?.kind !== 'operation') {
+      if (timelineSource?.kind !== 'operation' || !activeTimeline?.id) {
         return;
       }
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
       // Use operation playback service for seeking
-      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      opPlaybackService
+        .seekTimeline(activeTimeline.id, clickedTime)
+        .catch((err: unknown) => console.error('Failed to seek:', err));
     }
   }
 

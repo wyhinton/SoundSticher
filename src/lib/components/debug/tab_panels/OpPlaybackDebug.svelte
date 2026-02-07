@@ -49,8 +49,11 @@
         !lastEntry ||
         JSON.stringify(currentSessionIds.sort()) !== JSON.stringify(lastEntry.sessionIds.sort())
       ) {
-        sessionHistory = [...sessionHistory.slice(-9), { timestamp: lastUpdate, sessionIds: currentSessionIds }];
-        
+        sessionHistory = [
+          ...sessionHistory.slice(-9),
+          { timestamp: lastUpdate, sessionIds: currentSessionIds },
+        ];
+
         // Log warning if "global" timeline is present
         if (state.sessions['global']) {
           console.warn('⚠️ WARNING: "global" timeline session detected in playback state!', {

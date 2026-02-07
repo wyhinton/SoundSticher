@@ -7,10 +7,10 @@
   } from '$lib/state/timelinePlaybackService';
   import { opPlaybackState } from '$lib/state/opPlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
-  import { getActiveTimelineId, getActiveTimeline } from '$lib/state/timeline/timelines';
 
   // Component props
   export let disabled: boolean = false;
+  export let timelineId: string | null = null;
 
   let bufferingProgress = 0;
   let playHeadPosition = 0;
@@ -33,9 +33,8 @@
   // Transport control functions using new timeline playback service
   async function handlePlay() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot play. Please select a timeline first.');
+        console.error('No timeline ID - cannot play. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.playTimeline(timelineId, playHeadPosition);
@@ -46,9 +45,8 @@
 
   async function handlePause() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot pause. Please select a timeline first.');
+        console.error('No timeline ID - cannot pause. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.pauseTimeline();
@@ -59,9 +57,8 @@
 
   async function handleResume() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot resume. Please select a timeline first.');
+        console.error('No timeline ID - cannot resume. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.resumeTimeline();
@@ -72,9 +69,8 @@
 
   async function handleStop() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot stop. Please select a timeline first.');
+        console.error('No timeline ID - cannot stop. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.stopTimeline();
@@ -85,9 +81,8 @@
 
   async function handleSkipToStart() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot seek. Please select a timeline first.');
+        console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.seekTimeline(timelineId, 0);
@@ -98,9 +93,8 @@
 
   async function handleSkipToEnd() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot seek');
+        console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.seekTimeline(timelineId, currentDuration);
@@ -111,9 +105,8 @@
 
   async function toggleLoop() {
     try {
-      const timelineId = getActiveTimelineId();
       if (!timelineId) {
-        console.error('No active timeline - cannot toggle loop');
+        console.error('No timeline ID - cannot toggle loop. Please provide a timelineId prop.');
         return;
       }
       await timelinePlaybackService.setTimelineLoop(timelineId, !$opPlaybackState.loopEnabled);
