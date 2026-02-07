@@ -19,7 +19,6 @@ use crate::waveform::WaveformService;
 mod artifact_registry_commands;
 mod artifacts;
 mod artifacts_service;
-mod audio_manager;
 mod combine;
 mod cook;
 mod duration_cache;
