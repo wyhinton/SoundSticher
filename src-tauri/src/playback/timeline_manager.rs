@@ -12,7 +12,8 @@
 
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
-use crate::op_playback_commands::{AppTimelinePlaybackState, BuildGraphResponse, PlaybackSession};
+use crate::op_playback_commands::BuildGraphResponse;
+use crate::timeline_playback_commands::AppTimelinePlaybackState;
 use crate::playback::builder::{
     BuildContext, BuildPlaybackRequest, BuildResult, OpGraphPlaybackBuilder, TimelinePlaybackBuilder,
 };

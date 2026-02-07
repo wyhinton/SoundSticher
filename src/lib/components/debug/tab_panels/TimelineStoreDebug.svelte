@@ -20,7 +20,7 @@
   $: timelinesSummary = Object.values(timelinesState.timelines).map((timeline: Timeline) => {
     // Get playback state for this timeline
     const playback = playbackState[timeline.id];
-    
+
     return {
       id: timeline.id,
       sourceKind: timeline.source.kind,
@@ -323,7 +323,10 @@
 
   <!-- Timeline Playback State Store -->
   <div class="playback-state-section">
-    <h4><i class="fa fa-play-circle"></i> Timeline Playback State ({Object.keys(playbackState).length})</h4>
+    <h4>
+      <i class="fa fa-play-circle"></i> Timeline Playback State ({Object.keys(playbackState)
+        .length})
+    </h4>
     {#if Object.keys(playbackState).length === 0}
       <div class="empty-state">
         <i class="fa fa-play-circle"></i>

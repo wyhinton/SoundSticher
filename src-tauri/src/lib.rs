@@ -342,7 +342,7 @@ pub fn run() {
 
             // Initialize operation-based playback state
             app.manage(Arc::new(
-                op_playback_commands::AppTimelinePlaybackState::new(),
+                timeline_playback_commands::AppTimelinePlaybackState::new(),
             ));
 
             #[cfg(debug_assertions)] // Only include this code on debug builds

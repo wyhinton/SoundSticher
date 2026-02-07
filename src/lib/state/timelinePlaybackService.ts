@@ -16,7 +16,7 @@ import { invokeWithPerf } from './performance';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
 import type { BuildOpPlaybackGraphRequest, BuildGraphResponse } from './opPlaybackService';
 import { getActiveTimelineId } from './timeline/timelines';
-
+import { timelinePlaybackState as perTimelinePlaybackState } from './timeline/timelinePlaybackState';
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -252,6 +252,15 @@ export async function playTimeline(timelineId: string, startSeconds?: number): P
       activeTimelineId: timelineId,
       isPlaying: true,
       isPaused: false,
+    }));
+
+    // Also update the per-timeline playback state so the play button disables
+    perTimelinePlaybackState.update(state => ({
+      ...state,
+      [timelineId]: {
+        ...state[timelineId],
+        isPlaying: true,
+      },
     }));
 
     logger.opPlayback.success(`Timeline '${timelineId}' playing`);

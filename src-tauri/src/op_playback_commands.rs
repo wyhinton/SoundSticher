@@ -5,19 +5,20 @@
 
 use crate::logging::{LogSystem, LoggingService};
 use crate::playback::op_playback::{
-    AudioSpec, PlayableOp, PlaybackGraph, PlaybackOpId, SampleTime, TimelineSourceBuilder,
+    AudioSpec, PlayableOp, PlaybackGraph, SampleTime, TimelineSourceBuilder,
 };
 use crate::playback_ops::merge_playback::MergePlaybackOp;
 use crate::playback_ops::sample_playback::SamplePlayableOp;
 use crate::sample_cache::SampleCacheService;
-use crate::timeline_playback_commands::TimelineId;
+use crate::timeline_playback_commands::{
+    AppTimelinePlaybackState, PlaybackSession, PlaybackSessionDebugInfo, TimelineId,
+};
 use crate::{emit_logged, log_debug, log_info, send_channel_event};
-use dashmap::DashMap;
 use rodio::{OutputStream, Sink};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
@@ -38,19 +39,6 @@ impl From<AudioSpec> for AudioSpecDebugInfo {
             channels: spec.channels,
         }
     }
-}
-
-/// Serializable representation of a PlaybackSession for debugging
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackSessionDebugInfo {
-    pub duration_seconds: f64,
-    pub progress: f32,
-    pub seek_seconds: f32,
-    pub loop_playback: bool,
-    pub operation_names: Vec<String>,
-    pub operation_count: usize,
-    pub spec: AudioSpecDebugInfo,
 }
 
 /// Serializable representation of OpPlaybackState for debugging
@@ -91,111 +79,6 @@ pub enum OpPlaybackBuildGraphEvent {
         sample_rate: u32,
         channels: u16,
     },
-}
-
-/// A playback session for a specific timeline
-pub struct PlaybackSession {
-    /// The playback graph for this timeline
-    pub graph: Arc<PlaybackGraph>,
-
-    /// Audio specification
-    pub spec: AudioSpec,
-
-    /// Current playback progress (normalized 0.0-1.0)
-    pub progress: Mutex<f32>,
-
-    /// Current seek position in seconds
-    pub seek_seconds: Mutex<f32>,
-
-    /// Whether this timeline loops
-    pub loop_playback: bool,
-
-    /// Mapping of operation names to their IDs in this timeline's graph
-    pub op_ids: HashMap<String, PlaybackOpId>,
-}
-
-impl PlaybackSession {
-    pub fn new(
-        graph: Arc<PlaybackGraph>,
-        spec: AudioSpec,
-        loop_playback: bool,
-        op_ids: HashMap<String, PlaybackOpId>,
-    ) -> Self {
-        Self {
-            graph,
-            spec,
-            progress: Mutex::new(0.0),
-            seek_seconds: Mutex::new(0.0),
-            loop_playback,
-            op_ids,
-        }
-    }
-
-    pub fn duration_seconds(&self) -> f64 {
-        self.graph.duration().to_seconds(self.spec.sample_rate)
-    }
-}
-
-/// State for multi-timeline operation playback
-pub struct AppTimelinePlaybackState {
-    /// All timeline sessions
-    sessions: DashMap<TimelineId, PlaybackSession>,
-
-    /// Which timeline is currently audible (only one can play at a time)
-    active_timeline: RwLock<Option<TimelineId>>,
-
-    /// Single audio sink (hardware constraint)
-    sink: Mutex<Option<Arc<Sink>>>,
-
-    /// Whether audio is currently playing
-    is_playing: AtomicBool,
-
-    /// Whether playback is paused
-    is_paused: AtomicBool,
-}
-
-impl AppTimelinePlaybackState {
-    pub fn new() -> Self {
-        Self {
-            sessions: DashMap::new(),
-            active_timeline: RwLock::new(None),
-            sink: Mutex::new(None),
-            is_paused: AtomicBool::new(false),
-            is_playing: AtomicBool::new(false),
-        }
-    }
-
-    pub fn get_session(
-        &self,
-        timeline_id: &TimelineId,
-    ) -> Option<dashmap::mapref::one::Ref<TimelineId, PlaybackSession>> {
-        self.sessions.get(timeline_id)
-    }
-
-    pub fn insert_session(&self, timeline_id: TimelineId, session: PlaybackSession) {
-        self.sessions.insert(timeline_id, session);
-    }
-
-    pub fn remove_session(
-        &self,
-        timeline_id: &TimelineId,
-    ) -> Option<(TimelineId, PlaybackSession)> {
-        self.sessions.remove(timeline_id)
-    }
-
-    pub fn get_active_timeline(&self) -> Option<TimelineId> {
-        self.active_timeline.read().unwrap().clone()
-    }
-
-    pub fn set_active_timeline(&self, timeline_id: Option<TimelineId>) {
-        *self.active_timeline.write().unwrap() = timeline_id;
-    }
-}
-
-impl Default for AppTimelinePlaybackState {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 /// The type of playback operation
@@ -821,7 +704,7 @@ pub fn op_playback_play(
         .get_session(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
 
-    let loop_playback = session.loop_playback;
+    let loop_playback = *session.loop_playback.lock().unwrap();
     let spec = session.spec;
     let graph = session.graph.clone();
     let total_duration = session.duration_seconds();
@@ -879,7 +762,7 @@ pub fn op_playback_play(
                 &format!("Using explicit start position: {:.2}s", start)
             );
         }
-        *session_ref.seek_seconds.lock().unwrap() = start as f32;
+        *session_ref.seek_seconds.lock().unwrap() = start;
         *session_ref.progress.lock().unwrap() = (start / total_duration).clamp(0.0, 1.0) as f32;
         SampleTime::from_seconds(start, spec.sample_rate)
     } else {
@@ -1133,7 +1016,7 @@ pub fn op_playback_seek(
     let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
     let spec = session.spec;
     let graph = session.graph.clone();
-    let loop_playback = session.loop_playback;
+    let loop_playback = *session.loop_playback.lock().unwrap();
 
     // Calculate and update progress
     let progress = (position_seconds / total_duration).clamp(0.0, 1.0) as f32;
@@ -1155,7 +1038,7 @@ pub fn op_playback_seek(
     }
 
     *session.progress.lock().unwrap() = progress;
-    *session.seek_seconds.lock().unwrap() = position_seconds as f32;
+    *session.seek_seconds.lock().unwrap() = position_seconds as f64;
     drop(session);
 
     // Emit progress
@@ -1439,7 +1322,7 @@ fn run_progress_loop(
 
     // Capture the initial seek offset ONCE - this is the position we started from
     let initial_seek_offset: f32 = if let Some(session) = state.get_session(timeline_id) {
-        *session.seek_seconds.lock().unwrap()
+        *session.seek_seconds.lock().unwrap() as f32
     } else {
         eprintln!(
             "🔊 [progress_loop] session not found at start for timeline '{}'",
@@ -1462,7 +1345,6 @@ fn run_progress_loop(
     let mut accumulated_before_pause: f32 = 0.0;
     let mut loop_iteration: u64 = 0;
     let mut last_logged_iteration: u64 = 0;
-    let mut last_logged_progress: f32 = 0.0;
     let mut first_progress_update = true;
 
     loop {
@@ -1520,7 +1402,7 @@ fn run_progress_loop(
         };
 
         let total_duration_seconds = session.duration_seconds();
-        let loop_playback = session.loop_playback;
+        let loop_playback = *session.loop_playback.lock().unwrap();
         drop(session);
 
         // Check if sink is empty and not looping
@@ -1567,7 +1449,7 @@ fn run_progress_loop(
 
             // Check if seek happened while paused - if seek_seconds changed, use it
             if let Some(session) = state.get_session(timeline_id) {
-                let current_seek_seconds = *session.seek_seconds.lock().unwrap();
+                let current_seek_seconds = *session.seek_seconds.lock().unwrap() as f32;
                 let expected_position = initial_seek_offset + accumulated_before_pause;
 
                 // If seek_seconds differs significantly from our tracked position, a seek happened
@@ -1624,7 +1506,6 @@ fn run_progress_loop(
             );
 
             last_logged_iteration = loop_iteration;
-            last_logged_progress = progress;
             first_progress_update = false;
         }
 
@@ -1633,7 +1514,7 @@ fn run_progress_loop(
         // - seek_seconds: so that if playback is stopped and restarted, it can resume from here
         if let Some(session) = state.get_session(timeline_id) {
             *session.progress.lock().unwrap() = progress;
-            *session.seek_seconds.lock().unwrap() = current_position;
+            *session.seek_seconds.lock().unwrap() = current_position as f64;
         }
 
         emit_logged!(
@@ -1657,7 +1538,7 @@ fn run_progress_loop(
     );
 
     if let Some(session) = state.get_session(timeline_id) {
-        *session.seek_seconds.lock().unwrap() = final_position;
+        *session.seek_seconds.lock().unwrap() = final_position as f64;
     }
 
     state.is_playing.store(false, Ordering::Relaxed);
@@ -1722,9 +1603,9 @@ pub fn op_playback_set_loop(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), String> {
-    let mut session = state
+    let session = state
         .sessions
-        .get_mut(&timeline_id)
+        .get(&timeline_id)
         .ok_or(format!("Timeline '{}' not found", timeline_id))?;
 
     let op_names: Vec<String> = session.op_ids.keys().cloned().collect();
@@ -1743,7 +1624,7 @@ pub fn op_playback_set_loop(
         );
     }
 
-    session.loop_playback = loop_playback;
+    *session.loop_playback.lock().unwrap() = loop_playback;
     Ok(())
 }
 
@@ -1828,8 +1709,8 @@ pub fn get_op_playback_state(
         let operation_count = operation_names.len();
         let duration_seconds = session.duration_seconds();
         let progress = *session.progress.lock().unwrap();
-        let seek_seconds = *session.seek_seconds.lock().unwrap();
-        let loop_playback = session.loop_playback;
+        let seek_seconds = *session.seek_seconds.lock().unwrap() as f32;
+        let loop_playback = *session.loop_playback.lock().unwrap();
         let spec = session.spec.into();
 
         sessions_info.insert(

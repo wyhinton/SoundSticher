@@ -167,7 +167,7 @@
     handlePlayPause,
     'btn-play',
     isCurrentlyPlaying,
-    disabled
+    disabled || isCurrentlyPlaying
   )}
   {@render transportButton(
     'fa-pause',
