@@ -1260,8 +1260,13 @@ pub fn op_playback_seek(
         "progress": progress
     }));
 
-    // If this is the currently active timeline and it's playing, handle seeking
-    if state.get_active_timeline().as_ref() == Some(&timeline_id) && state.is_playing.load(Ordering::Relaxed) {
+    // If this is the currently active timeline and playback is active (playing or paused),
+    // we need to handle seeking. When paused, we still restart playback so that when
+    // the user resumes, it plays from the new seek position.
+    let is_active_and_playing = state.get_active_timeline().as_ref() == Some(&timeline_id) 
+        && state.is_playing.load(Ordering::Relaxed);
+    
+    if is_active_and_playing {
         let seek_duration = Duration::from_secs_f64(position_seconds);
 
         // Try to seek on the current sink's source
