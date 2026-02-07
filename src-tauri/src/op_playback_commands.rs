@@ -1496,19 +1496,44 @@ fn start_playback_from_position(
 /// Run the progress tracking loop for a timeline (blocks the current thread)
 ///
 /// This runs on the same thread as the OutputStream to keep it alive.
+///
+/// IMPORTANT: Progress is calculated as:
+///   current_position = initial_seek_offset + wall_clock_elapsed
+///   progress = current_position / total_duration
+///
+/// We capture the initial seek offset ONCE at loop start and never write it back
+/// during iteration. Only `progress` is updated in the session so that pause/stop
+/// can read the current progress. When pausing, we snapshot the current position
+/// so that resume can pick up from there.
 fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app: &AppHandle) {
     eprintln!(
         "🔊 [progress_loop] Started for timeline '{}'. OutputStream is alive on thread {:?}.",
         timeline_id, thread::current().id()
     );
 
+    // Capture the initial seek offset ONCE - this is the position we started from
+    let initial_seek_offset: f32 = if let Some(session) = state.get_session(timeline_id) {
+        *session.seek_seconds.lock().unwrap()
+    } else {
+        eprintln!("🔊 [progress_loop] session not found at start for timeline '{}'", timeline_id);
+        return;
+    };
+
+    eprintln!(
+        "🔊 [progress_loop] Initial seek offset: {:.3}s",
+        initial_seek_offset
+    );
+
     let mut tracking_start = Instant::now();
     let mut pause_start: Option<Instant> = None;
     let mut total_pause_duration = Duration::from_secs(0);
+    // Accumulated playing time (excluding pauses) since tracking_start was last set.
+    // When we resume from pause, we snapshot the accumulated position into accumulated_before_pause
+    // and reset tracking_start.
+    let mut accumulated_before_pause: f32 = 0.0;
     let mut loop_iteration: u64 = 0;
     let mut last_logged_iteration: u64 = 0;
     let mut last_logged_progress: f32 = 0.0;
-    let mut last_logged_elapsed: f32 = 0.0;
     let mut first_progress_update = true;
 
     loop {
@@ -1583,79 +1608,94 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
         if state.is_paused.load(Ordering::Relaxed) {
             // Mark pause start if we just entered pause state
             if pause_start.is_none() {
-                eprintln!("🔊 [progress_loop] PAUSED at iter={}, pausing progress tracking", loop_iteration);
+                // Snapshot how much playing time we've accumulated before this pause
+                let elapsed_this_segment = tracking_start.elapsed().as_secs_f32();
+                accumulated_before_pause += elapsed_this_segment;
+                eprintln!(
+                    "🔊 [progress_loop] PAUSED at iter={}, elapsed_this_segment={:.3}s, total_accumulated={:.3}s",
+                    loop_iteration, elapsed_this_segment, accumulated_before_pause
+                );
                 pause_start = Some(Instant::now());
             }
             thread::sleep(Duration::from_millis(50));
             continue;
         } else if let Some(pause_started_at) = pause_start.take() {
-            // We just resumed from pause
+            // We just resumed from pause - reset the wall clock
             let pause_duration = pause_started_at.elapsed();
             total_pause_duration += pause_duration;
             eprintln!(
-                "🔊 [progress_loop] RESUMED at iter={}, pause_duration={:.3}s, total_pause_duration={:.3}s",
-                loop_iteration, pause_duration.as_secs_f32(), total_pause_duration.as_secs_f32()
+                "🔊 [progress_loop] RESUMED at iter={}, pause_duration={:.3}s, total_pause_duration={:.3}s, accumulated_before_pause={:.3}s",
+                loop_iteration, pause_duration.as_secs_f32(), total_pause_duration.as_secs_f32(), accumulated_before_pause
             );
-            // Reset tracking_start to now so we measure from resume point
+            // Reset tracking_start so elapsed() measures from resume point
             tracking_start = Instant::now();
-            first_progress_update = true; // Log first update after resume
+            first_progress_update = true;
         }
 
-        // Get session reference again for updating progress
-        if let Some(session) = state.get_session(timeline_id) {
-            let seek_start = *session.seek_seconds.lock().unwrap();
-            let total_elapsed = tracking_start.elapsed();
-            let current_position = seek_start + total_elapsed.as_secs_f32();
+        // Calculate current position:
+        //   current_position = initial_seek_offset + accumulated_playing_time
+        // where accumulated_playing_time = time_accumulated_before_pauses + time_since_last_resume
+        let elapsed_this_segment = tracking_start.elapsed().as_secs_f32();
+        let total_playing_time = accumulated_before_pause + elapsed_this_segment;
+        let current_position = initial_seek_offset + total_playing_time;
 
-            // Calculate progress (handle looping)
-            let progress = if total_duration_seconds > 0.0 {
-                if loop_playback {
-                    (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
-                } else {
-                    (current_position / total_duration_seconds as f32).min(1.0)
-                }
+        // Calculate progress (handle looping)
+        let progress = if total_duration_seconds > 0.0 {
+            if loop_playback {
+                (current_position % total_duration_seconds as f32) / total_duration_seconds as f32
             } else {
-                0.0
-            };
-
-            // Log detailed progress info periodically or on first update
-            if first_progress_update || loop_iteration - last_logged_iteration >= 60 {
-                let progress_delta = (progress - last_logged_progress).abs();
-                let elapsed_delta = (total_elapsed.as_secs_f32() - last_logged_elapsed).abs();
-                
-                eprintln!(
-                    "🔊 [progress_loop] PROGRESS UPDATE @ iter={}: \n  \
-                    total_duration={:.3}s, seek_start={:.3}s, total_elapsed={:.3}s, \n  \
-                    current_position={:.3}s, progress={:.4} ({:.1}%), \n  \
-                    since_last_log: elapsed_delta={:.3}s, progress_delta={:.4}",
-                    loop_iteration,
-                    total_duration_seconds, seek_start, total_elapsed.as_secs_f32(),
-                    current_position, progress, progress * 100.0,
-                    elapsed_delta, progress_delta
-                );
-
-                last_logged_iteration = loop_iteration;
-                last_logged_progress = progress;
-                last_logged_elapsed = total_elapsed.as_secs_f32();
-                first_progress_update = false;
+                (current_position / total_duration_seconds as f32).min(1.0)
             }
+        } else {
+            0.0
+        };
 
+        // Log detailed progress info periodically or on first update
+        if first_progress_update || loop_iteration - last_logged_iteration >= 60 {
+            eprintln!(
+                "🔊 [progress_loop] PROGRESS @ iter={}: \n  \
+                initial_seek={:.3}s, accumulated_before_pause={:.3}s, elapsed_this_segment={:.3}s, \n  \
+                total_playing_time={:.3}s, current_position={:.3}s, \n  \
+                total_duration={:.3}s, progress={:.4} ({:.1}%)",
+                loop_iteration,
+                initial_seek_offset, accumulated_before_pause, elapsed_this_segment,
+                total_playing_time, current_position,
+                total_duration_seconds, progress, progress * 100.0,
+            );
+
+            last_logged_iteration = loop_iteration;
+            last_logged_progress = progress;
+            first_progress_update = false;
+        }
+
+        // Update session state:
+        // - progress: for UI display and pause/stop to read
+        // - seek_seconds: so that if playback is stopped and restarted, it can resume from here
+        if let Some(session) = state.get_session(timeline_id) {
             *session.progress.lock().unwrap() = progress;
             *session.seek_seconds.lock().unwrap() = current_position;
-
-            emit_logged!(app, "op-timeline-progress", serde_json::json!({
-                "timelineId": timeline_id,
-                "progress": progress
-            }));
         }
+
+        emit_logged!(app, "op-timeline-progress", serde_json::json!({
+            "timelineId": timeline_id,
+            "progress": progress
+        }));
 
         thread::sleep(Duration::from_millis(16)); // ~60 FPS
     }
 
+    // On exit, store the final position so stop/pause can report it correctly
+    let final_elapsed = tracking_start.elapsed().as_secs_f32();
+    let final_position = initial_seek_offset + accumulated_before_pause + final_elapsed;
     eprintln!(
-        "🔊 [progress_loop] Ended for timeline '{}' at iter={}. Total pause duration: {:.3}s",
-        timeline_id, loop_iteration, total_pause_duration.as_secs_f32()
+        "🔊 [progress_loop] Ended for timeline '{}' at iter={}. Final position: {:.3}s. Total pause duration: {:.3}s",
+        timeline_id, loop_iteration, final_position, total_pause_duration.as_secs_f32()
     );
+    
+    if let Some(session) = state.get_session(timeline_id) {
+        *session.seek_seconds.lock().unwrap() = final_position;
+    }
+    
     state.is_playing.store(false, Ordering::Relaxed);
 }
 
