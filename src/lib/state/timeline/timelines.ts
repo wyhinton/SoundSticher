@@ -805,6 +805,8 @@ export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
       };
     });
   } else {
+    console.log(`%cHERE LINE :808 %c`, 'color: yellow; font-weight: bold', '');
+
     // No timeline exists - create one (toggle on)
     logger.waveform.info(`Showing timeline for operation: ${operationId}`);
 

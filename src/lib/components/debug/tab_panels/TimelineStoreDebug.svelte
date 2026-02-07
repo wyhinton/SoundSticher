@@ -230,15 +230,15 @@
                   <div class="view-details">
                     <div class="view-item">
                       <span class="view-label">Zoom:</span>
-                      <span class="view-value">{timeline.zoom.toFixed(2)}x</span>
+                      <!-- <span class="view-value">{timeline.zoom.toFixed(2)}x</span> -->
                     </div>
                     <div class="view-item">
                       <span class="view-label">Scroll:</span>
-                      <span class="view-value">{timeline.scrollX.toFixed(0)}px</span>
+                      <!-- <span class="view-value">{timeline.scrollX.toFixed(0)}px</span> -->
                     </div>
                     <div class="view-item">
                       <span class="view-label">Playhead:</span>
-                      <span class="view-value">{timeline.playheadTime.toFixed(2)}s</span>
+                      <!-- <span class="view-value">{timeline.playheadTime.toFixed(2)}s</span> -->
                     </div>
                     <div class="view-item">
                       <span class="view-label">Tracks:</span>

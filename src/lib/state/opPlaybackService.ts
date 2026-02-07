@@ -216,27 +216,27 @@ async function initProgressListener(): Promise<void> {
 
     // Only update global state if this is for the "active" timeline or no specific timeline
     // This maintains backward compatibility for legacy single-timeline usage
-    if (!timelineId || timelineId === 'global') {
-      console.log(`%cHERE LINE :220 %c`, 'color: yellow; font-weight: bold', '');
+    // if (!timelineId || timelineId === 'global') {
+    //   console.log(`%cHERE LINE :220 %c`, 'color: yellow; font-weight: bold', '');
 
-      // Add detailed progress logging
-      if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
-        logger.opPlayback.info(
-          `Progress update: ${(progress * 100).toFixed(1)}% -> ${newPositionSeconds.toFixed(2)}s (was ${state.positionSeconds.toFixed(2)}s)`
-        );
-      }
+    //   // Add detailed progress logging
+    //   if (Math.abs(newPositionSeconds - state.positionSeconds) > 0.1) {
+    //     logger.opPlayback.info(
+    //       `Progress update: ${(progress * 100).toFixed(1)}% -> ${newPositionSeconds.toFixed(2)}s (was ${state.positionSeconds.toFixed(2)}s)`
+    //     );
+    //   }
 
-      internalState.update(s => ({
-        ...s,
-        progress,
-        positionSeconds: newPositionSeconds,
-      }));
-    } else {
-      // Timeline-specific progress - should be handled by timeline stores
-      logger.opPlayback.info(
-        `Timeline-specific progress for '${timelineId}': ${(progress * 100).toFixed(1)}% (handled by timeline store)`
-      );
-    }
+    //   internalState.update(s => ({
+    //     ...s,
+    //     progress,
+    //     positionSeconds: newPositionSeconds,
+    //   }));
+    // } else {
+    //   // Timeline-specific progress - should be handled by timeline stores
+    //   logger.opPlayback.info(
+    //     `Timeline-specific progress for '${timelineId}': ${(progress * 100).toFixed(1)}% (handled by timeline store)`
+    //   );
+    // }
   });
 
   logger.opPlayback.info('Progress listener initialized (legacy mode)');
@@ -253,12 +253,12 @@ function cleanupProgressListener(): void {
   }
 }
 
-/**
- * Initialize all event listeners
- */
-async function initEventListeners(): Promise<void> {
-  await initProgressListener();
-}
+// /**
+//  * Initialize all event listeners
+//  */
+// async function initEventListeners(): Promise<void> {
+//   await initProgressListener();
+// }
 
 /**
  * Cleanup all event listeners
@@ -986,7 +986,7 @@ export const opPlaybackService = {
   // Lifecycle
   initProgressListener,
   cleanupProgressListener,
-  initEventListeners,
+  // initEventListeners,
   cleanupEventListeners,
 };
 
