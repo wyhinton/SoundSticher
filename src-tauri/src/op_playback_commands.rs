@@ -257,7 +257,7 @@ pub struct AddOpResponse {
 /// Request to build a playback graph from multiple operations
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BuildGraphRequest {
+pub struct BuildOpPlaybackGraphRequest {
     /// Operations to add to the graph
     pub operations: Vec<AddOpRequest>,
 
@@ -285,7 +285,7 @@ pub struct BuildGraphResponse {
 #[tauri::command]
 pub async fn op_playback_build_graph(
     timeline_id: TimelineId,
-    request: BuildGraphRequest,
+    request: BuildOpPlaybackGraphRequest,
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     sample_cache: State<'_, Arc<SampleCacheService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
@@ -494,7 +494,7 @@ pub async fn op_playback_build_graph(
 #[tauri::command]
 pub async fn op_playback_build_graph_legacy(
     timeline_id: TimelineId,
-    request: BuildGraphRequest,
+    request: BuildOpPlaybackGraphRequest,
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     _sample_cache: State<'_, Arc<SampleCacheService>>, // Not used in legacy mode
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
@@ -1938,7 +1938,7 @@ fn stop_current_playback(state: &AppTimelinePlaybackState) {
     eprintln!("🛑 [stop_current_playback] EXIT");
 }
 
-fn count_graph_ops(request: &BuildGraphRequest) -> Result<usize, String> {
+fn count_graph_ops(request: &BuildOpPlaybackGraphRequest) -> Result<usize, String> {
     let mut count = 0;
 
     for op in &request.operations {

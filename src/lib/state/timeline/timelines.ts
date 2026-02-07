@@ -13,7 +13,7 @@ import { durationCache } from '../durationCache';
 import { listen } from '@tauri-apps/api/event';
 import type {
   OpTimelineProgressEvent,
-  BuildGraphRequest,
+  BuildOpPlaybackGraphRequest,
   AddOpRequest,
   MergeInputRequest,
 } from '../opPlaybackService';
@@ -775,7 +775,7 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
   //     }
 
   //     // Create the build graph request
-  //     const request: BuildGraphRequest = {
+  //     const request: BuildOpPlaybackGraphRequest = {
   //       operations,
   //       sampleRate: 44100,
   //       channels: 2,

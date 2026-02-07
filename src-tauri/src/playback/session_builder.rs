@@ -128,8 +128,8 @@ pub struct SessionBuildRequest {
     pub loop_playback: Option<bool>,
 }
 
-impl From<crate::op_playback_commands::BuildGraphRequest> for SessionBuildRequest {
-    fn from(req: crate::op_playback_commands::BuildGraphRequest) -> Self {
+impl From<crate::op_playback_commands::BuildOpPlaybackGraphRequest> for SessionBuildRequest {
+    fn from(req: crate::op_playback_commands::BuildOpPlaybackGraphRequest) -> Self {
         Self {
             operations: req.operations.into_iter().map(|op| op.into()).collect(),
             sample_rate: req.sample_rate,

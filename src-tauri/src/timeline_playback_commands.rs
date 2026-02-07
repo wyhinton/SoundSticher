@@ -20,7 +20,7 @@ use tauri::State;
 
 use crate::logging::LoggingService;
 use crate::op_playback_commands::{
-    AppTimelinePlaybackState, BuildGraphRequest, BuildGraphResponse,
+    AppTimelinePlaybackState, BuildGraphResponse, BuildOpPlaybackGraphRequest,
 };
 use crate::playback::timeline_manager::{
     TimelinePlaybackEvent, TimelinePlaybackManager, TimelineSource,
@@ -61,14 +61,14 @@ pub async fn timeline_build_playback(
     .map_err(|e| format!("Failed to execute build timeline task: {}", e))?
 }
 
-/// Build a timeline using legacy BuildGraphRequest format
+/// Build a timeline using legacy BuildOpPlaybackGraphRequest format
 ///
 /// This is a convenience wrapper for building operation-based timelines
-/// using the familiar BuildGraphRequest structure.
+/// using the familiar BuildOpPlaybackGraphRequest structure.
 #[tauri::command]
 pub async fn timeline_build_from_request(
     timeline_id: TimelineId,
-    request: BuildGraphRequest,
+    request: BuildOpPlaybackGraphRequest,
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     sample_cache: State<'_, Arc<SampleCacheService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,

@@ -57,7 +57,7 @@ export interface AddOpRequest {
 /**
  * Request to build a playback graph
  */
-export interface BuildGraphRequest {
+export interface BuildOpPlaybackGraphRequest {
   /** Operations to add to the graph */
   operations: AddOpRequest[];
   /** Sample rate for playback (default: 44100) */
@@ -276,7 +276,7 @@ function cleanupEventListeners(): void {
  */
 export async function buildTimelineForOp(
   timelineId: string,
-  request: BuildGraphRequest
+  request: BuildOpPlaybackGraphRequest
 ): Promise<BuildGraphResponse> {
   // Ensure progress listener is initialized
   // await initProgressListener();
@@ -384,7 +384,7 @@ export async function buildTimelineForOp(
 // /**
 //  * Build a playback graph from operations (legacy - uses global timeline)
 //  */
-// export async function buildGraph(request: BuildGraphRequest): Promise<BuildGraphResponse> {
+// export async function buildGraph(request: BuildOpPlaybackGraphRequest): Promise<BuildGraphResponse> {
 //   // For backward compatibility, use a default timeline ID
 //   return buildGraphForTimeline('global', request);
 // }
@@ -421,7 +421,7 @@ export async function buildGraphFromFilesForTimeline(
     currentTime += estimatedDuration + (options.gap ?? 0);
   }
 
-  const request: BuildGraphRequest = {
+  const request: BuildOpPlaybackGraphRequest = {
     operations,
     sampleRate: options.sampleRate,
     channels: options.channels,

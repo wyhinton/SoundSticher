@@ -14,7 +14,7 @@ import { writable, derived, get, type Readable } from 'svelte/store';
 import { logger } from './logging';
 import { invokeWithPerf } from './performance';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
-import type { BuildGraphRequest, BuildGraphResponse } from './opPlaybackService';
+import type { BuildOpPlaybackGraphRequest, BuildGraphResponse } from './opPlaybackService';
 import { getActiveTimelineId } from './timeline/timelines';
 
 // ============================================================================
@@ -28,7 +28,7 @@ export type TimelineSource =
   | {
       type: 'operation';
       /** The build request for the operation graph */
-      request: BuildGraphRequest;
+      request: BuildOpPlaybackGraphRequest;
     }
   | {
       type: 'audioFile';
@@ -215,13 +215,13 @@ export async function buildTimeline(
 }
 
 /**
- * Build a timeline from a BuildGraphRequest (convenience wrapper)
+ * Build a timeline from a BuildOpPlaybackGraphRequest (convenience wrapper)
  *
  * This is for the common case of building from an operation graph.
  */
 export async function buildTimelineFromRequest(
   timelineId: string,
-  request: BuildGraphRequest
+  request: BuildOpPlaybackGraphRequest
 ): Promise<BuildGraphResponse> {
   return buildTimeline(timelineId, {
     type: 'operation',

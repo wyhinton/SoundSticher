@@ -10,7 +10,7 @@ import { get } from 'svelte/store';
 import { appState } from './state.svelte';
 import {
   buildTimelineForOp,
-  type BuildGraphRequest,
+  type BuildOpPlaybackGraphRequest,
   type AddOpRequest,
   type MergeInputRequest,
 } from './opPlaybackService';
@@ -228,7 +228,7 @@ async function buildBackendGraphsForAllTimelines(): Promise<void> {
       }
 
       // Create the build graph request
-      const request: BuildGraphRequest = {
+      const request: BuildOpPlaybackGraphRequest = {
         operations,
         sampleRate: 44100,
         channels: 2,

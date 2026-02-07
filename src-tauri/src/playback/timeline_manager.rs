@@ -7,7 +7,7 @@
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
 use crate::op_playback_commands::{
-    AppTimelinePlaybackState, BuildGraphRequest, BuildGraphResponse, PlaybackSession,
+    AppTimelinePlaybackState, BuildGraphResponse, BuildOpPlaybackGraphRequest, PlaybackSession,
 };
 use crate::playback::session_builder::{
     OpPlaybackSessionBuilder, SessionBuildEvent, SessionBuildRequest,
@@ -35,7 +35,7 @@ pub enum TimelineSource {
     /// Audio from an operation graph (the main use case)
     Operation {
         /// The build request for the operation graph
-        request: BuildGraphRequest,
+        request: BuildOpPlaybackGraphRequest,
     },
 
     /// Audio from a single file (future)
@@ -198,7 +198,7 @@ impl TimelinePlaybackManager {
     fn build_operation_timeline<F>(
         &self,
         timeline_id: TimelineId,
-        request: BuildGraphRequest,
+        request: BuildOpPlaybackGraphRequest,
         on_event: F,
     ) -> Result<BuildGraphResponse, String>
     where
