@@ -52,6 +52,7 @@
   import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
   import { type OperationId } from '$lib/state/operation';
   import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
+  import timelinePlaybackService from '$lib/state/timelinePlaybackService';
 
   const dispatch = createEventDispatcher();
 
@@ -335,9 +336,9 @@
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-
+      console.log(clickedTime);
       // Use operation playback service for seeking
-      opPlaybackService
+      timelinePlaybackService
         .seekTimeline(activeTimeline.id, clickedTime)
         .catch((err: unknown) => console.error('Failed to seek:', err));
       return;

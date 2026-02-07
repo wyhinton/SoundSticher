@@ -1628,6 +1628,25 @@ fn run_progress_loop(state: &Arc<OpPlaybackState>, timeline_id: &TimelineId, app
             // We just resumed from pause - reset the wall clock
             let pause_duration = pause_started_at.elapsed();
             total_pause_duration += pause_duration;
+            
+            // Check if seek happened while paused - if seek_seconds changed, use it
+            if let Some(session) = state.get_session(timeline_id) {
+                let current_seek_seconds = *session.seek_seconds.lock().unwrap();
+                let expected_position = initial_seek_offset + accumulated_before_pause;
+                
+                // If seek_seconds differs significantly from our tracked position, a seek happened
+                if (current_seek_seconds - expected_position).abs() > 0.01 {
+                    eprintln!(
+                        "🔊 [progress_loop] SEEK DETECTED during pause: expected={:.3}s, actual={:.3}s, adjusting accumulated_before_pause",
+                        expected_position, current_seek_seconds
+                    );
+                    // Update accumulated_before_pause to reflect the seek position
+                    // The new position is: initial_seek_offset + new_accumulated = current_seek_seconds
+                    // So: new_accumulated = current_seek_seconds - initial_seek_offset
+                    accumulated_before_pause = current_seek_seconds - initial_seek_offset;
+                }
+            }
+            
             eprintln!(
                 "🔊 [progress_loop] RESUMED at iter={}, pause_duration={:.3}s, total_pause_duration={:.3}s, accumulated_before_pause={:.3}s",
                 loop_iteration, pause_duration.as_secs_f32(), total_pause_duration.as_secs_f32(), accumulated_before_pause
