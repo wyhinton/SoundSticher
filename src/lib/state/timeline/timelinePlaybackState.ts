@@ -21,3 +21,19 @@ export const timelinePlaybackState = writable<Record<TimelineId, TimelinePlaybac
 export function timelinePlayhead(timelineId: TimelineId) {
   return derived(timelinePlaybackState, $state => $state[timelineId]?.playheadTime ?? 0);
 }
+
+/**
+ * Derived store to get looping state for a specific timeline
+ * Returns false if timeline is not found
+ */
+export function timelineLooping(timelineId: TimelineId) {
+  return derived(timelinePlaybackState, $state => $state[timelineId]?.looping ?? false);
+}
+
+/**
+ * Derived store to get playing state for a specific timeline
+ * Returns false if timeline is not found
+ */
+export function timelineIsPlaying(timelineId: TimelineId) {
+  return derived(timelinePlaybackState, $state => $state[timelineId]?.isPlaying ?? false);
+}

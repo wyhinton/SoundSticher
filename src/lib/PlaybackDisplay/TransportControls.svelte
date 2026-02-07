@@ -1,11 +1,10 @@
 <script lang="ts">
+  import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import {
-    timelinePlaybackService,
-    timelinePlaybackState,
-    isTimelinePlaying,
-    isTimelinePaused,
-  } from '$lib/state/timelinePlaybackService';
-  import { opPlaybackState } from '$lib/state/opPlaybackService';
+    timelinePlayhead,
+    timelineLooping,
+    timelineIsPlaying,
+  } from '$lib/state/timeline/timelinePlaybackState';
   import { operationDuration } from '$lib/state/waveformCache';
 
   // Component props
@@ -13,22 +12,23 @@
   export let timelineId: string | null = null;
 
   let bufferingProgress = 0;
-  let playHeadPosition = 0;
 
-  // Listen to operation playback progress when using operation system
-  $: playHeadPosition = $opPlaybackState.positionSeconds;
+  // Create timeline-specific derived stores
+  $: playheadStore = timelineId ? timelinePlayhead(timelineId) : null;
+  $: loopingStore = timelineId ? timelineLooping(timelineId) : null;
+  $: isPlayingStore = timelineId ? timelineIsPlaying(timelineId) : null;
+
+  // Reactive values from timeline-specific stores
+  $: playHeadPosition = playheadStore ? $playheadStore : 0;
+  $: isLoopEnabled = loopingStore ? $loopingStore : false;
+  $: isCurrentlyPlaying = isPlayingStore ? $isPlayingStore : false;
 
   // Reactive current duration based on operation system
   $: currentDuration = $operationDuration;
 
-  // Reactive play state - use new timeline service
-  $: isCurrentlyPlaying = $isTimelinePlaying && !$isTimelinePaused;
-
-  // Reactive pause state - use new timeline service
-  $: isCurrentlyPaused = $isTimelinePaused;
-
-  // Reactive loop state (still from opPlaybackState for now)
-  $: isLoopEnabled = $opPlaybackState.loopEnabled;
+  // Paused state is when we have a playing timeline but isPlaying is false
+  // (This requires additional state tracking in timelinePlaybackState if needed)
+  $: isCurrentlyPaused = false; // TODO: Add paused state to timelinePlaybackState
 
   // Transport control functions using new timeline playback service
   async function handlePlay() {
@@ -109,7 +109,8 @@
         console.error('No timeline ID - cannot toggle loop. Please provide a timelineId prop.');
         return;
       }
-      await timelinePlaybackService.setTimelineLoop(timelineId, !$opPlaybackState.loopEnabled);
+      // Use timeline-specific loop state instead of global opPlaybackState
+      await timelinePlaybackService.setTimelineLoop(timelineId, !isLoopEnabled);
     } catch (error) {
       console.error('Error toggling loop:', error);
     }
