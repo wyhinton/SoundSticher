@@ -6,31 +6,42 @@
     type Timeline,
     operationTimelines,
   } from '$lib/state/timeline/timelines';
+  import { timelinePlaybackState } from '$lib/state/timeline/timelinePlaybackState';
   import { appState } from '$lib/state/state.svelte';
   import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
   // Reactive stores
   $: timelinesState = $timelinesStore;
+  $: playbackState = $timelinePlaybackState;
 
   // Computed data for display
   $: timelineCount = Object.keys($timelinesStore.timelines).length;
 
   // Timeline summary data
-  $: timelinesSummary = Object.values(timelinesState.timelines).map((timeline: Timeline) => ({
-    id: timeline.id,
-    sourceKind: timeline.source.kind,
-    isActive: false, // No active timeline concept in simplified version
-    isDocked: false, // No layout concept in simplified version
-    isFloating: false, // No layout concept in simplified version
-    // Add source-specific info
-    ...(timeline.source.kind === 'operation' ? { operationId: timeline.source.operationId } : {}),
-    ...(timeline.source.kind === 'audioFile' ? { fileId: timeline.source.fileId } : {}),
-    ...(timeline.source.kind === 'comparison'
-      ? {
-          comparisonA: timeline.source.a,
-          comparisonB: timeline.source.b,
-        }
-      : {}),
-  }));
+  $: timelinesSummary = Object.values(timelinesState.timelines).map((timeline: Timeline) => {
+    // Get playback state for this timeline
+    const playback = playbackState[timeline.id];
+    
+    return {
+      id: timeline.id,
+      sourceKind: timeline.source.kind,
+      isActive: false, // No active timeline concept in simplified version
+      isDocked: false, // No layout concept in simplified version
+      isFloating: false, // No layout concept in simplified version
+      // Playback state
+      playheadTime: playback?.playheadTime ?? 0,
+      isPlaying: playback?.isPlaying ?? false,
+      looping: playback?.looping ?? false,
+      // Add source-specific info
+      ...(timeline.source.kind === 'operation' ? { operationId: timeline.source.operationId } : {}),
+      ...(timeline.source.kind === 'audioFile' ? { fileId: timeline.source.fileId } : {}),
+      ...(timeline.source.kind === 'comparison'
+        ? {
+            comparisonA: timeline.source.a,
+            comparisonB: timeline.source.b,
+          }
+        : {}),
+    };
+  });
 
   // Interaction functions
   function createTestTimeline() {
@@ -162,6 +173,7 @@
             <tr>
               <th>ID</th>
               <th>Source</th>
+              <th>Playback State</th>
               <th>Status</th>
               <th>Layout</th>
               <th>View</th>
@@ -198,6 +210,26 @@
                   {:else if timeline.comparisonA && timeline.comparisonB}
                     <div class="source-detail">A vs B</div>
                   {/if}
+                </td>
+                <td class="playback-info">
+                  <div class="playback-details">
+                    <div class="playback-item">
+                      <span class="playback-label">Playhead:</span>
+                      <span class="playback-value">{timeline.playheadTime.toFixed(3)}s</span>
+                    </div>
+                    <div class="playback-item">
+                      <span class="playback-label">Playing:</span>
+                      <span class="playback-value" class:playing={timeline.isPlaying}>
+                        {timeline.isPlaying ? '▶ Yes' : '⏸ No'}
+                      </span>
+                    </div>
+                    <div class="playback-item">
+                      <span class="playback-label">Loop:</span>
+                      <span class="playback-value" class:looping={timeline.looping}>
+                        {timeline.looping ? '🔁 On' : '➡ Off'}
+                      </span>
+                    </div>
+                  </div>
                 </td>
                 <td class="status-info">
                   {#if timeline.isActive}
@@ -288,6 +320,20 @@
   </div>
 
   <!-- Active Timeline Details -->
+
+  <!-- Timeline Playback State Store -->
+  <div class="playback-state-section">
+    <h4><i class="fa fa-play-circle"></i> Timeline Playback State ({Object.keys(playbackState).length})</h4>
+    {#if Object.keys(playbackState).length === 0}
+      <div class="empty-state">
+        <i class="fa fa-play-circle"></i>
+        <p>No playback state yet</p>
+        <small>Play a timeline to see playback state here</small>
+      </div>
+    {:else}
+      <PrismWrapper data={playbackState} maxHeight="300px" fontSize="11px" />
+    {/if}
+  </div>
 
   <!-- Full Store State -->
   <div class="store-state-section">
@@ -445,6 +491,51 @@
     font-size: 9px;
   }
 
+  .playback-info {
+    min-width: 160px;
+  }
+
+  .playback-details {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .playback-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .playback-label {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .playback-value {
+    font-family: 'Courier New', monospace;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 2px 6px;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .playback-value.playing {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+    font-weight: 600;
+  }
+
+  .playback-value.looping {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    font-weight: 600;
+  }
+
   .status-badge,
   .layout-badge {
     display: inline-flex;
@@ -582,6 +673,7 @@
 
   /* Other sections */
   .active-timeline-section h4,
+  .playback-state-section h4,
   .store-state-section h4 {
     margin: 0 0 16px 0;
     color: #f59e0b;
@@ -590,6 +682,10 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .playback-state-section h4 {
+    color: #4ade80;
   }
 
   /* Button Styles */
