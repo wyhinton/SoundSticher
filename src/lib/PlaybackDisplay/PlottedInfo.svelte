@@ -48,7 +48,7 @@
 <div class="d-flex text-success">
   <!-- Timeline header with operation info -->
   <div class="timeline-header">
-    <span class="timeline-operation-name">
+    <span class="timeline-operation-name px-2">
       {timeline.source.kind === 'operation'
         ? `Operation: ${timeline.source.operationId}`
         : 'Timeline'}
@@ -61,11 +61,11 @@
   </div>
 
   <!-- Show progress bar while loading waveforms -->
-  {#if isLoading && operationProgress < 1}
+  <!-- {#if isLoading && operationProgress < 1}
     <Progress value={operationProgress}></Progress>
-  {/if}
+  {/if} -->
 
-  <div class="d-flex gap-1">
+  <div class="d-flex">
     <TransportControls disabled={transportDisabled} timelineId={timeline.id} />
     <TimeDisplay
       compact={true}
@@ -83,15 +83,15 @@
   }
 
   .timeline-header {
-    background-color: var(--bs-secondary-bg);
     border-bottom: 1px solid var(--bs-border-color);
     font-size: 14px;
+    background-color: black;
   }
 
   .timeline-operation-name {
     font-weight: 500;
-    color: var(--bs-secondary);
-    font-size: 11px;
+    font-size: 14px;
+    vertical-align: sub;
   }
 
   .loading-indicator {

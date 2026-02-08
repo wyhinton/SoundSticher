@@ -4,9 +4,9 @@
     timelineLooping,
     timelineIsPlaying,
   } from '$lib/state/timeline/timelinePlaybackState';
+  import { setActiveTimeline } from '$lib/state/timeline/timelines';
   import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
-  import { setActiveTimeline } from '$lib/state/timeline/timelines';
 
   // Component props
   export let disabled: boolean = false;
@@ -193,9 +193,6 @@
 <style>
   .transport-controls {
     background: linear-gradient(to bottom, #2c3e50, #34495e);
-    border: 1px solid #1a252f;
-    border-radius: 4px;
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
     transition: opacity 0.2s ease;
     padding: 2px 4px;
   }
@@ -212,7 +209,6 @@
     border: 1px solid #4a5568;
     background: linear-gradient(to bottom, #4a5568, #2d3748);
     color: #e2e8f0;
-    border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -220,6 +216,7 @@
     font-size: 11px;
     transition: all 0.1s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
   }
 
   .btn-transport:hover {
@@ -293,7 +290,7 @@
     background: #2d3748;
     border: 1px solid #1a252f;
     border-top: none;
-    border-radius: 0 0 4px 4px;
+
     font-size: 11px;
   }
 
