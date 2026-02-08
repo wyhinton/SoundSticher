@@ -258,7 +258,8 @@ export async function playTimeline(timelineId: string, startSeconds?: number): P
     perTimelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
-        ...state[timelineId],
+        playheadTime: state[timelineId]?.playheadTime ?? 0,
+        looping: state[timelineId]?.looping ?? false,
         isPlaying: true,
       },
     }));
@@ -271,22 +272,18 @@ export async function playTimeline(timelineId: string, startSeconds?: number): P
 }
 
 /**
- * Pause the currently playing timeline
+ * Pause the specified timeline
  */
-export async function pauseTimeline(): Promise<void> {
-  const state = get(internalState);
-  if (!state.activeTimelineId) {
-    logger.opPlayback.warning('No active timeline to pause');
-    return;
-  }
-
-  logger.opPlayback.info(`Pausing timeline '${state.activeTimelineId}'`);
+export async function pauseTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Pausing timeline '${timelineId}'`);
 
   try {
-    const result = await invokeWithPerf('timeline_pause');
+    const result = await invokeWithPerf('timeline_pause', {
+      timelineId,
+    });
 
     if (!result.ok) {
-      throw new Error(`Failed to pause timeline: ${result.error.message}`);
+      throw new Error(`Failed to pause timeline '${timelineId}': ${result.error.message}`);
     }
 
     internalState.update(s => ({
@@ -294,30 +291,26 @@ export async function pauseTimeline(): Promise<void> {
       isPaused: true,
     }));
 
-    logger.opPlayback.success(`Timeline '${state.activeTimelineId}' paused`);
+    logger.opPlayback.success(`Timeline '${timelineId}' paused`);
   } catch (error) {
-    logger.opPlayback.error('Failed to pause timeline:', error);
+    logger.opPlayback.error(`Failed to pause timeline '${timelineId}':`, error);
     throw error;
   }
 }
 
 /**
- * Resume the currently paused timeline
+ * Resume the specified timeline
  */
-export async function resumeTimeline(): Promise<void> {
-  const state = get(internalState);
-  if (!state.activeTimelineId) {
-    logger.opPlayback.warning('No active timeline to resume');
-    return;
-  }
-
-  logger.opPlayback.info(`Resuming timeline '${state.activeTimelineId}'`);
+export async function resumeTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Resuming timeline '${timelineId}'`);
 
   try {
-    const result = await invokeWithPerf('timeline_resume');
+    const result = await invokeWithPerf('timeline_resume', {
+      timelineId,
+    });
 
     if (!result.ok) {
-      throw new Error(`Failed to resume timeline: ${result.error.message}`);
+      throw new Error(`Failed to resume timeline '${timelineId}': ${result.error.message}`);
     }
 
     internalState.update(s => ({
@@ -325,9 +318,9 @@ export async function resumeTimeline(): Promise<void> {
       isPaused: false,
     }));
 
-    logger.opPlayback.success(`Timeline '${state.activeTimelineId}' resumed`);
+    logger.opPlayback.success(`Timeline '${timelineId}' resumed`);
   } catch (error) {
-    logger.opPlayback.error('Failed to resume timeline:', error);
+    logger.opPlayback.error(`Failed to resume timeline '${timelineId}':`, error);
     throw error;
   }
 }
@@ -335,14 +328,16 @@ export async function resumeTimeline(): Promise<void> {
 /**
  * Stop playback completely
  */
-export async function stopTimeline(): Promise<void> {
-  logger.opPlayback.info('Stopping timeline playback');
+export async function stopTimeline(timelineId: string): Promise<void> {
+  logger.opPlayback.info(`Stopping timeline '${timelineId}'`);
 
   try {
-    const result = await invokeWithPerf('timeline_stop');
+    const result = await invokeWithPerf('timeline_stop', {
+      timelineId,
+    });
 
     if (!result.ok) {
-      throw new Error(`Failed to stop timeline: ${result.error.message}`);
+      throw new Error(`Failed to stop timeline '${timelineId}': ${result.error.message}`);
     }
 
     internalState.update(s => ({
@@ -352,9 +347,9 @@ export async function stopTimeline(): Promise<void> {
       isPaused: false,
     }));
 
-    logger.opPlayback.success('Timeline playback stopped');
+    logger.opPlayback.success(`Timeline '${timelineId}' stopped`);
   } catch (error) {
-    logger.opPlayback.error('Failed to stop timeline:', error);
+    logger.opPlayback.error(`Failed to stop timeline '${timelineId}':`, error);
     throw error;
   }
 }
@@ -518,11 +513,11 @@ export async function togglePlayPauseActiveTimeline(): Promise<void> {
 
   // If this timeline is currently playing and not paused, pause it
   if (state.isPlaying && !state.isPaused && state.activeTimelineId === activeTimelineId) {
-    await pauseTimeline();
+    await pauseTimeline(activeTimelineId);
   }
   // If this timeline is currently paused, resume it
   else if (state.isPaused && state.activeTimelineId === activeTimelineId) {
-    await resumeTimeline();
+    await resumeTimeline(activeTimelineId);
   }
   // Otherwise, start playing this timeline
   else {

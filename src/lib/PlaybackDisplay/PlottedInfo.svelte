@@ -54,7 +54,7 @@
         : 'Timeline'}
     </span>
     {#if isLoading}
-      <span class="loading-indicator">Loading...</span>
+      <!-- <span class="loading-indicator">Loading...</span> -->
     {:else if hasError}
       <span class="error-indicator">Error: {waveformState?.error}</span>
     {/if}

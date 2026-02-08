@@ -395,7 +395,7 @@ pub fn run() {
             op_playback_commands::op_playback_set_loop,
             op_playback_commands::op_playback_set_volume,
             op_playback_commands::op_playback_stop,
-            op_playback_commands::get_op_playback_state,
+            timeline_playback_commands::get_app_playback_state,
             // Timeline playback commands (new architecture)
             timeline_playback_commands::timeline_build_playback,
             timeline_playback_commands::timeline_play,

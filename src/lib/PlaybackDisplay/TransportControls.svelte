@@ -52,7 +52,7 @@
         return;
       }
       setActiveTimeline(timelineId);
-      await timelinePlaybackService.pauseTimeline();
+      await timelinePlaybackService.pauseTimeline(timelineId);
     } catch (error) {
       console.error('Error pausing audio:', error);
     }
@@ -65,7 +65,7 @@
         return;
       }
       setActiveTimeline(timelineId);
-      await timelinePlaybackService.resumeTimeline();
+      await timelinePlaybackService.resumeTimeline(timelineId);
     } catch (error) {
       console.error('Error resuming audio:', error);
     }
@@ -78,7 +78,7 @@
         return;
       }
       setActiveTimeline(timelineId);
-      await timelinePlaybackService.stopTimeline();
+      await timelinePlaybackService.stopTimeline(timelineId);
     } catch (error) {
       console.error('Error stopping audio:', error);
     }

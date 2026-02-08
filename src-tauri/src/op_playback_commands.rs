@@ -41,17 +41,6 @@ impl From<AudioSpec> for AudioSpecDebugInfo {
     }
 }
 
-/// Serializable representation of OpPlaybackState for debugging
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpPlaybackStateDebugInfo {
-    pub sessions: HashMap<TimelineId, PlaybackSessionDebugInfo>,
-    pub active_timeline: Option<TimelineId>,
-    pub is_playing: bool,
-    pub is_paused: bool,
-    pub total_sessions: usize,
-}
-
 /// Events emitted during playback graph building
 #[derive(Clone, Serialize)]
 #[serde(
@@ -1688,54 +1677,6 @@ pub fn op_playback_clear_all_timelines(
     state.sessions.clear();
 
     Ok(())
-}
-
-/// Get the current state of OpPlaybackState for debugging purposes
-#[tauri::command]
-pub fn get_op_playback_state(
-    state: State<'_, Arc<AppTimelinePlaybackState>>,
-) -> Result<OpPlaybackStateDebugInfo, String> {
-    let active_timeline = state.get_active_timeline();
-    let is_playing = state.is_playing.load(Ordering::Relaxed);
-    let is_paused = state.is_paused.load(Ordering::Relaxed);
-
-    let mut sessions_info = HashMap::new();
-
-    for entry in state.sessions.iter() {
-        let timeline_id = entry.key();
-        let session = entry.value();
-
-        let operation_names: Vec<String> = session.op_ids.keys().cloned().collect();
-        let operation_count = operation_names.len();
-        let duration_seconds = session.duration_seconds();
-        let progress = *session.progress.lock().unwrap();
-        let seek_seconds = *session.seek_seconds.lock().unwrap() as f32;
-        let loop_playback = *session.loop_playback.lock().unwrap();
-        let spec = session.spec.into();
-
-        sessions_info.insert(
-            timeline_id.clone(),
-            PlaybackSessionDebugInfo {
-                duration_seconds,
-                progress,
-                seek_seconds,
-                loop_playback,
-                operation_names,
-                operation_count,
-                spec,
-            },
-        );
-    }
-
-    let total_sessions = sessions_info.len();
-
-    Ok(OpPlaybackStateDebugInfo {
-        sessions: sessions_info,
-        active_timeline,
-        is_playing,
-        is_paused,
-        total_sessions,
-    })
 }
 
 // Helper functions

@@ -83,7 +83,7 @@ export interface PerformanceState {
   get_durations_batch: PerformanceMetric[];
   get_filtered_artifacts: PerformanceMetric[];
   get_metadata: PerformanceMetric[];
-  get_op_playback_state: PerformanceMetric[];
+  get_app_playback_state: PerformanceMetric[];
   get_sample_cache_stats: PerformanceMetric[];
   get_waveform: PerformanceMetric[];
   get_waveform_cache_stats: PerformanceMetric[];
@@ -155,7 +155,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   get_durations_batch: [],
   get_filtered_artifacts: [],
   get_metadata: [],
-  get_op_playback_state: [],
+  get_app_playback_state: [],
   get_sample_cache_stats: [],
   get_waveform: [],
   get_waveform_cache_stats: [],

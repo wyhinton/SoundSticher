@@ -337,12 +337,8 @@ impl TimelinePlaybackController {
     // ── pause ────────────────────────────────────────────────────────────
 
     /// Pause the currently active timeline.
-    pub fn pause(&self) -> Result<(), Error> {
-        let timeline_id = self
-            .state
-            .get_active_timeline()
-            .ok_or_else(|| Error::PlaybackError("No active timeline to pause".to_string()))?;
-
+    /// Pause a specific timeline.
+    pub fn pause(&self, timeline_id: &TimelineId) -> Result<(), Error> {
         // Check if already paused
         if self.state.is_paused.load(Ordering::Relaxed) {
             return Err(Error::PlaybackError(format!(
@@ -357,6 +353,20 @@ impl TimelinePlaybackController {
                 "Timeline '{}' is not currently playing",
                 timeline_id
             )));
+        }
+
+        // Check if this is the active timeline
+        if let Some(active) = self.state.get_active_timeline() {
+            if &active != timeline_id {
+                return Err(Error::PlaybackError(format!(
+                    "Timeline '{}' is not currently active",
+                    timeline_id
+                )));
+            }
+        } else {
+            return Err(Error::PlaybackError(
+                "No active timeline to pause".to_string(),
+            ));
         }
 
         let sink = self.state.sink.lock().unwrap();
@@ -396,12 +406,8 @@ impl TimelinePlaybackController {
     // ── resume ───────────────────────────────────────────────────────────
 
     /// Resume the currently active timeline.
-    pub fn resume(&self) -> Result<(), Error> {
-        let timeline_id = self
-            .state
-            .get_active_timeline()
-            .ok_or_else(|| Error::PlaybackError("No active timeline to resume".to_string()))?;
-
+    /// Resume a specific timeline.
+    pub fn resume(&self, timeline_id: &TimelineId) -> Result<(), Error> {
         // Check if not paused
         if !self.state.is_paused.load(Ordering::Relaxed) {
             return Err(Error::PlaybackError(format!(
@@ -416,6 +422,20 @@ impl TimelinePlaybackController {
                 "Timeline '{}' is not currently playing",
                 timeline_id
             )));
+        }
+
+        // Check if this is the active timeline
+        if let Some(active) = self.state.get_active_timeline() {
+            if &active != timeline_id {
+                return Err(Error::PlaybackError(format!(
+                    "Timeline '{}' is not currently active",
+                    timeline_id
+                )));
+            }
+        } else {
+            return Err(Error::PlaybackError(
+                "No active timeline to resume".to_string(),
+            ));
         }
 
         let sink = self.state.sink.lock().unwrap();
@@ -873,20 +893,22 @@ pub fn timeline_play(
 
 #[tauri::command]
 pub fn timeline_pause(
+    timeline_id: TimelineId,
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), Error> {
-    make_controller(&state, &logging, app).pause()
+    make_controller(&state, &logging, app).pause(&timeline_id)
 }
 
 #[tauri::command]
 pub fn timeline_resume(
+    timeline_id: TimelineId,
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
 ) -> Result<(), Error> {
-    make_controller(&state, &logging, app).resume()
+    make_controller(&state, &logging, app).resume(&timeline_id)
 }
 
 #[tauri::command]
@@ -970,4 +992,63 @@ fn make_controller(
     app: AppHandle,
 ) -> TimelinePlaybackController {
     TimelinePlaybackController::new(Arc::clone(state.inner()), Arc::clone(logging.inner()), app)
+}
+
+/// Get the current state of OpPlaybackState for debugging purposes
+#[tauri::command]
+pub fn get_app_playback_state(
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
+) -> Result<AppPlaybackStateDebugInfo, String> {
+    let active_timeline = state.get_active_timeline();
+    let is_playing = state.is_playing.load(Ordering::Relaxed);
+    let is_paused = state.is_paused.load(Ordering::Relaxed);
+
+    let mut sessions_info = HashMap::new();
+
+    for entry in state.sessions.iter() {
+        let timeline_id = entry.key();
+        let session = entry.value();
+
+        let operation_names: Vec<String> = session.op_ids.keys().cloned().collect();
+        let operation_count = operation_names.len();
+        let duration_seconds = session.duration_seconds();
+        let progress = *session.progress.lock().unwrap();
+        let seek_seconds = *session.seek_seconds.lock().unwrap() as f32;
+        let loop_playback = *session.loop_playback.lock().unwrap();
+        let spec = session.spec.into();
+
+        sessions_info.insert(
+            timeline_id.clone(),
+            PlaybackSessionDebugInfo {
+                duration_seconds,
+                progress,
+                seek_seconds,
+                loop_playback,
+                operation_names,
+                operation_count,
+                spec,
+            },
+        );
+    }
+
+    let total_sessions = sessions_info.len();
+
+    Ok(AppPlaybackStateDebugInfo {
+        sessions: sessions_info,
+        active_timeline,
+        is_playing,
+        is_paused,
+        total_sessions,
+    })
+}
+
+/// Serializable representation of OpPlaybackState for debugging
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppPlaybackStateDebugInfo {
+    pub sessions: HashMap<TimelineId, PlaybackSessionDebugInfo>,
+    pub active_timeline: Option<TimelineId>,
+    pub is_playing: bool,
+    pub is_paused: bool,
+    pub total_sessions: usize,
 }

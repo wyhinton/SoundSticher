@@ -37,7 +37,7 @@
     if (!isRefreshing) return;
 
     try {
-      const state = await invoke<OpPlaybackStateDebugInfo>('get_op_playback_state');
+      const state = await invoke<OpPlaybackStateDebugInfo>('get_app_playback_state');
       playbackState = state;
       error = null;
       lastUpdate = Date.now();
