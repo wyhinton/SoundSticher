@@ -1,15 +1,15 @@
 <script lang="ts">
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
   // import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons'
+  import lottie from 'lottie-web';
+  import { tick } from 'svelte';
+
+  import DropDownActionsButton from '../components/Shared/DropDownActionsButton.svelte';
   import {
     appState,
     currentOperationSources,
     removeSourceFromCurrentOperation,
   } from '../state/state.svelte';
-  import { tick } from 'svelte';
-  import lottie from 'lottie-web';
-
-  import DropDownActionsButton from '../components/Shared/DropDownActionsButton.svelte';
   import { dropzone } from '$lib/attachments/droppable';
 
   // Get sample op files for display using operationId

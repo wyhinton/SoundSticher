@@ -1,4 +1,23 @@
 <script lang="ts">
+  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+  import { onDestroy, onMount } from 'svelte';
+  import { derived, get } from 'svelte/store';
+  import clipboard from 'tauri-plugin-clipboard-api';
+  import ArtifactRegistryDebug from '$lib/components/debug/tab_panels/ArtifactRegistryDebug.svelte';
+  import LoggingControls from '$lib/components/debug/tab_panels/LoggingControls.svelte';
+  import OpPlaybackDebug from '$lib/components/debug/tab_panels/OpPlaybackDebug.svelte';
+  import PerformanceDebugTable from '$lib/components/debug/tab_panels/PerformanceDebugTable.svelte';
+  import TimelineStoreDebug from '$lib/components/debug/tab_panels/TimelineStoreDebug.svelte';
+  import TabContainer from '$lib/components/debug/TabContainer.svelte';
+  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
+  import { exportState } from '$lib/state/export';
+  import { addToFavorites } from '$lib/state/favorites';
+  import {
+    initializeBackendLogListener,
+    updateBackendLoggingConfig,
+    loggingState,
+    listenerLogs,
+  } from '$lib/state/logging';
   import {
     exportAudio,
     invokeWithPerf,
@@ -6,6 +25,12 @@
     resetPerformance,
     type PerformanceMetric,
   } from '$lib/state/performance';
+  import {
+    selectedCount,
+    previewCount,
+    selectionSource,
+    selectionDisplayData as selectionDisplayDataStore,
+  } from '$lib/state/selection.svelte';
   import {
     appState,
     hoveredSourceItem,
@@ -15,29 +40,6 @@
     callSiteTrackingEnabled,
     toggleCallSiteTrackingEnabled,
   } from '$lib/state/state.svelte';
-  import clipboard from 'tauri-plugin-clipboard-api';
-  import { derived, get } from 'svelte/store';
-  import { toSource } from '$lib/utils/format';
-  import { onDestroy, onMount } from 'svelte';
-  import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-  import { exportState } from '$lib/state/export';
-  import TabContainer from '$lib/components/debug/TabContainer.svelte';
-  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
-  import LoggingControls from '$lib/components/debug/tab_panels/LoggingControls.svelte';
-  import ArtifactRegistryDebug from '$lib/components/debug/tab_panels/ArtifactRegistryDebug.svelte';
-  import {
-    selectedCount,
-    previewCount,
-    selectionSource,
-    selectionDisplayData as selectionDisplayDataStore,
-  } from '$lib/state/selection.svelte';
-  import {
-    initializeBackendLogListener,
-    updateBackendLoggingConfig,
-    loggingState,
-    listenerLogs,
-  } from '$lib/state/logging';
-  import { addToFavorites } from '$lib/state/favorites';
   import {
     undo,
     redo,
@@ -49,9 +51,7 @@
     getRedoStack,
     clearUndoRedoHistory,
   } from '$lib/state/undo/undo';
-  import TimelineStoreDebug from '$lib/components/debug/tab_panels/TimelineStoreDebug.svelte';
-  import OpPlaybackDebug from '$lib/components/debug/tab_panels/OpPlaybackDebug.svelte';
-  import PerformanceDebugTable from '$lib/components/debug/tab_panels/PerformanceDebugTable.svelte';
+  import { toSource } from '$lib/utils/format';
 
   // Helper function to process svg_path properties based on display mode
   function processSvgPaths(obj: any, mode: 'full' | 'trim' | 'hide', maxLength: number = 100): any {

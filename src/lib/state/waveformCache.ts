@@ -12,14 +12,12 @@
 // - Waveforms can arrive out of order, fail, or be re-requested without breaking layout
 
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
-import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
-import type { OperationDef, MergeOp } from './operation';
+import { durationCache } from './durationCache';
 import { logger } from './logging';
+import type { OperationDef, MergeOp } from './operation';
 import { opPlaybackService, type AddOpRequest, type MergeInputRequest } from './opPlaybackService';
 import { invokeWithPerf } from './performance';
-import { durationCache } from './durationCache';
-import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
-
+import { appState, type TimelineItem, type AudioFileTimelineItem } from './state.svelte';
 import {
   type FlattenedTimelineItem,
   type TimelineHierarchy,
@@ -27,6 +25,8 @@ import {
   getIndicesToMoveOnDrag,
 } from './timeline/timelineGraph';
 import { getHierarchicalTimelineItems, TimelineItemWithHierarchy } from './timeline/timelines';
+import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
+
 
 // ============================================================================
 // TYPES

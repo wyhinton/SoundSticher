@@ -1,13 +1,13 @@
 import { get } from 'svelte/store';
-import { logger } from './logging';
-import { invokeWithPerf } from './performance';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
+import { logger } from './logging';
 import type {
   BuildOpPlaybackGraphRequest,
   BuildGraphResponse,
   AddOpRequest,
 } from './opPlaybackService';
 import { useSampleCache } from './opPlaybackService';
+import { invokeWithPerf } from './performance';
 
 /**
  * Typed event definitions for build graph progress

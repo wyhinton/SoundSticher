@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { save as testSave } from '@tauri-apps/plugin-dialog';
-  import { invokeWithPerf } from './state/performance';
+  import { createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
+  import type { ExportAudioEvent } from './state/events';
   import {
-    exportState,
     applyFormatDefaults,
+    exportState,
     type ExportSettings,
     type ExportState,
   } from './state/export';
-  import { formatPercent } from './utils/format';
+  import { invokeWithPerf } from './state/performance';
   import { createTypedEventChannelWithLogging } from './utils/channelMaker';
-  import type { ExportAudioEvent } from './state/events';
+  import { formatPercent } from './utils/format';
 
   const dispatch = createEventDispatcher();
 

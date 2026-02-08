@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { activeStatus } from './state/status';
-  import { appState } from './state/state.svelte';
-  import { formatBytes } from './utils/format';
   import { invokeWithPerf } from './state/performance';
+  import { appState } from './state/state.svelte';
+  import { activeStatus } from './state/status';
+  import { formatBytes } from './utils/format';
 
   let lastActivity = '';
 

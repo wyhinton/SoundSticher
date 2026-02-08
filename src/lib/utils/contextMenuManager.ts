@@ -1,10 +1,10 @@
-import { debugState } from '../state/debug.svelte';
 import { get } from 'svelte/store';
 import type {
   ContextMenuConfig,
   ContextMenuProvider,
   ContextMenuContext,
 } from '../components/ContextMenu/types';
+import { debugState } from '../state/debug.svelte';
 
 /**
  * Context menu manager that handles whether to use custom or browser context menus

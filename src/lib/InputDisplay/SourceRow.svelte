@@ -1,8 +1,6 @@
 <script lang="ts">
-  import { toCssRgb } from '../utils/colors';
-  import type { Section } from '../state/state.svelte';
-  import EditableInput from './EditableInput.svelte';
   import DropDownActionsButton from '../components/Shared/DropDownActionsButton.svelte';
+  import type { Section } from '../state/state.svelte';
   import { addToFavorites, isFavorite } from '$lib/state/favorites';
 
   export let item: Section;

@@ -1,10 +1,10 @@
 // src/lib/stores/appState.ts
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { persisted } from 'svelte-persisted-store';
 import { get } from 'svelte/store';
-import { type Section, callSiteTrackingEnabled } from './state.svelte';
+import { persisted } from 'svelte-persisted-store';
 import type { ExportAudioEvent } from './events';
 import { exportState, type ExportSettings } from './export';
+import { type Section, callSiteTrackingEnabled } from './state.svelte';
 
 export interface PerformanceMetric {
   time: number;

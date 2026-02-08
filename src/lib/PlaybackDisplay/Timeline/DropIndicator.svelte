@@ -16,7 +16,7 @@
     y2={130}
     stroke="#00BFFF"
     stroke-width={2}
-    stroke-dasharray={`4 2`}
+    stroke-dasharray="4 2"
     opacity="0.8"
     pointer-events="none"
     class="drop-indicator-line"

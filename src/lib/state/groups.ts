@@ -1,7 +1,7 @@
-import { AbletonColor } from '$lib/utils/colors';
 import { get } from 'svelte/store';
-import { appState, AppState, AudioFileItem } from './state.svelte';
 import { loggingState, logger } from './logging';
+import { appState, AppState, AudioFileItem } from './state.svelte';
+import { AbletonColor } from '$lib/utils/colors';
 
 export interface GroupsState {
   defs: Record<string, GroupDef>; // serialized definitions

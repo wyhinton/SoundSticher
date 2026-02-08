@@ -1,8 +1,8 @@
-import { persisted } from 'svelte-persisted-store';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { get } from 'svelte/store';
 import { writable } from 'svelte/store';
-import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { persisted } from 'svelte-persisted-store';
 
 export interface LoggingState {
   artifactsLog: boolean;

@@ -1,58 +1,54 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
-  import { createEventDispatcher } from 'svelte';
-  import { appState } from '../state/state.svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { opPlaybackService } from '../state/opPlaybackService';
   import {
-    getItemSize,
-    isItemActive,
+    previewActive,
+    previewIds,
+    selectedIds,
+    selectionService,
+  } from '../state/selection.svelte';
+  import { appState, timelineDebugMode, type AudioFileTimelineItem } from '../state/state.svelte';
+  import {
+    buildHierarchyMaps,
+    getIndicesToMoveOnDrag,
+    type FlattenedTimelineItem,
+  } from '../state/timeline/timelineGraph';
+  import {
     canItemBeDragged,
     getItemColor,
+    getItemSize,
     getItemSvgPath,
+    isItemActive,
   } from '../utils/timelineHelpers';
-  import TimelineSegment from './Timeline/TimelineSegment.svelte';
+  import { D3TimelineManager } from './Timeline/D3TimelineManager';
+  import {
+    DEFAULT_DD,
+    DragDropManager,
+    type DragDropState,
+    type DragEndEvent,
+    type DragMoveEvent,
+    type DragStartEvent,
+  } from './Timeline/DragDropManager';
+  import DropIndicator from './Timeline/DropIndicator.svelte';
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
-  import DropIndicator from './Timeline/DropIndicator.svelte';
-  import {
-    selectionService,
-    selectedIds,
-    previewIds,
-    previewActive,
-  } from '../state/selection.svelte';
-  import { D3TimelineManager } from './Timeline/D3TimelineManager';
-  import { timelineDebugMode, type TimelineItem } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
-  import {
-    timelinesStore,
-    type TimelineId,
-    type Timeline,
-    setActiveTimeline,
-  } from '$lib/state/timeline/timelines';
-  import {
-    getIndicesToMoveOnDrag,
-    type TimelineHierarchy,
-    type FlattenedTimelineItem,
-    buildHierarchyMaps,
-  } from '../state/timeline/timelineGraph';
-  import { type AudioFileTimelineItem } from '../state/state.svelte';
-  // Import operation playback service
-  import { opPlaybackService } from '../state/opPlaybackService';
-
-  import {
-    DragDropManager,
-    type DragStartEvent,
-    type DragMoveEvent,
-    type DragEndEvent,
-    type DragDropState,
-    DEFAULT_DD,
-  } from './Timeline/DragDropManager';
+  import TimelineSegment from './Timeline/TimelineSegment.svelte';
   import { dropzone } from '$lib/attachments/droppable';
-  import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
+  import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
   import { type OperationId } from '$lib/state/operation';
-  import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
-  import timelinePlaybackService from '$lib/state/timelinePlaybackService';
   import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
+  import {
+    setActiveTimeline,
+    timelinesStore,
+    type Timeline,
+    type TimelineId,
+  } from '$lib/state/timeline/timelines';
+  // Import operation playback service
+
+  import timelinePlaybackService from '$lib/state/timelinePlaybackService';
+  import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
 
   const dispatch = createEventDispatcher();
 
@@ -601,7 +597,7 @@
   >
     <svg class="waveform-svg-parent" bind:this={svgEl} viewBox={`0 0 ${width} ${height}`}>
       <!-- Fixed header region (top padding) -->
-      <g class="fixed-header" transform={`translate(0, 0)`}>
+      <g class="fixed-header" transform="translate(0, 0)">
         <!-- Reserved space for future header content -->
       </g>
 
@@ -610,7 +606,7 @@
         class="scalable-content"
         transform={`translate(0, ${topPadding}) scale(1, ${contentScaleY})`}
       >
-        <g bind:this={pathGroup} transform={``}>
+        <g bind:this={pathGroup} transform="">
           <!-- Zero level baseline (in design space coordinates) -->
           <line
             x1="0"

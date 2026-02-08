@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
 
   interface AudioSpecDebugInfo {

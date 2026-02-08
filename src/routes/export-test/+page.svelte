@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { exportState, type ExportSettings, calculateEstimatedFileSize } from '$lib/state/export';
   import { exportAudio } from '$lib/state/performance';
-  import { onMount } from 'svelte';
 
   let testDuration = 10; // 10 seconds for testing
   let exporting = false;

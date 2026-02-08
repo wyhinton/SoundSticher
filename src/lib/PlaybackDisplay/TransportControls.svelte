@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import {
     timelinePlayhead,
     timelineLooping,
     timelineIsPlaying,
   } from '$lib/state/timeline/timelinePlaybackState';
+  import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
 
   // Component props

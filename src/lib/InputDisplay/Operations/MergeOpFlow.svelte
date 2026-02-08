@@ -1,18 +1,16 @@
 <script lang="ts">
-  import { SvelteFlow, Background, useSvelteFlow } from '@xyflow/svelte';
-  import type { Node, Edge, NodeTypes } from '@xyflow/svelte';
+  import type { Edge, Node, NodeTypes } from '@xyflow/svelte';
+  import { Background, SvelteFlow, useSvelteFlow } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
-  import type { MergeOp, OperationSource, OperationId } from '$lib/state/operation';
-  import { operationMeta, type OperationKind } from '$lib/types';
-
-  import SourceNode from './SourceNode.svelte';
-  import OperationNode from './OperationNode.svelte';
+  import { onMount } from 'svelte';
   import OperationNodeWithStatus from './OperationNodeWithStatus.svelte';
   import OpFlowHeader from './OpFlowHeader.svelte';
-  import { onMount } from 'svelte';
-  import { createOperationRenderStore } from '$lib/state/autoRender';
   import OpFooter from './OpFooter.svelte';
+  import SourceNode from './SourceNode.svelte';
+  import { createOperationRenderStore } from '$lib/state/autoRender';
+  import type { MergeOp, OperationId, OperationSource } from '$lib/state/operation';
+  import { operationMeta, type OperationKind } from '$lib/types';
 
   export let operation: MergeOp;
   export let operationId: OperationId;

@@ -3,10 +3,9 @@
     deleteAllOperations,
     deleteOperationsById,
     type OperationsState,
-    type OperationId,
   } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
-  import { operationMeta, isValidOperationKind, type OperationKind } from '$lib/types';
+  import { isValidOperationKind, operationMeta, type OperationKind } from '$lib/types';
 
   export let onClose: () => void;
 

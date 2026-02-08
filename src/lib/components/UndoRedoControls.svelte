@@ -1,6 +1,6 @@
 <!-- UndoRedoControls.svelte -->
 <script lang="ts">
-  import { undo, redo, canUndo, canRedo, getUndoRedoLabels } from '$lib/state/undo/undo';
+  import { canRedo, canUndo, getUndoRedoLabels, redo, undo } from '$lib/state/undo/undo';
 
   // Reactive updates
   $: undoAvailable = canUndo();

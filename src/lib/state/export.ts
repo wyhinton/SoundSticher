@@ -1,6 +1,6 @@
 // stores/settings.ts
-import { persisted } from 'svelte-persisted-store';
 import type { Writable } from 'svelte/store';
+import { persisted } from 'svelte-persisted-store';
 
 export type ExportSettings = {
   sampleRate: number;

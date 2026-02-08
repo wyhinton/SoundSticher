@@ -1,7 +1,5 @@
 <script lang="ts">
   import type * as d3 from 'd3';
-  import { appState } from '../../state/state.svelte';
-  import { scale } from 'svelte/transition';
 
   export let playHeadX: number;
   export let currentTransform: d3.ZoomTransform;

@@ -1,5 +1,5 @@
-import { get } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
+import { get } from 'svelte/store';
 import { appState } from './state.svelte';
 
 export interface Favorite {

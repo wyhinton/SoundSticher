@@ -1,16 +1,9 @@
+import { listen } from '@tauri-apps/api/event';
 import { derived, get, Readable, writable } from 'svelte/store';
 import { persisted } from 'svelte-persisted-store';
-import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
-import type { OperationDef, OperationId } from '../operation';
-import { logger } from '../logging';
-import {
-  operationWaveforms,
-  waveformCache,
-  type Waveform,
-  type WaveformSpec,
-} from '../waveformCache';
 import { durationCache } from '../durationCache';
-import { listen } from '@tauri-apps/api/event';
+import { logger } from '../logging';
+import type { OperationDef, OperationId } from '../operation';
 import type {
   OpTimelineProgressEvent,
   BuildOpPlaybackGraphRequest,
@@ -18,8 +11,15 @@ import type {
   MergeInputRequest,
 } from '../opPlaybackService';
 import { buildTimelineForOp } from '../opPlaybackService';
-import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
+import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
+import {
+  operationWaveforms,
+  waveformCache,
+  type Waveform,
+  type WaveformSpec,
+} from '../waveformCache';
 import { timelinePlaybackState } from './timelinePlaybackState';
+import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
 // Timeline progress listener for updating individual timeline views
 let timelineProgressUnlisten: (() => void) | null = null;

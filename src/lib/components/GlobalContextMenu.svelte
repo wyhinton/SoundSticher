@@ -1,7 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import ContextMenu from '../components/ContextMenu/ContextMenu.svelte';
   import { contextMenuManager } from '../utils/contextMenuManager';
-  import { onMount } from 'svelte';
 
   // State management using Svelte 5 runes
   let isVisible = $state(false);

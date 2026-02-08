@@ -1,15 +1,14 @@
 <script lang="ts">
   import type { ZoomTransform } from 'd3-zoom';
+  import { selectionService } from '../../state/selection.svelte';
   import type { TimelineItem } from '../../state/state.svelte';
   import {
     getDisplayName,
-    getItemSize,
     getItemColor,
+    getItemSize,
     getItemTextColor,
     shouldShowLabel,
   } from '../../utils/timelineHelpers';
-  import { selectionService } from '../../state/selection.svelte';
-  import { clear } from 'tauri-plugin-clipboard-api';
 
   export let items: TimelineItem[] = [];
   export let originalPathWidth: number;

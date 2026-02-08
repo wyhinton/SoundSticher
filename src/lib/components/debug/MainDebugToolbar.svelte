@@ -1,21 +1,20 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { onDestroy, onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import { customContextMenu, debugState } from '../../state/debug.svelte';
+  import { loggingState } from '../../state/logging';
+  import { useSampleCache } from '../../state/opPlaybackService';
+  import { invokeWithPerf } from '../../state/performance';
   import {
     appState,
     callSiteTrackingEnabled,
+    timelineDebugMode,
     toggleCallSiteTrackingEnabled,
   } from '../../state/state.svelte';
-  import { invokeWithPerf, updateInputs } from '../../state/performance';
-  import { loggingState } from '../../state/logging';
-  import { get } from 'svelte/store';
-  import { onMount, onDestroy } from 'svelte';
-  import { debugState, customContextMenu } from '../../state/debug.svelte';
-  import { timelineDebugMode } from '../../state/state.svelte';
-  import { type DurationResponse } from '$lib/state/durationCache';
   import UndoRedoControls from '../UndoRedoControls.svelte';
   import TimelineOverlay from './TimelineDebugOverlay.svelte';
-  import { useSampleCache } from '../../state/opPlaybackService';
+  import { type DurationResponse } from '$lib/state/durationCache';
 
   // Visibility state
   let isVisible = false;

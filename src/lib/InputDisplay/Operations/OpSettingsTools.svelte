@@ -2,11 +2,11 @@
   import type { OperationId } from '$lib/state/operation';
   import { type RenderPolicy } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
-  import { setRenderPolicyCommand } from '$lib/state/undo/undo';
   import {
-    toggleTimelineVisibilityByOpId,
     isOperationTimelineVisible,
+    toggleTimelineVisibilityByOpId,
   } from '$lib/state/timeline/timelines';
+  import { setRenderPolicyCommand } from '$lib/state/undo/undo';
 
   export let operationId: OperationId;
   export let operationName: string;

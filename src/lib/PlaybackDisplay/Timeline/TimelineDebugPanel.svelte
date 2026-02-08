@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
+  import { invoke } from '@tauri-apps/api/core';
+  import { onDestroy, onMount } from 'svelte';
   import {
-    durationSeconds,
-    type TimelineItem,
     appState,
+    durationSeconds,
     toggleShowFullSvgPath,
+    type TimelineItem,
   } from '../../state/state.svelte';
   import { timelinesStore } from '../../state/timeline/timelines';
-  import { invoke } from '@tauri-apps/api/core';
-  import { onMount, onDestroy } from 'svelte';
+  import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
 
   // Props passed from Timeline component
   export let isDragging: boolean;

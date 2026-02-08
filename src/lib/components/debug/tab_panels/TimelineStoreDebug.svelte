@@ -1,14 +1,14 @@
 <script lang="ts">
+  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
+  import { appState } from '$lib/state/state.svelte';
+  import { timelinePlaybackState } from '$lib/state/timeline/timelinePlaybackState';
   import {
-    timelinesStore,
     createTimelineStateForOp,
+    operationTimelines,
+    timelinesStore,
     toggleTimelineVisibilityByOpId,
     type Timeline,
-    operationTimelines,
   } from '$lib/state/timeline/timelines';
-  import { timelinePlaybackState } from '$lib/state/timeline/timelinePlaybackState';
-  import { appState } from '$lib/state/state.svelte';
-  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
   // Reactive stores
   $: timelinesState = $timelinesStore;
   $: playbackState = $timelinePlaybackState;

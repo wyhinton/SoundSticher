@@ -1,11 +1,11 @@
-import type { D3TimelineManager, TimelineItem } from './D3TimelineManager';
-import { invokeWithPerf, updateInputs } from '../../state/performance';
-import { generateProgressChannel, type SortAudioEvent } from '../../state/events';
 import { Channel } from '@tauri-apps/api/core';
-import { type AppState } from '../../state/state.svelte';
 import { get, type Writable } from 'svelte/store';
 import { writable, type Readable } from 'svelte/store';
+import { generateProgressChannel, type SortAudioEvent } from '../../state/events';
 import { logger } from '../../state/logging';
+import { invokeWithPerf, updateInputs } from '../../state/performance';
+import { type AppState } from '../../state/state.svelte';
+import type { D3TimelineManager, TimelineItem } from './D3TimelineManager';
 
 export type DragDropState = {
   isDragging: boolean;

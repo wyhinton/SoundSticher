@@ -1,6 +1,6 @@
-import type { ContextMenuProvider } from './types';
-import { invokeWithPerf } from '../../state/performance';
 import { invoke } from '@tauri-apps/api/core';
+import { invokeWithPerf } from '../../state/performance';
+import type { ContextMenuProvider } from './types';
 
 //
 

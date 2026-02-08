@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { formatBytes, formatMilliseconds } from '../utils/format';
-  import OperationArtifactsTable from './OperationArtifactsTable.svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import {
     animatedIds,
     appState,
@@ -11,7 +10,8 @@
     setHoveredItem,
     type Section,
   } from '../state/state.svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { formatBytes, formatMilliseconds } from '../utils/format';
+  import OperationArtifactsTable from './OperationArtifactsTable.svelte';
 
   // Props
   export let operationId: string | undefined = undefined;

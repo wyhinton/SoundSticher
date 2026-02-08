@@ -1,20 +1,20 @@
 <script lang="ts">
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
-  import { appState } from './state/state.svelte';
-  import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
-  import Timeline from './PlaybackDisplay/Timeline.svelte';
-  import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import { onDestroy, onMount } from 'svelte';
-  import Footer from './StatusFooter.svelte';
-  import { initializeFrontend } from './state/initializeFrontend';
+  import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
   import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
   import MainDebugToolbar from './components/debug/MainDebugToolbar.svelte';
-  import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
-  import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
   import { TIMELINE_RESIZE } from './config/timelineConfig';
-  import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
+  import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
+  import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
+  import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
+  import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
+  import Timeline from './PlaybackDisplay/Timeline.svelte';
+  import { initializeFrontend } from './state/initializeFrontend';
+  import { appState } from './state/state.svelte';
   import { operationTimelines } from './state/timeline/timelines';
+  import Footer from './StatusFooter.svelte';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})

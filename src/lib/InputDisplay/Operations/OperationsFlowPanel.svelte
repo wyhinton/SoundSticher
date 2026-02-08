@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { appState } from '$lib/state/state.svelte';
-  import { type MergeOp, type OperationDef } from '$lib/state/operation';
-  import { dispatch, type DeleteMultipleOperationsCommand } from '$lib/state/undo/undo';
-  import MergeOpFlow from './MergeOpFlow.svelte';
-  import { dropzone } from '$lib/attachments/droppable';
   import { SvelteFlowProvider } from '@xyflow/svelte';
   import { Pane, Splitpanes } from 'svelte-splitpanes';
   import AddOpsPane from './AddOpsPane.svelte';
+  import MergeOpFlow from './MergeOpFlow.svelte';
+  import { dropzone } from '$lib/attachments/droppable';
+  import { type MergeOp } from '$lib/state/operation';
+  import { appState } from '$lib/state/state.svelte';
+  import { dispatch, type DeleteMultipleOperationsCommand } from '$lib/state/undo/undo';
 
   // Panel visibility
   export let isExpanded = true;

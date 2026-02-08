@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { appState } from '$lib/state/state.svelte';
   import Prism from 'prismjs';
   import 'prismjs/components/prism-json';
   import 'prismjs/themes/prism-okaidia.css';
-  import { onMount, afterUpdate } from 'svelte';
-  import { appState } from '$lib/state/state.svelte';
+  import { afterUpdate, onMount } from 'svelte';
 
   export let data: any = {};
   export let language: string = 'json';

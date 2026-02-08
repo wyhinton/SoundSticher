@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
-import { appState, type AppState } from '../state.svelte';
 import { loggingState } from '../logging';
 import type { OperationId, OperationDef, OperationSource, RenderPolicy } from '../operation';
+import { appState, type AppState } from '../state.svelte';
 import { applyCommand } from './applyCommand';
 import { invertCommand } from './invertCommand';
 

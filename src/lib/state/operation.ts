@@ -1,7 +1,7 @@
 import { get } from 'svelte/store';
-import { appState, AppState, AudioFileItem, Section } from './state.svelte';
-import { loggingState, logger } from './logging';
 import { groupRegistry, GroupResult } from './groups';
+import { loggingState, logger } from './logging';
+import { appState, AppState, AudioFileItem, Section } from './state.svelte';
 import {
   dispatch,
   type DeleteOperationCommand,

@@ -12,11 +12,11 @@
 
 import { writable, derived, get, type Readable } from 'svelte/store';
 import { logger } from './logging';
-import { invokeWithPerf } from './performance';
-import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
 import type { BuildOpPlaybackGraphRequest, BuildGraphResponse } from './opPlaybackService';
-import { getActiveTimelineId } from './timeline/timelines';
+import { invokeWithPerf } from './performance';
 import { timelinePlaybackState as perTimelinePlaybackState } from './timeline/timelinePlaybackState';
+import { getActiveTimelineId } from './timeline/timelines';
+import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
 // ============================================================================
 // TYPES
 // ============================================================================
