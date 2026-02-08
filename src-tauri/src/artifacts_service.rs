@@ -210,17 +210,13 @@ pub async fn get_filtered_artifacts(
             // Try to match against frontend_op_id first if it looks like a frontend ID
             let matches = if is_frontend_id {
                 // Match against frontend_op_id (preferred for frontend queries)
-                let frontend_match = r
-                    .frontend_op_id
-                    .as_ref() == Some(operation_id);
+                let frontend_match = r.frontend_op_id.as_ref() == Some(operation_id);
                 // Fallback to backend ID match if no frontend match
                 frontend_match || backend_id_string == *operation_id
             } else {
                 // Match against backend ID first, then try frontend ID
                 let backend_match = backend_id_string == *operation_id;
-                let frontend_match = r
-                    .frontend_op_id
-                    .as_ref() == Some(operation_id);
+                let frontend_match = r.frontend_op_id.as_ref() == Some(operation_id);
                 backend_match || frontend_match
             };
 
@@ -380,15 +376,14 @@ pub async fn remove_artifacts_by_operation_debug(
 
     for record in all_records {
         let op_id_string = id_utils::id_to_string(record.creator_op_id);
-        if op_id_string == operation_id
-            && registry.remove_artifact(&record.id).is_some() {
-                removed_count += 1;
-                logger.debug(
-                    LogSystem::Artifacts,
-                    &format!("Removed artifact: {}", record.id),
-                    Some("remove"),
-                );
-            }
+        if op_id_string == operation_id && registry.remove_artifact(&record.id).is_some() {
+            removed_count += 1;
+            logger.debug(
+                LogSystem::Artifacts,
+                &format!("Removed artifact: {}", record.id),
+                Some("remove"),
+            );
+        }
     }
 
     logger.info(
@@ -484,8 +479,7 @@ impl From<ArtifactRecord> for ArtifactRecordForFrontend {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ArtifactFilter {
     pub artifact_type: Option<String>,
     pub exists: Option<bool>,
@@ -493,4 +487,3 @@ pub struct ArtifactFilter {
     pub min_size_bytes: Option<u64>,
     pub max_size_bytes: Option<u64>,
 }
-

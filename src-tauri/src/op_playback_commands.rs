@@ -243,7 +243,7 @@ pub async fn op_playback_build_graph(
                     return; // Errors are propagated via Result, not events
                 }
             };
-            let _ = send_channel_event!(on_event, op_event);
+            send_channel_event!(on_event, op_event);
         })
     })
     .await
@@ -1038,7 +1038,7 @@ pub fn op_playback_seek(
     }
 
     *session.progress.lock().unwrap() = progress;
-    *session.seek_seconds.lock().unwrap() = position_seconds as f64;
+    *session.seek_seconds.lock().unwrap() = position_seconds;
     drop(session);
 
     // Emit progress

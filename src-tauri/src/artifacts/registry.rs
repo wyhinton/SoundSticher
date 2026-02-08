@@ -133,7 +133,11 @@ impl ArtifactRegistry {
         creator_op_id: OpId,
         frontend_op_id: Option<String>,
     ) -> Result<ArtifactId, Box<dyn std::error::Error>> {
-        let record = ArtifactRecord::from_artifact_with_frontend_id(&artifact, creator_op_id, frontend_op_id)?;
+        let record = ArtifactRecord::from_artifact_with_frontend_id(
+            &artifact,
+            creator_op_id,
+            frontend_op_id,
+        )?;
         let artifact_id = record.id.clone();
 
         // Store the artifact and record together
@@ -167,7 +171,11 @@ impl ArtifactRegistry {
         tags: HashMap<String, String>,
         frontend_op_id: Option<String>,
     ) -> Result<ArtifactId, Box<dyn std::error::Error>> {
-        let mut record = ArtifactRecord::from_artifact_with_frontend_id(&artifact, creator_op_id, frontend_op_id)?;
+        let mut record = ArtifactRecord::from_artifact_with_frontend_id(
+            &artifact,
+            creator_op_id,
+            frontend_op_id,
+        )?;
         record.tags = tags;
         let artifact_id = record.id.clone();
 

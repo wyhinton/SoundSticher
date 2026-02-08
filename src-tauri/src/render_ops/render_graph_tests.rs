@@ -1957,7 +1957,10 @@ async fn render_single_operation_internal(
             ))
         }
         FrontendOperationDef::Sample {
-            id: _, name, sources, ..
+            id: _,
+            name,
+            sources,
+            ..
         } => {
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -2142,7 +2145,10 @@ fn render_single_operation_blocking(
             ))
         }
         FrontendOperationDef::Sample {
-            id: _, name, sources, ..
+            id: _,
+            name,
+            sources,
+            ..
         } => {
             if let Ok(logger) = logging_service.lock() {
                 log_info!(

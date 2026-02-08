@@ -852,12 +852,12 @@ pub async fn timeline_build_playback(
     tauri::async_runtime::spawn_blocking(move || {
         let manager = TimelinePlaybackManager::new(state, sample_cache, logging_service);
         manager.build_timeline(timeline_id, source, |event| {
-            let _ = send_channel_event!(on_event, event);
+            send_channel_event!(on_event, event);
         })
     })
     .await
     .map_err(|e| Error::PlaybackError(format!("Task panicked: {}", e)))?
-    .map_err(|e| Error::PlaybackError(e))
+    .map_err(Error::PlaybackError)
 }
 
 #[tauri::command]

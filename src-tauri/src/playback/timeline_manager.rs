@@ -13,12 +13,13 @@
 use crate::log_info;
 use crate::logging::{LogSystem, LoggingService};
 use crate::op_playback_commands::BuildGraphResponse;
-use crate::timeline_playback_commands::AppTimelinePlaybackState;
 use crate::playback::builder::{
-    BuildContext, BuildPlaybackRequest, BuildResult, OpGraphPlaybackBuilder, TimelinePlaybackBuilder,
+    BuildContext, BuildPlaybackRequest, BuildResult, OpGraphPlaybackBuilder,
+    TimelinePlaybackBuilder,
 };
 use crate::playback::session_builder::SessionBuildEvent;
 use crate::sample_cache::SampleCacheService;
+use crate::timeline_playback_commands::AppTimelinePlaybackState;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -264,10 +265,7 @@ impl TimelinePlaybackManager {
                     logger,
                     LogSystem::Playback,
                     "timeline_manager",
-                    &format!(
-                        "Replacing existing session for timeline '{}'",
-                        timeline_id
-                    )
+                    &format!("Replacing existing session for timeline '{}'", timeline_id)
                 );
             }
         }

@@ -1,7 +1,7 @@
 pub mod graph;
-pub mod op_node;
 pub mod invalidation;
+pub mod op_node;
 
 pub use graph::*;
-pub use op_node::*;
 pub use invalidation::*;
+pub use op_node::*;
