@@ -9,7 +9,7 @@
 // The old op_playback_* commands remain as legacy wrappers; new work goes through
 // the controller.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -373,6 +373,7 @@ impl TimelinePlaybackController {
         if let Some(ref s) = *sink {
             s.pause();
             self.state.is_paused.store(true, Ordering::Relaxed);
+            self.state.is_playing.store(false, Ordering::Relaxed);
         }
         drop(sink);
 
@@ -994,7 +995,6 @@ fn make_controller(
     TimelinePlaybackController::new(Arc::clone(state.inner()), Arc::clone(logging.inner()), app)
 }
 
-/// Get the current state of OpPlaybackState for debugging purposes
 #[tauri::command]
 pub fn get_app_playback_state(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
@@ -1003,14 +1003,16 @@ pub fn get_app_playback_state(
     let is_playing = state.is_playing.load(Ordering::Relaxed);
     let is_paused = state.is_paused.load(Ordering::Relaxed);
 
-    let mut sessions_info = HashMap::new();
+    // BTreeMap guarantees deterministic ordering by key
+    let mut sessions_info: BTreeMap<String, PlaybackSessionDebugInfo> = BTreeMap::new();
 
     for entry in state.sessions.iter() {
-        let timeline_id = entry.key();
+        let timeline_id = entry.key().clone();
         let session = entry.value();
 
         let operation_names: Vec<String> = session.op_ids.keys().cloned().collect();
         let operation_count = operation_names.len();
+
         let duration_seconds = session.duration_seconds();
         let progress = *session.progress.lock().unwrap();
         let seek_seconds = *session.seek_seconds.lock().unwrap() as f32;
@@ -1018,7 +1020,7 @@ pub fn get_app_playback_state(
         let spec = session.spec.into();
 
         sessions_info.insert(
-            timeline_id.clone(),
+            timeline_id,
             PlaybackSessionDebugInfo {
                 duration_seconds,
                 progress,
@@ -1041,12 +1043,11 @@ pub fn get_app_playback_state(
         total_sessions,
     })
 }
-
 /// Serializable representation of OpPlaybackState for debugging
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPlaybackStateDebugInfo {
-    pub sessions: HashMap<TimelineId, PlaybackSessionDebugInfo>,
+    pub sessions: BTreeMap<TimelineId, PlaybackSessionDebugInfo>,
     pub active_timeline: Option<TimelineId>,
     pub is_playing: bool,
     pub is_paused: bool,
