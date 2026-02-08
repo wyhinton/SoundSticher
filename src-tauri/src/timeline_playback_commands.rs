@@ -21,14 +21,12 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::error::Error;
 use crate::logging::{LogSystem, LoggingService};
 use crate::op_playback_commands::{AudioSpecDebugInfo, BuildGraphResponse};
 use crate::playback::op_playback::{SampleTime, TimelineSourceBuilder};
-use crate::playback::timeline_manager::{
-    TimelinePlaybackEvent, TimelinePlaybackManager, TimelineSource,
-};
-use crate::playback::PlaybackGraph;
-use crate::playback::{AudioSpec, PlaybackOpId};
+use crate::playback::timeline_manager::{TimelinePlaybackManager, TimelineSource};
+use crate::playback::{AudioSpec, PlaybackGraph, PlaybackOpId, TimelinePlaybackEvent};
 use crate::sample_cache::SampleCacheService;
 use crate::{emit_logged, log_info, send_channel_event};
 
@@ -109,8 +107,11 @@ impl PlaybackSession {
         match start_seconds {
             Some(start) => {
                 *self.seek_seconds.lock().unwrap() = start;
-                *self.progress.lock().unwrap() =
-                    if total > 0.0 { (start / total).clamp(0.0, 1.0) as f32 } else { 0.0 };
+                *self.progress.lock().unwrap() = if total > 0.0 {
+                    (start / total).clamp(0.0, 1.0) as f32
+                } else {
+                    0.0
+                };
                 SampleTime::from_seconds(start, self.spec.sample_rate)
             }
             None => {
@@ -129,8 +130,11 @@ impl PlaybackSession {
     pub fn seek(&self, seconds: f64) {
         let total = self.duration_seconds();
         *self.seek_seconds.lock().unwrap() = seconds;
-        *self.progress.lock().unwrap() =
-            if total > 0.0 { (seconds / total).clamp(0.0, 1.0) as f32 } else { 0.0 };
+        *self.progress.lock().unwrap() = if total > 0.0 {
+            (seconds / total).clamp(0.0, 1.0) as f32
+        } else {
+            0.0
+        };
     }
 
     pub fn set_loop(&self, enabled: bool) {
@@ -241,7 +245,11 @@ impl TimelinePlaybackController {
         logging: Arc<Mutex<LoggingService>>,
         app: AppHandle,
     ) -> Self {
-        Self { state, logging, app }
+        Self {
+            state,
+            logging,
+            app,
+        }
     }
 
     // ── play ─────────────────────────────────────────────────────────────
@@ -251,16 +259,24 @@ impl TimelinePlaybackController {
     /// This is the full replacement for the old `op_playback_play`:
     /// it computes the start position, stops any current playback,
     /// spawns the playback thread, and runs the progress loop.
-    pub fn play(
-        &self,
-        timeline_id: TimelineId,
-        start_seconds: Option<f64>,
-    ) -> Result<(), String> {
+    pub fn play(&self, timeline_id: TimelineId, start_seconds: Option<f64>) -> Result<(), Error> {
+        // ── 0. Check if this timeline is already playing ─────────────────
+        if let Some(active) = self.state.get_active_timeline() {
+            if active == timeline_id
+                && self.state.is_playing.load(Ordering::Relaxed)
+                && !self.state.is_paused.load(Ordering::Relaxed)
+            {
+                return Err(Error::PlaybackError(format!(
+                    "Timeline '{}' is already playing",
+                    timeline_id
+                )));
+            }
+        }
+
         // ── 1. Read session metadata (immutable snapshot) ────────────────
-        let session = self
-            .state
-            .get_session(&timeline_id)
-            .ok_or_else(|| format!("No session for timeline '{timeline_id}'"))?;
+        let session = self.state.get_session(&timeline_id).ok_or_else(|| {
+            Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
+        })?;
 
         let start_position = session.prepare_play(start_seconds);
         let loop_playback = session.loop_enabled();
@@ -321,11 +337,27 @@ impl TimelinePlaybackController {
     // ── pause ────────────────────────────────────────────────────────────
 
     /// Pause the currently active timeline.
-    pub fn pause(&self) -> Result<(), String> {
+    pub fn pause(&self) -> Result<(), Error> {
         let timeline_id = self
             .state
             .get_active_timeline()
-            .ok_or_else(|| "No active timeline to pause".to_string())?;
+            .ok_or_else(|| Error::PlaybackError("No active timeline to pause".to_string()))?;
+
+        // Check if already paused
+        if self.state.is_paused.load(Ordering::Relaxed) {
+            return Err(Error::PlaybackError(format!(
+                "Timeline '{}' is already paused",
+                timeline_id
+            )));
+        }
+
+        // Check if not playing
+        if !self.state.is_playing.load(Ordering::Relaxed) {
+            return Err(Error::PlaybackError(format!(
+                "Timeline '{}' is not currently playing",
+                timeline_id
+            )));
+        }
 
         let sink = self.state.sink.lock().unwrap();
         if let Some(ref s) = *sink {
@@ -345,7 +377,9 @@ impl TimelinePlaybackController {
                     "pause",
                     &format!(
                         "Paused timeline '{}' at {:.2}s ({:.1}%)",
-                        timeline_id, pos, progress * 100.0
+                        timeline_id,
+                        pos,
+                        progress * 100.0
                     )
                 );
             }
@@ -362,11 +396,27 @@ impl TimelinePlaybackController {
     // ── resume ───────────────────────────────────────────────────────────
 
     /// Resume the currently active timeline.
-    pub fn resume(&self) -> Result<(), String> {
+    pub fn resume(&self) -> Result<(), Error> {
         let timeline_id = self
             .state
             .get_active_timeline()
-            .ok_or_else(|| "No active timeline to resume".to_string())?;
+            .ok_or_else(|| Error::PlaybackError("No active timeline to resume".to_string()))?;
+
+        // Check if not paused
+        if !self.state.is_paused.load(Ordering::Relaxed) {
+            return Err(Error::PlaybackError(format!(
+                "Timeline '{}' is not paused",
+                timeline_id
+            )));
+        }
+
+        // Check if not playing
+        if !self.state.is_playing.load(Ordering::Relaxed) {
+            return Err(Error::PlaybackError(format!(
+                "Timeline '{}' is not currently playing",
+                timeline_id
+            )));
+        }
 
         let sink = self.state.sink.lock().unwrap();
         match *sink {
@@ -374,7 +424,11 @@ impl TimelinePlaybackController {
                 s.play();
                 self.state.is_paused.store(false, Ordering::Relaxed);
             }
-            None => return Err("No active playback to resume".to_string()),
+            None => {
+                return Err(Error::PlaybackError(
+                    "No active playback to resume".to_string(),
+                ))
+            }
         }
         drop(sink);
 
@@ -388,7 +442,9 @@ impl TimelinePlaybackController {
                     "resume",
                     &format!(
                         "Resumed timeline '{}' from {:.2}s ({:.1}%)",
-                        timeline_id, pos, progress * 100.0
+                        timeline_id,
+                        pos,
+                        progress * 100.0
                     )
                 );
             }
@@ -400,11 +456,10 @@ impl TimelinePlaybackController {
     // ── stop ─────────────────────────────────────────────────────────────
 
     /// Stop a specific timeline and reset its progress to zero.
-    pub fn stop(&self, timeline_id: &TimelineId) -> Result<(), String> {
-        let session = self
-            .state
-            .get_session(timeline_id)
-            .ok_or_else(|| format!("No session for timeline '{timeline_id}'"))?;
+    pub fn stop(&self, timeline_id: &TimelineId) -> Result<(), Error> {
+        let session = self.state.get_session(timeline_id).ok_or_else(|| {
+            Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
+        })?;
 
         if let Ok(logger) = self.logging.lock() {
             log_info!(
@@ -440,15 +495,10 @@ impl TimelinePlaybackController {
     ///
     /// If the timeline is actively playing, the audio is restarted from the
     /// new position (since rodio's `try_seek` is not always supported).
-    pub fn seek(
-        &self,
-        timeline_id: &TimelineId,
-        position_seconds: f64,
-    ) -> Result<(), String> {
-        let session = self
-            .state
-            .get_session(timeline_id)
-            .ok_or_else(|| format!("No session for timeline '{timeline_id}'"))?;
+    pub fn seek(&self, timeline_id: &TimelineId, position_seconds: f64) -> Result<(), Error> {
+        let session = self.state.get_session(timeline_id).ok_or_else(|| {
+            Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
+        })?;
 
         let total_duration = session.duration_seconds();
         let spec = session.spec;
@@ -466,7 +516,10 @@ impl TimelinePlaybackController {
                 "seek",
                 &format!(
                     "Seeking timeline '{}' to {:.2}s / {:.2}s ({:.1}%)",
-                    timeline_id, position_seconds, total_duration, progress * 100.0
+                    timeline_id,
+                    position_seconds,
+                    total_duration,
+                    progress * 100.0
                 )
             );
         }
@@ -524,15 +577,10 @@ impl TimelinePlaybackController {
 
     // ── loop / volume / progress ─────────────────────────────────────────
 
-    pub fn set_loop(
-        &self,
-        timeline_id: &TimelineId,
-        loop_playback: bool,
-    ) -> Result<(), String> {
-        let session = self
-            .state
-            .get_session(timeline_id)
-            .ok_or_else(|| format!("No session for timeline '{timeline_id}'"))?;
+    pub fn set_loop(&self, timeline_id: &TimelineId, loop_playback: bool) -> Result<(), Error> {
+        let session = self.state.get_session(timeline_id).ok_or_else(|| {
+            Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
+        })?;
         session.set_loop(loop_playback);
 
         if let Ok(logger) = self.logging.lock() {
@@ -553,17 +601,16 @@ impl TimelinePlaybackController {
         }
     }
 
-    pub fn get_progress(&self, timeline_id: &TimelineId) -> Result<f32, String> {
-        let session = self
-            .state
-            .get_session(timeline_id)
-            .ok_or_else(|| format!("No session for timeline '{timeline_id}'"))?;
+    pub fn get_progress(&self, timeline_id: &TimelineId) -> Result<f32, Error> {
+        let session = self.state.get_session(timeline_id).ok_or_else(|| {
+            Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
+        })?;
         Ok(session.progress())
     }
 
     // ── clear ────────────────────────────────────────────────────────────
 
-    pub fn clear(&self, timeline_id: &TimelineId) -> Result<(), String> {
+    pub fn clear(&self, timeline_id: &TimelineId) -> Result<(), Error> {
         // Stop if this is the active timeline
         if self.state.get_active_timeline().as_ref() == Some(timeline_id) {
             self.state.stop_current_playback();
@@ -588,7 +635,7 @@ impl TimelinePlaybackController {
         Ok(())
     }
 
-    pub fn clear_all(&self) -> Result<(), String> {
+    pub fn clear_all(&self) -> Result<(), Error> {
         let count = self.state.sessions.len();
         self.state.stop_current_playback();
         self.state.set_active_timeline(None);
@@ -604,7 +651,6 @@ impl TimelinePlaybackController {
         }
         Ok(())
     }
-
 }
 
 // ─── Playback engine (private) ──────────────────────────────────────────────
@@ -695,7 +741,9 @@ fn run_progress_loop(
         }
 
         let (total_duration, loop_playback) = {
-            let Some(session) = state.get_session(timeline_id) else { break };
+            let Some(session) = state.get_session(timeline_id) else {
+                break;
+            };
             (session.duration_seconds(), session.loop_enabled())
         };
 
@@ -764,9 +812,8 @@ fn run_progress_loop(
     }
 
     // Snapshot final position
-    let final_pos = initial_seek
-        + accumulated_before_pause
-        + tracking_start.elapsed().as_secs_f32();
+    let final_pos =
+        initial_seek + accumulated_before_pause + tracking_start.elapsed().as_secs_f32();
     if let Some(session) = state.get_session(timeline_id) {
         *session.seek_seconds.lock().unwrap() = final_pos as f64;
     }
@@ -797,7 +844,7 @@ pub async fn timeline_build_playback(
     sample_cache: State<'_, Arc<SampleCacheService>>,
     logging_service: State<'_, Arc<Mutex<LoggingService>>>,
     on_event: Channel<TimelinePlaybackEvent>,
-) -> Result<BuildGraphResponse, String> {
+) -> Result<BuildGraphResponse, Error> {
     let state = Arc::clone(state.inner());
     let sample_cache = Arc::clone(sample_cache.inner());
     let logging_service = Arc::clone(logging_service.inner());
@@ -809,7 +856,8 @@ pub async fn timeline_build_playback(
         })
     })
     .await
-    .map_err(|e| format!("timeline_build_playback panicked: {e}"))?
+    .map_err(|e| Error::PlaybackError(format!("Task panicked: {}", e)))?
+    .map_err(|e| Error::PlaybackError(e))
 }
 
 #[tauri::command]
@@ -819,7 +867,7 @@ pub fn timeline_play(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).play(timeline_id, start_seconds)
 }
 
@@ -828,7 +876,7 @@ pub fn timeline_pause(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).pause()
 }
 
@@ -837,7 +885,7 @@ pub fn timeline_resume(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).resume()
 }
 
@@ -847,7 +895,7 @@ pub fn timeline_stop(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).stop(&timeline_id)
 }
 
@@ -858,7 +906,7 @@ pub fn timeline_seek(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).seek(&timeline_id, position_seconds)
 }
 
@@ -869,7 +917,7 @@ pub fn timeline_set_loop(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).set_loop(&timeline_id, loop_playback)
 }
 
@@ -880,7 +928,7 @@ pub fn timeline_set_volume(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).set_master_volume(volume);
     Ok(())
 }
@@ -891,7 +939,7 @@ pub fn timeline_get_progress(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<f32, String> {
+) -> Result<f32, Error> {
     make_controller(&state, &logging, app).get_progress(&timeline_id)
 }
 
@@ -901,7 +949,7 @@ pub fn timeline_clear(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).clear(&timeline_id)
 }
 
@@ -910,7 +958,7 @@ pub fn timeline_clear_all(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
     app: AppHandle,
     logging: State<'_, Arc<Mutex<LoggingService>>>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     make_controller(&state, &logging, app).clear_all()
 }
 
@@ -921,9 +969,5 @@ fn make_controller(
     logging: &State<'_, Arc<Mutex<LoggingService>>>,
     app: AppHandle,
 ) -> TimelinePlaybackController {
-    TimelinePlaybackController::new(
-        Arc::clone(state.inner()),
-        Arc::clone(logging.inner()),
-        app,
-    )
+    TimelinePlaybackController::new(Arc::clone(state.inner()), Arc::clone(logging.inner()), app)
 }
