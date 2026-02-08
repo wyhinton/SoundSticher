@@ -6,6 +6,7 @@
   } from '$lib/state/timeline/timelinePlaybackState';
   import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
+  import { setActiveTimeline } from '$lib/state/timeline/timelines';
 
   // Component props
   export let disabled: boolean = false;
@@ -37,6 +38,7 @@
         console.error('No timeline ID - cannot play. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       await timelinePlaybackService.playTimeline(timelineId, playHeadPosition);
     } catch (error) {
       console.error('Error playing audio:', error);
@@ -49,6 +51,7 @@
         console.error('No timeline ID - cannot pause. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       await timelinePlaybackService.pauseTimeline();
     } catch (error) {
       console.error('Error pausing audio:', error);
@@ -61,6 +64,7 @@
         console.error('No timeline ID - cannot resume. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       await timelinePlaybackService.resumeTimeline();
     } catch (error) {
       console.error('Error resuming audio:', error);
@@ -73,6 +77,7 @@
         console.error('No timeline ID - cannot stop. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       await timelinePlaybackService.stopTimeline();
     } catch (error) {
       console.error('Error stopping audio:', error);
@@ -85,6 +90,7 @@
         console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       await timelinePlaybackService.seekTimeline(timelineId, 0);
     } catch (error) {
       console.error('Error skipping to start:', error);
@@ -97,6 +103,7 @@
         console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       await timelinePlaybackService.seekTimeline(timelineId, currentDuration);
     } catch (error) {
       console.error('Error skipping to end:', error);
@@ -109,6 +116,7 @@
         console.error('No timeline ID - cannot toggle loop. Please provide a timelineId prop.');
         return;
       }
+      setActiveTimeline(timelineId);
       // Use timeline-specific loop state instead of global opPlaybackState
       await timelinePlaybackService.setTimelineLoop(timelineId, !isLoopEnabled);
     } catch (error) {
