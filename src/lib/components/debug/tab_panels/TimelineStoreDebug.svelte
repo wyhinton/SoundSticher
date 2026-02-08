@@ -278,39 +278,6 @@
                     {/if}
                   </div>
                 </td>
-                <td class="actions">
-                  <div class="action-buttons">
-                    <!-- {#if !timeline.isActive}
-                      <button
-                        class="btn-micro btn-primary"
-                        on:click={() => setAsActive(timeline.id)}
-                      >
-                        <i class="fa fa-star"></i>
-                      </button>
-                    {/if} -->
-
-                    <!-- {#if timeline.isFloating}
-                      <button
-                        class="btn-micro btn-secondary"
-                        on:click={() => moveToDocked(timeline.id)}
-                      >
-                        <i class="fa fa-anchor"></i>
-                      </button>
-                    {:else}
-                      <button
-                        class="btn-micro btn-secondary"
-                        on:click={() => moveToFloating(timeline.id)}
-                      >
-                        <i class="fa fa-window-maximize"></i>
-                      </button>
-                    {/if} -->
-
-                    <button class="btn-micro btn-info" on:click={() => resetViewState(timeline.id)}>
-                      <i class="fa fa-refresh"></i>
-                    </button>
-                    <PrismWrapper data={$operationTimelines}></PrismWrapper>
-                  </div>
-                </td>
               </tr>
             {/each}
           </tbody>
