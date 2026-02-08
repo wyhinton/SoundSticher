@@ -262,6 +262,7 @@
   });
 </script>
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 <div class="prism-wrapper {className}">
   <!-- Search bar -->
   <div class="search-container">

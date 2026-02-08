@@ -1,8 +1,9 @@
 import js from '@eslint/js';
 import importPlugin from 'eslint-plugin-import';
 import svelte from 'eslint-plugin-svelte';
-import ts from 'typescript-eslint';
 import globals from 'globals';
+import ts from 'typescript-eslint';
+import 'eslint-plugin-only-warn';
 
 export default [
   // 🌍 Browser environment for the entire project
