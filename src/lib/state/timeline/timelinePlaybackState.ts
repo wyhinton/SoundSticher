@@ -17,26 +17,26 @@ export const timelinePlaybackState = writable<Record<TimelineId, TimelinePlaybac
 /**
  * Service class for managing timeline playback state operations
  */
-export class TimelinePlaybackService {
+export class TimelinePlaybackStoreService {
   /**
    * Add a new timeline with default playback state
    */
-  static addTimeline(timelineId: TimelineId, initialState?: Partial<TimelinePlaybackState>) {
+  addTimeline(timelineId: TimelineId, initialState?: Partial<TimelinePlaybackState>) {
     timelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
         playheadTime: 0,
-        looping: false,
+        looping: true,
         isPlaying: false,
-        ...initialState
-      }
+        ...initialState,
+      },
     }));
   }
 
   /**
    * Remove a timeline from playback state
    */
-  static removeTimeline(timelineId: TimelineId) {
+  removeTimeline(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
       const newState = { ...state };
       delete newState[timelineId];
@@ -47,15 +47,19 @@ export class TimelinePlaybackService {
   /**
    * Update playhead time for a specific timeline
    */
-  static setPlayheadTime(timelineId: TimelineId, time: number) {
+  setPlayheadTime(timelineId: TimelineId, time: number) {
     timelinePlaybackState.update(state => {
-      const currentState = state[timelineId] || { playheadTime: 0, looping: false, isPlaying: false };
+      const currentState = state[timelineId] || {
+        playheadTime: 0,
+        looping: false,
+        isPlaying: false,
+      };
       return {
         ...state,
         [timelineId]: {
           ...currentState,
-          playheadTime: time
-        }
+          playheadTime: time,
+        },
       };
     });
   }
@@ -63,15 +67,19 @@ export class TimelinePlaybackService {
   /**
    * Toggle looping state for a specific timeline
    */
-  static toggleLooping(timelineId: TimelineId) {
+  toggleLooping(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
-      const currentState = state[timelineId] || { playheadTime: 0, looping: false, isPlaying: false };
+      const currentState = state[timelineId] || {
+        playheadTime: 0,
+        looping: false,
+        isPlaying: false,
+      };
       return {
         ...state,
         [timelineId]: {
           ...currentState,
-          looping: !currentState.looping
-        }
+          looping: !currentState.looping,
+        },
       };
     });
   }
@@ -79,15 +87,19 @@ export class TimelinePlaybackService {
   /**
    * Set looping state for a specific timeline
    */
-  static setLooping(timelineId: TimelineId, looping: boolean) {
+  setLooping(timelineId: TimelineId, looping: boolean) {
     timelinePlaybackState.update(state => {
-      const currentState = state[timelineId] || { playheadTime: 0, looping: false, isPlaying: false };
+      const currentState = state[timelineId] || {
+        playheadTime: 0,
+        looping: false,
+        isPlaying: false,
+      };
       return {
         ...state,
         [timelineId]: {
           ...currentState,
-          looping
-        }
+          looping,
+        },
       };
     });
   }
@@ -95,15 +107,19 @@ export class TimelinePlaybackService {
   /**
    * Start playback for a specific timeline
    */
-  static startPlayback(timelineId: TimelineId) {
+  startPlayback(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
-      const currentState = state[timelineId] || { playheadTime: 0, looping: false, isPlaying: false };
+      const currentState = state[timelineId] || {
+        playheadTime: 0,
+        looping: false,
+        isPlaying: false,
+      };
       return {
         ...state,
         [timelineId]: {
           ...currentState,
-          isPlaying: true
-        }
+          isPlaying: true,
+        },
       };
     });
   }
@@ -111,15 +127,19 @@ export class TimelinePlaybackService {
   /**
    * Stop playback for a specific timeline
    */
-  static stopPlayback(timelineId: TimelineId) {
+  stopPlayback(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
-      const currentState = state[timelineId] || { playheadTime: 0, looping: false, isPlaying: false };
+      const currentState = state[timelineId] || {
+        playheadTime: 0,
+        looping: false,
+        isPlaying: false,
+      };
       return {
         ...state,
         [timelineId]: {
           ...currentState,
-          isPlaying: false
-        }
+          isPlaying: false,
+        },
       };
     });
   }
@@ -127,15 +147,19 @@ export class TimelinePlaybackService {
   /**
    * Toggle playback state for a specific timeline
    */
-  static togglePlayback(timelineId: TimelineId) {
+  togglePlayback(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
-      const currentState = state[timelineId] || { playheadTime: 0, looping: false, isPlaying: false };
+      const currentState = state[timelineId] || {
+        playheadTime: 0,
+        looping: false,
+        isPlaying: false,
+      };
       return {
         ...state,
         [timelineId]: {
           ...currentState,
-          isPlaying: !currentState.isPlaying
-        }
+          isPlaying: !currentState.isPlaying,
+        },
       };
     });
   }
@@ -143,13 +167,13 @@ export class TimelinePlaybackService {
   /**
    * Stop all timelines
    */
-  static stopAllTimelines() {
+  stopAllTimelines() {
     timelinePlaybackState.update(state => {
       const newState: Record<TimelineId, TimelinePlaybackState> = {};
       Object.entries(state).forEach(([timelineId, currentState]) => {
         newState[timelineId as TimelineId] = {
           ...currentState,
-          isPlaying: false
+          isPlaying: false,
         };
       });
       return newState;
@@ -159,21 +183,21 @@ export class TimelinePlaybackService {
   /**
    * Reset a timeline to default state
    */
-  static resetTimeline(timelineId: TimelineId) {
+  resetTimeline(timelineId: TimelineId) {
     timelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
         playheadTime: 0,
         looping: false,
-        isPlaying: false
-      }
+        isPlaying: false,
+      },
     }));
   }
 
   /**
    * Get current playback state for a timeline (snapshot)
    */
-  static getTimelineState(timelineId: TimelineId): TimelinePlaybackState | null {
+  getTimelineState(timelineId: TimelineId): TimelinePlaybackState | null {
     let currentState: TimelinePlaybackState | null = null;
     timelinePlaybackState.subscribe(state => {
       currentState = state[timelineId] || null;
@@ -184,7 +208,7 @@ export class TimelinePlaybackService {
   /**
    * Check if a timeline exists in the playback state
    */
-  static hasTimeline(timelineId: TimelineId): boolean {
+  hasTimeline(timelineId: TimelineId): boolean {
     let exists = false;
     timelinePlaybackState.subscribe(state => {
       exists = timelineId in state;
@@ -195,7 +219,7 @@ export class TimelinePlaybackService {
   /**
    * Get all timeline IDs that are currently tracked
    */
-  static getAllTimelineIds(): TimelineId[] {
+  getAllTimelineIds(): TimelineId[] {
     let ids: TimelineId[] = [];
     timelinePlaybackState.subscribe(state => {
       ids = Object.keys(state) as TimelineId[];
@@ -206,10 +230,12 @@ export class TimelinePlaybackService {
   /**
    * Clear all timeline playback states
    */
-  static clearAll() {
+  clearAll() {
     timelinePlaybackState.set({});
   }
 }
+
+export const timelinePlaybackStoreService = new TimelinePlaybackStoreService();
 
 /**
  * Derived store to get playhead time for a specific timeline

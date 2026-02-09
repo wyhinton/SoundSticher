@@ -1,4 +1,5 @@
 import { get } from 'svelte/store';
+import { durationCache } from './durationCache';
 import { groupRegistry, GroupResult } from './groups';
 import { loggingState, logger } from './logging';
 import { appState, AppState, AudioFileItem, Section } from './state.svelte';
@@ -868,4 +869,67 @@ export function removeOperationsFromCurrentOp(operationIdsToRemove: OperationId[
 
     return s;
   });
+}
+
+// Recursive function to collect all file paths from an operation
+export function collectFilePaths(
+  op: OperationDef,
+  operationDefs: Record<string, OperationDef> | undefined
+): string[] {
+  const paths: string[] = [];
+
+  if (op.kind === 'sample') {
+    const fileSource = op.sources.find(s => s.type === 'file');
+    if (fileSource && fileSource.type === 'file') {
+      paths.push(fileSource.fileId);
+    }
+  } else if (op.kind === 'merge') {
+    for (const source of op.sources) {
+      if (source.type === 'operation' && operationDefs) {
+        const sourceOp = operationDefs[source.operationId];
+        if (sourceOp) {
+          paths.push(...collectFilePaths(sourceOp, operationDefs));
+        }
+      }
+    }
+  }
+
+  return paths;
+}
+
+/**
+ * Build a duration map for all files used by an operation and its dependencies
+ * This loads durations from cache for accurate timing calculations
+ */
+export async function buildOperationDurationMap(
+  operation: OperationDef,
+  timelineId?: string
+): Promise<Map<string, number>> {
+  const currentAppState = get(appState);
+  const operationDefs = currentAppState.operations?.defs;
+
+  if (!operationDefs) {
+    throw new Error('No operation definitions available');
+  }
+
+  const durationsMap = new Map<string, number>();
+
+  // Collect all file paths from the operation and its dependencies
+  const filePaths = collectFilePaths(operation, operationDefs);
+
+  if (filePaths.length > 0) {
+    try {
+      const durations = await durationCache.getBatch(filePaths);
+      for (const [filePath, duration] of durations.entries()) {
+        if (duration && duration > 0) {
+          durationsMap.set(filePath, duration);
+        }
+      }
+    } catch (error) {
+      const context = timelineId ? ` for timeline ${timelineId}` : '';
+      console.warn(`Failed to load durations${context}, using placeholder durations:`, error);
+    }
+  }
+
+  return durationsMap;
 }

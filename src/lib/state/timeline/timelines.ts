@@ -8,9 +8,10 @@ import { getOperationById } from '../operation';
 import type { OpTimelineProgressEvent } from '../opPlaybackService';
 import { invokeWithPerf } from '../performance';
 import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
+import timelinePlaybackService from '../timelinePlaybackService';
 import { dispatch, type ToggleTimelineVisibilityCommand } from '../undo/undo';
 import { waveformCache, type Waveform } from '../waveformCache';
-import { timelinePlaybackState } from './timelinePlaybackState';
+import { timelinePlaybackState, timelinePlaybackStoreService } from './timelinePlaybackState';
 import { timelineService } from './timelineStoreService';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
@@ -95,7 +96,6 @@ export interface TimelineViewState {
   zoom: number;
   scrollX: number;
   selection?: TimeRange;
-  visibleTracks: TrackId[];
 }
 
 export interface TimelineWaveformState {
@@ -767,6 +767,7 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
     [timelineId]: defaultTimelineViewState(),
   }));
 
+  timelinePlaybackStoreService.addTimeline(timelineId);
   return {
     id: timelineId,
     source: { kind: 'operation', operationId },
@@ -814,11 +815,7 @@ export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
     timelineService.deleteTimeline(existingTimelineId);
 
     // Also clean up the view state for this timeline
-    timelineViewStates.update(states => {
-      const newStates = { ...states };
-      delete newStates[existingTimelineId];
-      return newStates;
-    });
+    timelinePlaybackStoreService.removeTimeline(existingTimelineId);
   } else {
     console.log(`%cHERE LINE :808 %c`, 'color: yellow; font-weight: bold', '');
 
