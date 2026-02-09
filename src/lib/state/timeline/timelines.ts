@@ -4,7 +4,7 @@ import { persisted } from 'svelte-persisted-store';
 import { durationCache } from '../durationCache';
 import { logger } from '../logging';
 import type { OperationDef, OperationId } from '../operation';
-import { getOperationById } from '../operation';
+import { buildBackendGraphForTimeline, getOperationById } from '../operation';
 import type { OpTimelineProgressEvent } from '../opPlaybackService';
 import { invokeWithPerf } from '../performance';
 import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
@@ -757,17 +757,10 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
       logger.waveform.error(`Failed to load waveform data for operation ${operationId}:`, error);
     }
   };
-
+  timelinePlaybackStoreService.addTimeline(timelineId);
   loadWaveformData();
   // buildBackendGraph();
 
-  // Initialize view state for this timeline
-  timelineViewStates.update(states => ({
-    ...states,
-    [timelineId]: defaultTimelineViewState(),
-  }));
-
-  timelinePlaybackStoreService.addTimeline(timelineId);
   return {
     id: timelineId,
     source: { kind: 'operation', operationId },
@@ -816,21 +809,17 @@ export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
 
     // Also clean up the view state for this timeline
     timelinePlaybackStoreService.removeTimeline(existingTimelineId);
+    timelinePlaybackService.clearTimeline(existingTimelineId);
   } else {
     console.log(`%cHERE LINE :808 %c`, 'color: yellow; font-weight: bold', '');
 
     // No timeline exists - create one (toggle on)
     logger.waveform.info(`Showing timeline for operation: ${operationId}`);
 
-    const newTimeline = createTimelineStateForOp(operationId);
+    // const newTimeline = createTimelineStateForOp(operationId);
 
-    timelinesStore.update(state => ({
-      ...state,
-      timelines: {
-        ...state.timelines,
-        [newTimeline.id]: newTimeline,
-      },
-    }));
+    const newTimeline = timelineService.createTimelineForOperation(operationId);
+    buildBackendGraphForTimeline(newTimeline.id, operationId);
   }
 }
 
