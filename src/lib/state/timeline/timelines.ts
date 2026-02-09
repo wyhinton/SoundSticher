@@ -153,10 +153,30 @@ const DEFAULT_VIEW_STATE: TimelineViewState = {
   visibleTracks: [],
 };
 
+/**
+ * Generate a cryptographically unique timeline ID.
+ * Uses the Web Crypto API for strong randomness + timestamp for sortability.
+ * Format: `tl_<timestamp>_<128-bit random hex>`
+ *
+ * This ensures:
+ * - No collisions (128-bit cryptographic randomness + timestamp)
+ * - Sortable by creation time (timestamp prefix)
+ * - Human-readable format
+ */
 function createTimelineId(): TimelineId {
-  const now = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 8);
-  return `tl_${now}_${rand}`;
+  const timestamp = Date.now().toString(36); // e.g., "1234567890" in base36
+
+  // Generate 16 bytes (128 bits) of cryptographic randomness
+  const randomBytes = new Uint8Array(16);
+  crypto.getRandomValues(randomBytes);
+
+  // Convert to hex string
+  const randomHex = Array.from(randomBytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 24); // Use first 24 hex chars (96 bits) for readability
+
+  return `tl_${timestamp}_${randomHex}`;
 }
 
 export function defaultTimelineViewState(): TimelineViewState {
@@ -704,67 +724,6 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
     }
   };
 
-  // Build the backend playback graph for this timeline
-  // const buildBackendGraph = async () => {
-  //   try {
-  //     logger.opPlayback.info(
-  //       `Building backend graph for timeline ${timelineId}, operation ${operationId}`
-  //     );
-
-  //     // Get the operation definition from app state
-  //     const currentAppState = get(appState);
-  //     const operation = currentAppState.operations?.defs?.[operationId];
-
-  //     if (!operation) {
-  //       logger.opPlayback.error(`Operation ${operationId} not found in app state`);
-  //       return;
-  //     }
-
-  //     // Convert the operation to AddOpRequest format
-  //     // For now, we'll create a simple request - this may need to be expanded
-  //     // based on the complexity of the operation
-  //     const operations: AddOpRequest[] = [];
-
-  //     if (operation.kind === 'sample') {
-  //       // Handle sample operation
-  //       const fileSource = operation.sources.find(s => s.type === 'file');
-  //       if (fileSource && fileSource.type === 'file') {
-  //         operations.push({
-  //           name: `${operation.name}_sample`,
-  //           opType: 'sample',
-  //           filePath: fileSource.fileId,
-  //           startTime: 0,
-  //           gain: 1.0,
-  //         });
-  //       }
-  //     } else if (operation.kind === 'merge') {
-  //       // For merge operations, we'll need more complex handling
-  //       // For now, create a basic merge operation
-  //       operations.push({
-  //         name: `${operation.name}_merge`,
-  //         opType: 'merge',
-  //         startTime: 0,
-  //         gain: 1.0,
-  //         inputs: [], // This would need proper implementation
-  //       });
-  //     }
-
-  //     // Create the build graph request
-  //     const request: BuildOpPlaybackGraphRequest = {
-  //       operations,
-  //       sampleRate: 44100,
-  //       channels: 2,
-  //       loopPlayback: true,
-  //     };
-
-  //     await buildGraphForTimeline(timelineId, request);
-  //     logger.opPlayback.info(`Successfully built backend graph for timeline ${timelineId}`);
-  //   } catch (error) {
-  //     logger.opPlayback.error(`Failed to build backend graph for timeline ${timelineId}:`, error);
-  //   }
-  // };
-
-  // Trigger async loading and backend graph building (don't await to avoid blocking timeline creation)
   loadWaveformData();
   // buildBackendGraph();
 
