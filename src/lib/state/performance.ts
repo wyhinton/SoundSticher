@@ -127,6 +127,7 @@ export interface PerformanceState {
   timeline_set_loop: PerformanceMetric[];
   timeline_set_volume: PerformanceMetric[];
   timeline_stop: PerformanceMetric[];
+  timeline_toggle: PerformanceMetric[];
   toggle_audio_file_active: PerformanceMetric[];
   update_sorting: PerformanceMetric[];
 }
@@ -199,6 +200,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   timeline_set_loop: [],
   timeline_set_volume: [],
   timeline_stop: [],
+  timeline_toggle: [],
   toggle_audio_file_active: [],
   update_sorting: [],
 });

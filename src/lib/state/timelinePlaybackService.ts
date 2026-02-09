@@ -14,7 +14,7 @@ import { writable, derived, get, type Readable } from 'svelte/store';
 import { logger } from './logging';
 import type { BuildOpPlaybackGraphRequest, BuildGraphResponse } from './opPlaybackService';
 import { invokeWithPerf } from './performance';
-import { timelinePlaybackState as perTimelinePlaybackState } from './timeline/timelinePlaybackState';
+import { timelinePlaybackState } from './timeline/timelinePlaybackState';
 import { getActiveTimelineId } from './timeline/timelines';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
 // ============================================================================
@@ -95,11 +95,6 @@ const internalState = writable<TimelinePlaybackState>({
   isPaused: false,
   buildingTimelineId: null,
 });
-
-export const timelinePlaybackState: Readable<TimelinePlaybackState> = derived(
-  internalState,
-  $state => $state
-);
 
 export const activeTimelineId: Readable<string | null> = derived(
   internalState,
@@ -255,7 +250,7 @@ export async function playTimeline(timelineId: string, startSeconds?: number): P
     }));
 
     // Also update the per-timeline playback state so the play button disables
-    perTimelinePlaybackState.update(state => ({
+    timelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
         playheadTime: state[timelineId]?.playheadTime ?? 0,
@@ -496,11 +491,8 @@ export async function clearAllTimelines(): Promise<void> {
 /**
  * Toggle play/pause for the active timeline
  *
- * This function:
- * - Gets the active timeline from timelinesStore
- * - Checks the current playback state
- * - Plays, pauses, or resumes as appropriate
- * - Returns early if no timeline is active
+ * This function calls the backend timeline_toggle command which handles
+ * the play/pause/resume logic based on current timeline state.
  */
 export async function togglePlayPauseActiveTimeline(): Promise<void> {
   const activeTimelineId = getActiveTimelineId();
@@ -509,19 +501,26 @@ export async function togglePlayPauseActiveTimeline(): Promise<void> {
     return;
   }
 
-  const state = get(internalState);
+  logger.opPlayback.info(`Toggling play/pause for timeline '${activeTimelineId}'`);
 
-  // If this timeline is currently playing and not paused, pause it
-  if (state.isPlaying && !state.isPaused && state.activeTimelineId === activeTimelineId) {
-    await pauseTimeline(activeTimelineId);
-  }
-  // If this timeline is currently paused, resume it
-  else if (state.isPaused && state.activeTimelineId === activeTimelineId) {
-    await resumeTimeline(activeTimelineId);
-  }
-  // Otherwise, start playing this timeline
-  else {
-    await playTimeline(activeTimelineId);
+  try {
+    // Call the backend toggle command - it will handle the logic internally
+    const result = await invokeWithPerf('timeline_toggle', {
+      timelineId: activeTimelineId,
+    });
+
+    if (!result.ok) {
+      throw new Error(`Failed to toggle timeline '${activeTimelineId}': ${result.error.message}`);
+    }
+
+    // Note: The backend will emit progress events and update state through
+    // the individual play/pause/resume operations, so we don't need to
+    // update the internal state here directly.
+
+    logger.opPlayback.success(`Timeline '${activeTimelineId}' toggle completed`);
+  } catch (error) {
+    logger.opPlayback.error(`Failed to toggle timeline '${activeTimelineId}':`, error);
+    throw error;
   }
 }
 

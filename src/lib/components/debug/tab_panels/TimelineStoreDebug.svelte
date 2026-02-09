@@ -4,7 +4,6 @@
   import { timelinePlaybackState } from '$lib/state/timeline/timelinePlaybackState';
   import {
     createTimelineStateForOp,
-    operationTimelines,
     timelinesStore,
     toggleTimelineVisibilityByOpId,
     type Timeline,

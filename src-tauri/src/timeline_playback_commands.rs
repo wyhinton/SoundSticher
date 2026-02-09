@@ -418,9 +418,9 @@ impl TimelinePlaybackController {
         }
 
         // Check if not playing
-        if !self.state.is_playing.load(Ordering::Relaxed) {
+        if self.state.is_playing.load(Ordering::Relaxed) {
             return Err(Error::PlaybackError(format!(
-                "Timeline '{}' is not currently playing",
+                "Timeline '{}' is already currently playing",
                 timeline_id
             )));
         }
@@ -444,6 +444,7 @@ impl TimelinePlaybackController {
             Some(ref s) => {
                 s.play();
                 self.state.is_paused.store(false, Ordering::Relaxed);
+                self.state.is_playing.store(true, Ordering::Relaxed);
             }
             None => {
                 return Err(Error::PlaybackError(
@@ -627,6 +628,33 @@ impl TimelinePlaybackController {
             Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
         })?;
         Ok(session.progress())
+    }
+
+    // ── toggle ───────────────────────────────────────────────────────────
+
+    /// Toggle play/pause/resume for a specific timeline.
+    ///
+    /// If the timeline is currently playing and not paused, pause it.
+    /// If the timeline is currently paused, resume it.
+    /// Otherwise, start playing the timeline from current position.
+    pub fn toggle(&self, timeline_id: &TimelineId) -> Result<(), Error> {
+        let active_timeline = self.state.get_active_timeline();
+        let is_playing = self.state.is_playing.load(Ordering::Relaxed);
+        let is_paused = self.state.is_paused.load(Ordering::Relaxed);
+
+        // Check if this timeline is the currently active one
+        let is_this_timeline_active = active_timeline.as_ref() == Some(timeline_id);
+
+        if is_this_timeline_active && is_playing && !is_paused {
+            // Timeline is currently playing and not paused - pause it
+            self.pause(timeline_id)
+        } else if is_this_timeline_active && is_paused {
+            // Timeline is currently paused - resume it
+            self.resume(timeline_id)
+        } else {
+            // Timeline is not playing or not active - start playing it
+            self.play(timeline_id.clone(), None)
+        }
     }
 
     // ── clear ────────────────────────────────────────────────────────────
@@ -985,6 +1013,16 @@ pub fn timeline_clear_all(
     make_controller(&state, &logging, app).clear_all()
 }
 
+#[tauri::command]
+pub fn timeline_toggle(
+    timeline_id: TimelineId,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
+    app: AppHandle,
+    logging: State<'_, Arc<Mutex<LoggingService>>>,
+) -> Result<(), Error> {
+    make_controller(&state, &logging, app).toggle(&timeline_id)
+}
+
 // ─── Helper ─────────────────────────────────────────────────────────────────
 
 fn make_controller(
@@ -1005,6 +1043,13 @@ pub fn get_app_playback_state(
 
     // BTreeMap guarantees deterministic ordering by key
     let mut sessions_info: BTreeMap<String, PlaybackSessionDebugInfo> = BTreeMap::new();
+
+    // let mut sink = state.sink.lock().unwrap();
+    // if let Some(ref s) = *sink {
+    //     s.is_paused()
+    //     s.len()
+    //     s.
+    // }
 
     for entry in state.sessions.iter() {
         let timeline_id = entry.key().clone();

@@ -1,8 +1,8 @@
 <script lang="ts">
   import {
-    timelinePlayhead,
-    timelineLooping,
     timelineIsPlaying,
+    timelineLooping,
+    timelinePlayhead,
   } from '$lib/state/timeline/timelinePlaybackState';
   import { setActiveTimeline } from '$lib/state/timeline/timelines';
   import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';

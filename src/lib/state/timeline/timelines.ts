@@ -4,20 +4,9 @@ import { persisted } from 'svelte-persisted-store';
 import { durationCache } from '../durationCache';
 import { logger } from '../logging';
 import type { OperationDef, OperationId } from '../operation';
-import type {
-  OpTimelineProgressEvent,
-  BuildOpPlaybackGraphRequest,
-  AddOpRequest,
-  MergeInputRequest,
-} from '../opPlaybackService';
-import { buildTimelineForOp } from '../opPlaybackService';
+import type { OpTimelineProgressEvent } from '../opPlaybackService';
 import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
-import {
-  operationWaveforms,
-  waveformCache,
-  type Waveform,
-  type WaveformSpec,
-} from '../waveformCache';
+import { waveformCache, type Waveform } from '../waveformCache';
 import { timelinePlaybackState } from './timelinePlaybackState';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 

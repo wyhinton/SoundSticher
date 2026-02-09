@@ -1,16 +1,14 @@
 <script lang="ts">
-  import { listen } from '@tauri-apps/api/event';
-  import Progress from '../Progress.svelte';
-  import { type Timeline } from '../state/timeline/timelines';
-  import {
-    timelinePlaybackState,
-    isTimelinePlaying,
-    isTimelinePaused,
-  } from '../state/timelinePlaybackService';
+  import { timelinesStore, type Timeline } from '../state/timeline/timelines';
+  import { isTimelinePaused, isTimelinePlaying } from '../state/timelinePlaybackService';
   import TimeDisplay from './TimeDisplay.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
   import TransportControls from './TransportControls.svelte';
-  import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
+  import { appState } from '$lib/state/state.svelte';
+  import {
+    timelinePlaybackState,
+    timelinePlayhead,
+  } from '$lib/state/timeline/timelinePlaybackState';
 
   export let timeline: Timeline;
 
@@ -39,7 +37,7 @@
   $: totalDurationSeconds = waveformState?.totalDuration ?? 0;
 
   // Check if THIS timeline is the active one playing
-  $: isThisTimelineActive = $timelinePlaybackState.activeTimelineId === timeline.id;
+  $: isThisTimelineActive = $timelinesStore.activeTimelineId === timeline.id;
   $: isPlaying = isThisTimelineActive && $isTimelinePlaying;
   $: isPaused = isThisTimelineActive && $isTimelinePaused;
   $: isCurrentlyPlaying = isPlaying && !isPaused;
@@ -50,7 +48,7 @@
   <div class="timeline-header">
     <span class="timeline-operation-name px-2">
       {timeline.source.kind === 'operation'
-        ? `Operation: ${timeline.source.operationId}`
+        ? `${$appState.operations?.defs?.[timeline.source.operationId]?.name}`
         : 'Timeline'}
     </span>
     {#if isLoading}
@@ -74,7 +72,7 @@
       isPlaying={isCurrentlyPlaying}
     />
   </div>
-  <TimelineInfo></TimelineInfo>
+  <TimelineInfo {timeline} />
 </div>
 
 <style>

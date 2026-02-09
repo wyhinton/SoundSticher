@@ -2,9 +2,9 @@
   import lottie from 'lottie-web';
   import { tick } from 'svelte';
   import {
+    addSourceToCurrentOperation,
     appState,
     currentOperationSources,
-    addSourceToCurrentOperation,
   } from '../state/state.svelte';
   import SourceRow from './SourceRow.svelte';
 

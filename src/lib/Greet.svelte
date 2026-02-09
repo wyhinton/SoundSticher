@@ -13,7 +13,7 @@
   import Timeline from './PlaybackDisplay/Timeline.svelte';
   import { initializeFrontend } from './state/initializeFrontend';
   import { appState } from './state/state.svelte';
-  import { operationTimelines } from './state/timeline/timelines';
+  import { operationTimelines, timelinesStore } from './state/timeline/timelines';
   import Footer from './StatusFooter.svelte';
 
   WebviewWindow.getCurrent()
@@ -118,7 +118,10 @@
             <Splitpanes theme="modern-theme" horizontal={true}>
               {#each $operationTimelines as timeline (timeline.id)}
                 <Pane>
-                  <div class="timeline-pane-content">
+                  <div
+                    class="timeline-pane-content"
+                    class:active={$timelinesStore.activeTimelineId === timeline.id}
+                  >
                     <PlottedInfo {timeline} />
                     <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
                   </div>
@@ -165,6 +168,22 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    opacity: 0.5;
+  }
+
+  .timeline-pane-content.active {
+    border-color: var(--bs-primary, #0d6efd);
+    background-color: rgba(13, 110, 253, 0.05);
+    opacity: 1;
+  }
+
+  .no-timelines {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--bs-text-muted);
   }
 
   /* Modern theme for splitpanes */
