@@ -2,8 +2,14 @@ import { get } from 'svelte/store';
 import { loggingState } from '../logging';
 import type { OperationId, OperationDef, OperationSource, RenderPolicy } from '../operation';
 import { appState, type AppState, type TimelineItem } from '../state.svelte';
-import type { TimelineSource, TimelineViewState } from '../timeline/timelines';
+import {
+  timelinesStore,
+  type TimelineSource,
+  type TimelineViewState,
+  type TimelinesState,
+} from '../timeline/timelines';
 import { applyCommand } from './applyCommand';
+import { applyTimelineCommand } from './applyTimelineCommand';
 import { invertCommand } from './invertCommand';
 
 // ============================================================================
@@ -209,11 +215,11 @@ class UndoRedoManager {
         console.log(`🔄 UndoRedo: Dispatching command "${commandLabel}"`, command);
       }
 
-      // Apply the command and capture any side effects
+      // Apply the command and capture any side effects using transactional updates
       let finalCommand: Command = command;
-      appState.update(state => {
-        finalCommand = applyCommand(state, command);
-        return state;
+      updateStoresTransactionally(stores => {
+        finalCommand = applyCommand(stores.appState, command);
+        stores.timelinesState = applyTimelineCommand(stores.timelinesState, finalCommand);
       });
 
       // Create the inverse command for undo
@@ -287,10 +293,10 @@ class UndoRedoManager {
         console.log(`↶ UndoRedo: Undoing "${historyEntry.label}"`);
       }
 
-      // Apply the inverse command
-      appState.update(state => {
-        applyCommand(state, historyEntry.inverse);
-        return state;
+      // Apply the inverse command using transactional updates
+      updateStoresTransactionally(stores => {
+        applyCommand(stores.appState, historyEntry.inverse);
+        stores.timelinesState = applyTimelineCommand(stores.timelinesState, historyEntry.inverse);
       });
 
       // Move the current index back
@@ -340,10 +346,10 @@ class UndoRedoManager {
         console.log(`↷ UndoRedo: Redoing "${historyEntry.label}"`);
       }
 
-      // Apply the forward command
-      appState.update(state => {
-        applyCommand(state, historyEntry.forward);
-        return state;
+      // Apply the forward command using transactional updates
+      updateStoresTransactionally(stores => {
+        applyCommand(stores.appState, historyEntry.forward);
+        stores.timelinesState = applyTimelineCommand(stores.timelinesState, historyEntry.forward);
       });
 
       // Move the current index forward
@@ -445,6 +451,47 @@ class UndoRedoManager {
 }
 
 // ============================================================================
+// TRANSACTIONAL STORE UPDATES
+// ============================================================================
+
+/**
+ * Store states for transactional updates
+ */
+interface StoreStates {
+  appState: AppState;
+  timelinesState: TimelinesState;
+}
+
+/**
+ * Update multiple stores transactionally to maintain consistency
+ * This ensures that commands affecting multiple stores update them atomically
+ */
+function updateStoresTransactionally(updater: (stores: StoreStates) => void): void {
+  const isLogging = get(loggingState).operationsLog;
+  if (isLogging) {
+    console.log('🔄 UndoRedo: Starting transactional store update');
+  }
+  try {
+    // Step 1: Get current values from all stores
+    const stores: StoreStates = {
+      appState: get(appState),
+      timelinesState: get(timelinesStore),
+    };
+    // Step 2: Let the caller modify the stores
+    updater(stores);
+    // Step 3: Write updated stores back atomically
+    appState.set(stores.appState);
+    timelinesStore.set(stores.timelinesState);
+    if (isLogging) {
+      console.log('✅ UndoRedo: Transactional store update completed successfully');
+    }
+  } catch (error) {
+    console.error('❌ UndoRedo: Error during transactional store update:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
 // UTILITIES
 // ============================================================================
 
@@ -477,12 +524,6 @@ function getCommandLabel(command: Command): string {
     default:
       return 'Unknown Command';
   }
-}
-
-function generateOperationId(): OperationId {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
-  return `op_${timestamp}_${random}`;
 }
 
 function generateHistoryId(): string {

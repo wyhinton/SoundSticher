@@ -154,7 +154,6 @@ export interface TimelineItemWithHierarchy {
 const DEFAULT_VIEW_STATE: TimelineViewState = {
   zoom: 1,
   scrollX: 0,
-  visibleTracks: [],
 };
 
 /**
@@ -186,7 +185,6 @@ function createTimelineId(): TimelineId {
 export function defaultTimelineViewState(): TimelineViewState {
   return {
     ...DEFAULT_VIEW_STATE,
-    visibleTracks: [],
   };
 }
 
