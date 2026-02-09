@@ -400,6 +400,7 @@ pub fn run() {
             timeline_playback_commands::timeline_build_playback,
             timeline_playback_commands::timeline_play,
             timeline_playback_commands::timeline_pause,
+            timeline_playback_commands::timeline_toggle,
             timeline_playback_commands::timeline_resume,
             timeline_playback_commands::timeline_stop,
             timeline_playback_commands::timeline_seek,

@@ -634,7 +634,7 @@ impl TimelinePlaybackController {
 
     /// Toggle play/pause/resume for a specific timeline.
     ///
-    /// If the timeline is currently playing and not paused, pause it.
+    /// If the timeline is currently playing and not paused, pau se it.
     /// If the timeline is currently paused, resume it.
     /// Otherwise, start playing the timeline from current position.
     pub fn toggle(&self, timeline_id: &TimelineId) -> Result<(), Error> {
@@ -648,9 +648,6 @@ impl TimelinePlaybackController {
         if is_this_timeline_active && is_playing && !is_paused {
             // Timeline is currently playing and not paused - pause it
             self.pause(timeline_id)
-        } else if is_this_timeline_active && is_paused {
-            // Timeline is currently paused - resume it
-            self.resume(timeline_id)
         } else {
             // Timeline is not playing or not active - start playing it
             self.play(timeline_id.clone(), None)
