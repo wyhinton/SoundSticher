@@ -6,6 +6,7 @@ import {
   buildGraph as buildGraphInternal,
   buildGraphFromFiles as buildGraphFromFilesInternal,
 } from './playbackGraphUtils';
+import { clearSource, publishStatus } from './status';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '$lib/utils/channelMaker';
 
 /**
@@ -374,7 +375,6 @@ export async function buildTimelineForOp(
     logger.opPlayback.error(`Failed to build graph for timeline '${timelineId}':`, error);
 
     // Error status is handled by re-importing for this specific case
-    const { publishStatus, clearSource } = await import('./status');
     clearSource(`build-graph-${timelineId}`);
     publishStatus({
       source: `build-graph-${timelineId}`,

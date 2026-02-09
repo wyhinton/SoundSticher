@@ -409,6 +409,7 @@ pub fn run() {
             timeline_playback_commands::timeline_get_progress,
             timeline_playback_commands::timeline_clear,
             timeline_playback_commands::timeline_clear_all,
+            timeline_playback_commands::op_timeline_sync_full,
             // Artifact registry commands
             artifact_registry_commands::get_artifact_registry_records,
             artifact_registry_commands::get_artifact_registry_stats,

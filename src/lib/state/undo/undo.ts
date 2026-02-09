@@ -1,7 +1,8 @@
 import { get } from 'svelte/store';
 import { loggingState } from '../logging';
 import type { OperationId, OperationDef, OperationSource, RenderPolicy } from '../operation';
-import { appState, type AppState } from '../state.svelte';
+import { appState, type AppState, type TimelineItem } from '../state.svelte';
+import type { TimelineSource, TimelineViewState } from '../timeline/timelines';
 import { applyCommand } from './applyCommand';
 import { invertCommand } from './invertCommand';
 
@@ -24,6 +25,7 @@ export type Command =
   | ReorderOperationSourcesCommand
   | RemoveOperationSourcesFromCurrentOpCommand
   | SetRenderPolicyCommand
+  | ToggleTimelineVisibilityCommand
   | CommandBatch;
 
 // Individual command types
@@ -135,6 +137,19 @@ export interface SetRenderPolicyCommand {
   policy: RenderPolicy;
   // Captured data for undo
   previousPolicy?: RenderPolicy;
+}
+
+export interface ToggleTimelineVisibilityCommand {
+  type: 'toggle-timeline-visibility';
+  operationId: OperationId;
+  // Captured data for undo
+  wasVisible?: boolean;
+  timelineId?: string;
+  timelineData?: {
+    source: TimelineSource;
+    serializedItems?: TimelineItem[];
+  };
+  viewState?: TimelineViewState;
 }
 
 export interface CommandBatch {
@@ -455,6 +470,8 @@ function getCommandLabel(command: Command): string {
       return `Remove ${command.operationIdsToRemove.length} Source(s) from Current Operation`;
     case 'set-render-policy':
       return 'Set Render Policy';
+    case 'toggle-timeline-visibility':
+      return 'Toggle Timeline Visibility';
     case 'batch':
       return command.label || `Batch (${command.commands.length} commands)`;
     default:

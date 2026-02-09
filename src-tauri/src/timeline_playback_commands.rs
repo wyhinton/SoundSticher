@@ -7,7 +7,7 @@
 // TimelinePlaybackController → sends commands to the worker via mpsc channel
 // Tauri commands   → thin glue that constructs a controller and calls one method
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
@@ -295,12 +295,10 @@ impl AppTimelinePlaybackState {
     fn send_cmd(&self, cmd: AudioCommand) -> Result<(), Error> {
         let guard = self.audio_tx.lock().unwrap();
         match guard.as_ref() {
-            Some(tx) => tx.send(cmd).map_err(|_| {
-                Error::PlaybackError("Audio worker channel disconnected".to_string())
-            }),
-            None => Err(Error::PlaybackError(
-                "Audio worker not started".to_string(),
-            )),
+            Some(tx) => tx
+                .send(cmd)
+                .map_err(|_| Error::PlaybackError("Audio worker channel disconnected".to_string())),
+            None => Err(Error::PlaybackError("Audio worker not started".to_string())),
         }
     }
 
@@ -584,63 +582,73 @@ fn audio_worker_loop(
         }
 
         // ── Progress update (only while playing) ────────────────────────
+        // ── Progress update (only while playing) ────────────────────────
         if state.transport() == TransportState::Playing {
-            if let Some(ref tid) = tracking_timeline {
-                // Check if sink is empty (playback finished naturally)
-                let is_empty = sink.as_ref().map(|s| s.empty()).unwrap_or(true);
-                let loop_playback = state
-                    .get_session(tid)
-                    .map(|s| s.loop_enabled())
-                    .unwrap_or(false);
+            // If nothing is being tracked, reset defensively
+            let Some(ref tid) = tracking_timeline else {
+                stop_and_reset!();
+                continue;
+            };
 
-                if is_empty && !loop_playback {
-                    // Natural end of playback
-                    if let Some(session) = state.get_session(tid) {
-                        *session.progress.lock().unwrap() = 1.0;
-                    }
-
-                    emit_logged!(
-                        app,
-                        "op-timeline-progress",
-                        serde_json::json!({ "timelineId": tid, "progress": 1.0 })
-                    );
-
-                    stop_and_reset!();
-                    continue;
-                }
-
-                // Compute progress
-                let total_duration = state
-                    .get_session(tid)
-                    .map(|s| s.duration_seconds())
-                    .unwrap_or(0.0);
-
-                let elapsed = tracking_start.elapsed().as_secs_f32();
-                let current_pos = initial_seek + accumulated_before_pause + elapsed;
-
-                let progress = if total_duration > 0.0 {
-                    let td = total_duration as f32;
-                    if loop_playback {
-                        (current_pos % td) / td
-                    } else {
-                        (current_pos / td).min(1.0)
-                    }
-                } else {
-                    0.0
-                };
-
-                // Update session metadata
-                if let Some(session) = state.get_session(tid) {
-                    *session.progress.lock().unwrap() = progress;
-                    *session.seek_seconds.lock().unwrap() = current_pos as f64;
-                }
+            // If the session no longer exists, it was removed externally.
+            // Stop immediately and reset worker state.
+            let Some(session) = state.get_session(tid) else {
+                stop_and_reset!();
 
                 emit_logged!(
                     app,
                     "op-timeline-progress",
-                    serde_json::json!({ "timelineId": tid, "progress": progress })
+                    serde_json::json!({ "timelineId": null, "progress": 0.0 })
                 );
+
+                continue;
+            };
+
+            // Check if sink finished naturally
+            let is_empty = sink.as_ref().map(|s| s.empty()).unwrap_or(true);
+            let loop_playback = session.loop_enabled();
+
+            if is_empty && !loop_playback {
+                // Natural end of playback
+                *session.progress.lock().unwrap() = 1.0;
+
+                emit_logged!(
+                    app,
+                    "op-timeline-progress",
+                    serde_json::json!({ "timelineId": tid, "progress": 1.0 })
+                );
+
+                stop_and_reset!();
+                continue;
             }
+
+            // ── Compute progress ─────────────────────────────────────────
+            let total_duration = session.duration_seconds();
+
+            let elapsed = tracking_start.elapsed().as_secs_f32();
+            let current_pos = initial_seek + accumulated_before_pause + elapsed;
+
+            let progress = if total_duration > 0.0 {
+                let td = total_duration as f32;
+
+                if loop_playback {
+                    (current_pos % td) / td
+                } else {
+                    (current_pos / td).min(1.0)
+                }
+            } else {
+                0.0
+            };
+
+            // Update session metadata
+            *session.progress.lock().unwrap() = progress;
+            *session.seek_seconds.lock().unwrap() = current_pos as f64;
+
+            emit_logged!(
+                app,
+                "op-timeline-progress",
+                serde_json::json!({ "timelineId": tid, "progress": progress })
+            );
         }
     }
 
@@ -890,8 +898,8 @@ impl TimelinePlaybackController {
         );
 
         // If actively playing/paused, send seek command to worker
-        let is_active = self.state.get_active_timeline().as_ref() == Some(timeline_id)
-            && !self.state.is_idle();
+        let is_active =
+            self.state.get_active_timeline().as_ref() == Some(timeline_id) && !self.state.is_idle();
 
         if is_active {
             self.state.send_cmd(AudioCommand::Seek {
@@ -1215,4 +1223,47 @@ pub struct AppPlaybackStateDebugInfo {
     pub is_playing: bool,
     pub is_paused: bool,
     pub total_sessions: usize,
+}
+
+#[tauri::command]
+pub fn op_timeline_sync_full(
+    timeline_ids: Vec<TimelineId>,
+    state: State<'_, Arc<AppTimelinePlaybackState>>,
+) -> Result<(), String> {
+    let desired: HashSet<TimelineId> = timeline_ids.into_iter().collect();
+
+    // Current session keys
+    let existing: HashSet<TimelineId> = state.sessions.iter().map(|e| e.key().clone()).collect();
+
+    // Compute diff
+    let to_add = desired.difference(&existing);
+    let to_remove = existing.difference(&desired);
+
+    // 1️⃣ Remove stale sessions
+    for timeline_id in to_remove {
+        state.remove_session(timeline_id);
+
+        // If this was active, stop transport
+        if state.get_active_timeline().as_ref() == Some(timeline_id) {
+            state.set_active_timeline(None);
+
+            // Tell worker to stop
+            if let Err(e) = state.send_cmd(AudioCommand::Stop) {
+                eprintln!("Failed to stop worker during sync: {e}");
+            }
+        }
+    }
+
+    // 2️⃣ Insert placeholders for new timelines
+    for timeline_id in to_add {
+        // Placeholder session (no graph yet)
+        let empty_graph = Arc::new(PlaybackGraph::new(AudioSpec::cd_quality()));
+        let spec = AudioSpec::default();
+
+        let session = PlaybackSession::new(empty_graph, spec, false, HashMap::new());
+
+        state.insert_session(timeline_id.clone(), session);
+    }
+
+    Ok(())
 }

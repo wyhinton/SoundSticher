@@ -13,7 +13,7 @@ import {
 } from './opPlaybackService';
 import { appState } from './state.svelte';
 import { initializeStatusPublishers } from './status-publishers';
-import { timelinesStore } from './timeline/timelines';
+import { initializeTimelineSync, timelinesStore } from './timeline/timelines';
 import { timelinePlaybackService } from './timelinePlaybackService';
 import { undo, redo, canUndo, canRedo } from './undo/undo';
 import { initWaveformService } from './waveformCache';
@@ -264,7 +264,7 @@ export function initializeFrontend(): () => void {
   initializeAutoRenderSubscription();
   // Initialize automatic status publishers (buffering, etc.)
   initializeStatusPublishers();
-
+  initializeTimelineSync();
   // subscribeForTimelineStoreSerialization();
   // Initialize waveform service (handles loading waveforms when operation changes)
   const cleanupWaveformService = initWaveformService();

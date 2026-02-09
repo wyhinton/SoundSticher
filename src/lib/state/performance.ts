@@ -70,6 +70,7 @@ export interface PerformanceState {
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
   count_audio_files_in_folders: PerformanceMetric[];
   export_audio: PerformanceMetric[];
+  get_app_playback_state: PerformanceMetric[];
   get_app_state: PerformanceMetric[];
   get_artifact_debug_info: PerformanceMetric[];
   get_artifact_details_debug: PerformanceMetric[];
@@ -83,7 +84,6 @@ export interface PerformanceState {
   get_durations_batch: PerformanceMetric[];
   get_filtered_artifacts: PerformanceMetric[];
   get_metadata: PerformanceMetric[];
-  get_app_playback_state: PerformanceMetric[];
   get_sample_cache_stats: PerformanceMetric[];
   get_waveform: PerformanceMetric[];
   get_waveform_cache_stats: PerformanceMetric[];
@@ -104,6 +104,7 @@ export interface PerformanceState {
   op_playback_set_loop: PerformanceMetric[];
   op_playback_set_volume: PerformanceMetric[];
   op_playback_stop: PerformanceMetric[];
+  op_timeline_sync_full: PerformanceMetric[];
   pause_sample_preview: PerformanceMetric[];
   play_sample_preview: PerformanceMetric[];
   refresh_artifact_registry_status: PerformanceMetric[];
@@ -115,7 +116,6 @@ export interface PerformanceState {
   test_async: PerformanceMetric[];
   test_render_single_operation: PerformanceMetric[];
   test_scheduler: PerformanceMetric[];
-  timeline_build_from_request: PerformanceMetric[];
   timeline_build_playback: PerformanceMetric[];
   timeline_clear: PerformanceMetric[];
   timeline_clear_all: PerformanceMetric[];
@@ -143,6 +143,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   combine_all_cached_samples_with_custom_order: [],
   count_audio_files_in_folders: [],
   export_audio: [],
+  get_app_playback_state: [],
   get_app_state: [],
   get_artifact_debug_info: [],
   get_artifact_details_debug: [],
@@ -156,7 +157,6 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   get_durations_batch: [],
   get_filtered_artifacts: [],
   get_metadata: [],
-  get_app_playback_state: [],
   get_sample_cache_stats: [],
   get_waveform: [],
   get_waveform_cache_stats: [],
@@ -177,6 +177,7 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   op_playback_set_loop: [],
   op_playback_set_volume: [],
   op_playback_stop: [],
+  op_timeline_sync_full: [],
   pause_sample_preview: [],
   play_sample_preview: [],
   refresh_artifact_registry_status: [],
@@ -188,7 +189,6 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   test_async: [],
   test_render_single_operation: [],
   test_scheduler: [],
-  timeline_build_from_request: [],
   timeline_build_playback: [],
   timeline_clear: [],
   timeline_clear_all: [],

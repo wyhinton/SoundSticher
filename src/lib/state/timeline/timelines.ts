@@ -4,10 +4,14 @@ import { persisted } from 'svelte-persisted-store';
 import { durationCache } from '../durationCache';
 import { logger } from '../logging';
 import type { OperationDef, OperationId } from '../operation';
+import { getOperationById } from '../operation';
 import type { OpTimelineProgressEvent } from '../opPlaybackService';
+import { invokeWithPerf } from '../performance';
 import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
+import { dispatch, type ToggleTimelineVisibilityCommand } from '../undo/undo';
 import { waveformCache, type Waveform } from '../waveformCache';
 import { timelinePlaybackState } from './timelinePlaybackState';
+import { timelineService } from './timelineStoreService';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
 // Timeline progress listener for updating individual timeline views
@@ -339,6 +343,38 @@ export const timelinesStore = persisted<TimelinesState>(
     serializer: timelineStoreSerializer,
   }
 );
+
+const timelineKeys = derived(timelinesStore, $store => Object.keys($store.timelines));
+
+/**
+ * Initialize timeline synchronization with the backend
+ * This keeps the backend's playback sessions in sync with frontend timelines
+ */
+export function initializeTimelineSync(): void {
+  timelineKeys.subscribe(async keys => {
+    console.log(`%cHERE LINE :352 %c`, 'color: yellow; font-weight: bold', '');
+
+    logger.timeline?.info(`Timeline keys changed: [${keys.join(', ')}] - syncing with backend`);
+
+    try {
+      const result = await invokeWithPerf('op_timeline_sync_full', {
+        timelineIds: keys,
+      });
+
+      if (!result.ok) {
+        logger.timeline?.error('Failed to sync timelines with backend:', result.error);
+      } else {
+        logger.timeline?.info(`Successfully synced ${keys.length} timelines with backend`);
+      }
+    } catch (error) {
+      logger.timeline?.error('Error during timeline sync:', error);
+    }
+  });
+}
+
+// Initialize timeline sync when module loads
+if (typeof window !== 'undefined') {
+}
 
 /**
  * Separate persisted store for timeline view states (zoom, scroll, selection, etc.)
@@ -698,7 +734,6 @@ export function createOperationTimelineItems(
  */
 export function createTimelineStateForOp(operationId: OperationId): Timeline {
   const timelineId = createTimelineId();
-  console.log(timelineId);
   const operationIdReadable = writable(operationId);
   const waveformState = createTimelineWaveformStore(timelineId);
 
@@ -706,8 +741,7 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
   // This should happen after the timeline is created to get the file paths from the operation
   const loadWaveformData = async () => {
     try {
-      const currentAppState = get(appState);
-      const operation = currentAppState.operations?.defs?.[operationId];
+      const operation = getOperationById(operationId);
       if (operation) {
         const hierarchicalItems = getHierarchicalTimelineItems(operation, operationId);
         const filePaths = hierarchicalItems
@@ -742,10 +776,24 @@ export function createTimelineStateForOp(operationId: OperationId): Timeline {
 }
 
 /**
- * Toggle timeline visibility for a specific operation ID
+ * Toggle timeline visibility for a specific operation ID using the undo/redo system
  * If no timeline exists for this operation, create one
  * If timeline exists, remove it (toggle off)
+ *
+ * This operation is undoable/redoable.
  */
+export function toggleTimelineVisibilityByOpIdDispatch(operationId: OperationId): void {
+  logger.waveform.info(`Toggling timeline visibility for operation: ${operationId}`);
+
+  // Create and dispatch the undoable command
+  const command: ToggleTimelineVisibilityCommand = {
+    type: 'toggle-timeline-visibility',
+    operationId,
+  };
+
+  dispatch(command, 'Toggle Timeline Visibility');
+}
+
 export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
   const currentState = get(timelinesStore);
 
@@ -763,15 +811,7 @@ export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
     // Timeline exists - remove it (toggle off)
     logger.waveform.info(`Hiding timeline for operation: ${operationId}`);
 
-    timelinesStore.update(state => {
-      const newTimelines = { ...state.timelines };
-      delete newTimelines[existingTimelineId];
-
-      return {
-        ...state,
-        timelines: newTimelines,
-      };
-    });
+    timelineService.deleteTimeline(existingTimelineId);
 
     // Also clean up the view state for this timeline
     timelineViewStates.update(states => {
