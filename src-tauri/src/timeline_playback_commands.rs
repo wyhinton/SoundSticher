@@ -1,16 +1,15 @@
 // Timeline Playback Commands
 //
-// Architecture: Option C – Hybrid
+// Architecture: AudioWorker — single dedicated audio thread
 //
 // PlaybackSession  → per-session metadata + start-position computation
-// TimelinePlaybackController → multi-session orchestration, global sink, playback threads
+// AudioWorker      → single thread that owns OutputStream + Sink, receives AudioCommands
+// TimelinePlaybackController → sends commands to the worker via mpsc channel
 // Tauri commands   → thin glue that constructs a controller and calls one method
-//
-// The old op_playback_* commands remain as legacy wrappers; new work goes through
-// the controller.
 
 use std::collections::{BTreeMap, HashMap};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -31,6 +30,60 @@ use crate::sample_cache::SampleCacheService;
 use crate::{emit_logged, log_info, send_channel_event};
 
 pub type TimelineId = String;
+
+// ─── Playback transport state (published by worker, read by anyone) ────────
+
+/// Mirrors the worker's internal state for external readers.
+/// The worker is the *only* writer; everyone else reads.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransportState {
+    Idle = 0,
+    Playing = 1,
+    Paused = 2,
+}
+
+impl From<u8> for TransportState {
+    fn from(v: u8) -> Self {
+        match v {
+            1 => TransportState::Playing,
+            2 => TransportState::Paused,
+            _ => TransportState::Idle,
+        }
+    }
+}
+
+// ─── AudioCommand ───────────────────────────────────────────────────────────
+
+/// Commands sent to the audio worker thread via an `mpsc` channel.
+pub enum AudioCommand {
+    /// Start playing a timeline from a position.
+    Play {
+        timeline_id: TimelineId,
+        graph: Arc<PlaybackGraph>,
+        spec: AudioSpec,
+        loop_playback: bool,
+        start_position: SampleTime,
+    },
+    /// Pause the currently active timeline.
+    Pause,
+    /// Resume the currently paused timeline.
+    Resume,
+    /// Stop playback entirely and reset.
+    Stop,
+    /// Seek to a position (seconds). If playing, restarts from that position.
+    Seek {
+        timeline_id: TimelineId,
+        position_seconds: f64,
+        graph: Arc<PlaybackGraph>,
+        spec: AudioSpec,
+        loop_playback: bool,
+    },
+    /// Set master volume (0.0–1.0+).
+    SetVolume(f32),
+    /// Shut down the worker thread.
+    Shutdown,
+}
 
 // ─── PlaybackSession ────────────────────────────────────────────────────────
 
@@ -146,24 +199,30 @@ impl PlaybackSession {
 
 /// Shared state for multi-timeline playback.
 ///
-/// Fields are `pub(crate)` so that both the controller (in this module) and
-/// the legacy `op_playback_commands` module can access them during the
-/// migration period.
+/// The audio worker thread is the single owner of OutputStream + Sink.
+/// All transport commands go through `audio_tx`. The worker publishes
+/// its transport state back into `transport_state` and `active_timeline`
+/// so that readers can query without locking a channel.
 pub struct AppTimelinePlaybackState {
-    /// All timeline sessions
+    /// All timeline sessions (metadata only — no audio resources)
     pub(crate) sessions: DashMap<TimelineId, PlaybackSession>,
 
-    /// Which timeline is currently audible (only one at a time — hardware constraint)
+    /// Which timeline is currently audible (written by worker, read by anyone)
     pub(crate) active_timeline: RwLock<Option<TimelineId>>,
 
-    /// Single audio sink
-    pub(crate) sink: Mutex<Option<Arc<Sink>>>,
+    /// Transport state published by the worker (Idle / Playing / Paused)
+    pub(crate) transport_state: AtomicU8,
 
-    /// Whether audio is currently playing
+    /// Channel to send commands to the audio worker thread
+    pub(crate) audio_tx: Mutex<Option<mpsc::Sender<AudioCommand>>>,
+
+    // ── Legacy fields (used by op_playback_commands during migration) ────
+    /// Whether audio is currently playing (LEGACY — read transport_state instead)
     pub(crate) is_playing: AtomicBool,
-
-    /// Whether playback is paused
+    /// Whether playback is paused (LEGACY — read transport_state instead)
     pub(crate) is_paused: AtomicBool,
+    /// Single audio sink (LEGACY — the worker owns the real sink now)
+    pub(crate) sink: Mutex<Option<Arc<Sink>>>,
 }
 
 impl AppTimelinePlaybackState {
@@ -171,11 +230,33 @@ impl AppTimelinePlaybackState {
         Self {
             sessions: DashMap::new(),
             active_timeline: RwLock::new(None),
-            sink: Mutex::new(None),
+            transport_state: AtomicU8::new(TransportState::Idle as u8),
+            audio_tx: Mutex::new(None),
             is_paused: AtomicBool::new(false),
             is_playing: AtomicBool::new(false),
+            sink: Mutex::new(None),
         }
     }
+
+    // ── transport state queries ──────────────────────────────────────────
+
+    pub fn transport(&self) -> TransportState {
+        TransportState::from(self.transport_state.load(Ordering::Acquire))
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.transport() == TransportState::Playing
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.transport() == TransportState::Paused
+    }
+
+    pub fn is_idle(&self) -> bool {
+        self.transport() == TransportState::Idle
+    }
+
+    // ── session helpers ─────────────────────────────────────────────────
 
     pub fn get_session(
         &self,
@@ -207,7 +288,26 @@ impl AppTimelinePlaybackState {
         self.sessions.clear();
     }
 
-    /// Stop the current sink, reset flags, and drop the sink reference.
+    // ── worker channel ──────────────────────────────────────────────────
+
+    /// Send a command to the audio worker. Spawns the worker if it isn't
+    /// running yet (lazy init).
+    fn send_cmd(&self, cmd: AudioCommand) -> Result<(), Error> {
+        let guard = self.audio_tx.lock().unwrap();
+        match guard.as_ref() {
+            Some(tx) => tx.send(cmd).map_err(|_| {
+                Error::PlaybackError("Audio worker channel disconnected".to_string())
+            }),
+            None => Err(Error::PlaybackError(
+                "Audio worker not started".to_string(),
+            )),
+        }
+    }
+
+    // ── Legacy compatibility (for op_playback_commands during migration) ──
+
+    /// Stop the current sink, reset legacy flags, and drop the sink reference.
+    /// LEGACY: used only by op_playback_commands. New code uses AudioCommand::Stop.
     pub fn stop_current_playback(&self) {
         self.is_playing.store(false, Ordering::Relaxed);
         self.is_paused.store(false, Ordering::Relaxed);
@@ -219,6 +319,27 @@ impl AppTimelinePlaybackState {
         }
         *sink = None;
     }
+
+    /// Start the audio worker thread with a proper Arc reference.
+    pub fn ensure_worker_arc(
+        self: &Arc<Self>,
+        app: AppHandle,
+        logging: Arc<Mutex<LoggingService>>,
+    ) {
+        let mut guard = self.audio_tx.lock().unwrap();
+        if guard.is_some() {
+            return; // already running
+        }
+
+        let (tx, rx) = mpsc::channel::<AudioCommand>();
+        *guard = Some(tx);
+        drop(guard);
+
+        let state = Arc::clone(self);
+        thread::spawn(move || {
+            audio_worker_loop(rx, state, app, logging);
+        });
+    }
 }
 
 impl Default for AppTimelinePlaybackState {
@@ -227,9 +348,316 @@ impl Default for AppTimelinePlaybackState {
     }
 }
 
+// ─── Audio Worker Loop ──────────────────────────────────────────────────────
+
+/// The single audio thread. Owns the `OutputStream` (platform audio handle)
+/// and `Sink`. Processes `AudioCommand`s from the channel and runs a
+/// progress-reporting loop while audio is playing.
+fn audio_worker_loop(
+    rx: mpsc::Receiver<AudioCommand>,
+    state: Arc<AppTimelinePlaybackState>,
+    app: AppHandle,
+    logging: Arc<Mutex<LoggingService>>,
+) {
+    // Create audio output — lives for the entire worker lifetime.
+    let (_stream, stream_handle) = match OutputStream::try_default() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("🔊 [audio_worker] FATAL: cannot create audio output: {e}");
+            // Mark channel as dead so callers get an error
+            *state.audio_tx.lock().unwrap() = None;
+            return;
+        }
+    };
+
+    let mut sink: Option<Sink> = None;
+
+    // Progress tracking state
+    let mut tracking_timeline: Option<TimelineId> = None;
+    let mut tracking_start = Instant::now();
+    let mut initial_seek: f32 = 0.0;
+    let mut accumulated_before_pause: f32 = 0.0;
+    let mut pause_start: Option<Instant> = None;
+
+    /// Helper: stop current sink and reset tracking
+    macro_rules! stop_and_reset {
+        () => {
+            if let Some(ref s) = sink {
+                s.stop();
+            }
+            sink = None;
+            state
+                .transport_state
+                .store(TransportState::Idle as u8, Ordering::Release);
+            state.set_active_timeline(None);
+            tracking_timeline = None;
+            pause_start = None;
+            accumulated_before_pause = 0.0;
+            initial_seek = 0.0;
+        };
+    }
+
+    loop {
+        // If we're playing, use a non-blocking recv with a 16ms timeout
+        // so we can update progress at ~60fps.
+        // If idle/paused, block until a command arrives.
+        let cmd = match state.transport() {
+            TransportState::Playing => {
+                match rx.recv_timeout(Duration::from_millis(16)) {
+                    Ok(cmd) => Some(cmd),
+                    Err(mpsc::RecvTimeoutError::Timeout) => None, // just update progress
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+            TransportState::Paused => {
+                // While paused, check less frequently but still respond to commands
+                match rx.recv_timeout(Duration::from_millis(50)) {
+                    Ok(cmd) => Some(cmd),
+                    Err(mpsc::RecvTimeoutError::Timeout) => None,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+            TransportState::Idle => {
+                // Block until command
+                match rx.recv() {
+                    Ok(cmd) => Some(cmd),
+                    Err(_) => break, // channel closed
+                }
+            }
+        };
+
+        // ── Handle command ──────────────────────────────────────────────
+        if let Some(cmd) = cmd {
+            match cmd {
+                AudioCommand::Play {
+                    timeline_id,
+                    graph,
+                    spec,
+                    loop_playback,
+                    start_position,
+                } => {
+                    // Stop any existing playback
+                    stop_and_reset!();
+
+                    // Create new sink
+                    let new_sink = match Sink::try_new(&stream_handle) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("🔊 [audio_worker] ERROR creating sink: {e}");
+                            continue;
+                        }
+                    };
+
+                    // Build source and append
+                    let source = TimelineSourceBuilder::new()
+                        .spec(spec)
+                        .looping(loop_playback)
+                        .start_position(start_position)
+                        .build(graph);
+
+                    new_sink.append(source);
+                    new_sink.set_volume(1.0);
+                    new_sink.play();
+
+                    // Init progress tracking
+                    initial_seek = start_position.to_seconds(spec.sample_rate) as f32;
+                    accumulated_before_pause = 0.0;
+                    tracking_start = Instant::now();
+                    pause_start = None;
+                    tracking_timeline = Some(timeline_id.clone());
+
+                    sink = Some(new_sink);
+                    state.set_active_timeline(Some(timeline_id));
+                    state
+                        .transport_state
+                        .store(TransportState::Playing as u8, Ordering::Release);
+                }
+
+                AudioCommand::Pause => {
+                    if let Some(ref s) = sink {
+                        s.pause();
+                        // Record accumulated time before pause
+                        accumulated_before_pause += tracking_start.elapsed().as_secs_f32();
+                        pause_start = Some(Instant::now());
+                        state
+                            .transport_state
+                            .store(TransportState::Paused as u8, Ordering::Release);
+                    }
+                }
+
+                AudioCommand::Resume => {
+                    if let Some(ref s) = sink {
+                        s.play();
+                        pause_start = None;
+                        tracking_start = Instant::now();
+                        state
+                            .transport_state
+                            .store(TransportState::Playing as u8, Ordering::Release);
+                    }
+                }
+
+                AudioCommand::Stop => {
+                    // Snapshot final position before resetting
+                    if let Some(ref tid) = tracking_timeline {
+                        if let Some(session) = state.get_session(tid) {
+                            session.reset();
+                        }
+                    }
+                    stop_and_reset!();
+
+                    emit_logged!(
+                        app,
+                        "op-timeline-progress",
+                        serde_json::json!({ "timelineId": null, "progress": 0.0 })
+                    );
+                }
+
+                AudioCommand::Seek {
+                    timeline_id,
+                    position_seconds,
+                    graph,
+                    spec,
+                    loop_playback,
+                } => {
+                    let was_paused = state.is_paused();
+
+                    // Stop current sink
+                    if let Some(ref s) = sink {
+                        s.stop();
+                    }
+                    sink = None;
+
+                    // Create new sink from seek position
+                    let new_sink = match Sink::try_new(&stream_handle) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("🔊 [audio_worker] ERROR creating sink on seek: {e}");
+                            continue;
+                        }
+                    };
+
+                    let seek_pos = SampleTime::from_seconds(position_seconds, spec.sample_rate);
+                    let source = TimelineSourceBuilder::new()
+                        .spec(spec)
+                        .looping(loop_playback)
+                        .start_position(seek_pos)
+                        .build(graph);
+
+                    new_sink.append(source);
+                    new_sink.set_volume(1.0);
+
+                    // Reset tracking
+                    initial_seek = position_seconds as f32;
+                    accumulated_before_pause = 0.0;
+                    tracking_start = Instant::now();
+                    tracking_timeline = Some(timeline_id.clone());
+
+                    if was_paused {
+                        new_sink.pause();
+                        pause_start = Some(Instant::now());
+                        state
+                            .transport_state
+                            .store(TransportState::Paused as u8, Ordering::Release);
+                    } else {
+                        new_sink.play();
+                        pause_start = None;
+                        state
+                            .transport_state
+                            .store(TransportState::Playing as u8, Ordering::Release);
+                    }
+
+                    sink = Some(new_sink);
+                    state.set_active_timeline(Some(timeline_id));
+                }
+
+                AudioCommand::SetVolume(volume) => {
+                    if let Some(ref s) = sink {
+                        s.set_volume(volume);
+                    }
+                }
+
+                AudioCommand::Shutdown => {
+                    stop_and_reset!();
+                    break;
+                }
+            }
+        }
+
+        // ── Progress update (only while playing) ────────────────────────
+        if state.transport() == TransportState::Playing {
+            if let Some(ref tid) = tracking_timeline {
+                // Check if sink is empty (playback finished naturally)
+                let is_empty = sink.as_ref().map(|s| s.empty()).unwrap_or(true);
+                let loop_playback = state
+                    .get_session(tid)
+                    .map(|s| s.loop_enabled())
+                    .unwrap_or(false);
+
+                if is_empty && !loop_playback {
+                    // Natural end of playback
+                    if let Some(session) = state.get_session(tid) {
+                        *session.progress.lock().unwrap() = 1.0;
+                    }
+
+                    emit_logged!(
+                        app,
+                        "op-timeline-progress",
+                        serde_json::json!({ "timelineId": tid, "progress": 1.0 })
+                    );
+
+                    stop_and_reset!();
+                    continue;
+                }
+
+                // Compute progress
+                let total_duration = state
+                    .get_session(tid)
+                    .map(|s| s.duration_seconds())
+                    .unwrap_or(0.0);
+
+                let elapsed = tracking_start.elapsed().as_secs_f32();
+                let current_pos = initial_seek + accumulated_before_pause + elapsed;
+
+                let progress = if total_duration > 0.0 {
+                    let td = total_duration as f32;
+                    if loop_playback {
+                        (current_pos % td) / td
+                    } else {
+                        (current_pos / td).min(1.0)
+                    }
+                } else {
+                    0.0
+                };
+
+                // Update session metadata
+                if let Some(session) = state.get_session(tid) {
+                    *session.progress.lock().unwrap() = progress;
+                    *session.seek_seconds.lock().unwrap() = current_pos as f64;
+                }
+
+                emit_logged!(
+                    app,
+                    "op-timeline-progress",
+                    serde_json::json!({ "timelineId": tid, "progress": progress })
+                );
+            }
+        }
+    }
+
+    // Worker shutting down
+    if let Ok(logger) = logging.lock() {
+        log_info!(
+            logger,
+            LogSystem::Playback,
+            "audio_worker",
+            "Audio worker thread exiting"
+        );
+    }
+}
+
 // ─── TimelinePlaybackController ─────────────────────────────────────────────
 
-/// Runtime controller: multi-session orchestration and global sink management.
+/// Runtime controller: sends commands to the audio worker.
 ///
 /// Every public method is self-contained — callers (Tauri commands) construct
 /// one, call a single method, and let it drop.
@@ -245,6 +673,8 @@ impl TimelinePlaybackController {
         logging: Arc<Mutex<LoggingService>>,
         app: AppHandle,
     ) -> Self {
+        // Ensure the audio worker is running
+        state.ensure_worker_arc(app.clone(), Arc::clone(&logging));
         Self {
             state,
             logging,
@@ -255,17 +685,10 @@ impl TimelinePlaybackController {
     // ── play ─────────────────────────────────────────────────────────────
 
     /// Start playback of `timeline_id`, optionally from `start_seconds`.
-    ///
-    /// This is the full replacement for the old `op_playback_play`:
-    /// it computes the start position, stops any current playback,
-    /// spawns the playback thread, and runs the progress loop.
     pub fn play(&self, timeline_id: TimelineId, start_seconds: Option<f64>) -> Result<(), Error> {
         // ── 0. Check if this timeline is already playing ─────────────────
-        if let Some(active) = self.state.get_active_timeline() {
-            if active == timeline_id
-                && self.state.is_playing.load(Ordering::Relaxed)
-                && !self.state.is_paused.load(Ordering::Relaxed)
-            {
+        if let Some(ref active) = self.state.get_active_timeline() {
+            if active == &timeline_id && self.state.is_playing() {
                 return Err(Error::PlaybackError(format!(
                     "Timeline '{}' is already playing",
                     timeline_id
@@ -273,7 +696,7 @@ impl TimelinePlaybackController {
             }
         }
 
-        // ── 1. Read session metadata (immutable snapshot) ────────────────
+        // ── 1. Read session metadata ─────────────────────────────────────
         let session = self.state.get_session(&timeline_id).ok_or_else(|| {
             Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
         })?;
@@ -285,7 +708,7 @@ impl TimelinePlaybackController {
         let total_duration = session.duration_seconds();
         let op_count = session.op_ids.len();
         let op_names = session.op_names();
-        drop(session); // release DashMap ref before locking sink
+        drop(session);
 
         // ── 2. Log ───────────────────────────────────────────────────────
         if let Ok(logger) = self.logging.lock() {
@@ -305,80 +728,42 @@ impl TimelinePlaybackController {
             );
         }
 
-        // ── 3. Stop whatever is currently playing ────────────────────────
-        self.state.stop_current_playback();
-
-        // ── 4. Update global state ───────────────────────────────────────
-        self.state.set_active_timeline(Some(timeline_id.clone()));
-        self.state.is_playing.store(true, Ordering::Relaxed);
-        self.state.is_paused.store(false, Ordering::Relaxed);
-
-        // ── 5. Spawn playback thread ─────────────────────────────────────
-        let state = Arc::clone(&self.state);
-        let app = self.app.clone();
-        let tid = timeline_id.clone();
-
-        thread::spawn(move || {
-            start_playback_from_position(
-                state,
-                app,
-                tid,
-                graph,
-                spec,
-                loop_playback,
-                start_position,
-                false, // not paused
-            );
-        });
-
-        Ok(())
+        // ── 3. Send Play command to worker ───────────────────────────────
+        self.state.send_cmd(AudioCommand::Play {
+            timeline_id,
+            graph,
+            spec,
+            loop_playback,
+            start_position,
+        })
     }
 
     // ── pause ────────────────────────────────────────────────────────────
 
-    /// Pause the currently active timeline.
-    /// Pause a specific timeline.
     pub fn pause(&self, timeline_id: &TimelineId) -> Result<(), Error> {
-        // Check if already paused
-        if self.state.is_paused.load(Ordering::Relaxed) {
+        if self.state.is_paused() {
             return Err(Error::PlaybackError(format!(
                 "Timeline '{}' is already paused",
                 timeline_id
             )));
         }
-
-        // Check if not playing
-        if !self.state.is_playing.load(Ordering::Relaxed) {
+        if !self.state.is_playing() {
             return Err(Error::PlaybackError(format!(
                 "Timeline '{}' is not currently playing",
                 timeline_id
             )));
         }
-
-        // Check if this is the active timeline
-        if let Some(active) = self.state.get_active_timeline() {
-            if &active != timeline_id {
-                return Err(Error::PlaybackError(format!(
-                    "Timeline '{}' is not currently active",
-                    timeline_id
-                )));
-            }
-        } else {
-            return Err(Error::PlaybackError(
-                "No active timeline to pause".to_string(),
-            ));
+        if self.state.get_active_timeline().as_ref() != Some(timeline_id) {
+            return Err(Error::PlaybackError(format!(
+                "Timeline '{}' is not currently active",
+                timeline_id
+            )));
         }
 
-        let sink = self.state.sink.lock().unwrap();
-        if let Some(ref s) = *sink {
-            s.pause();
-            self.state.is_paused.store(true, Ordering::Relaxed);
-            self.state.is_playing.store(false, Ordering::Relaxed);
-        }
-        drop(sink);
+        self.state.send_cmd(AudioCommand::Pause)?;
 
-        // Log + emit progress snapshot
-        if let Some(session) = self.state.get_session(&timeline_id) {
+        // Log
+        if let Some(session) = self.state.get_session(timeline_id) {
             let progress = session.progress();
             let pos = progress as f64 * session.duration_seconds();
             if let Ok(logger) = self.logging.lock() {
@@ -406,55 +791,23 @@ impl TimelinePlaybackController {
 
     // ── resume ───────────────────────────────────────────────────────────
 
-    /// Resume the currently active timeline.
-    /// Resume a specific timeline.
     pub fn resume(&self, timeline_id: &TimelineId) -> Result<(), Error> {
-        // Check if not paused
-        if !self.state.is_paused.load(Ordering::Relaxed) {
+        if !self.state.is_paused() {
             return Err(Error::PlaybackError(format!(
                 "Timeline '{}' is not paused",
                 timeline_id
             )));
         }
-
-        // Check if not playing
-        if self.state.is_playing.load(Ordering::Relaxed) {
+        if self.state.get_active_timeline().as_ref() != Some(timeline_id) {
             return Err(Error::PlaybackError(format!(
-                "Timeline '{}' is already currently playing",
+                "Timeline '{}' is not currently active",
                 timeline_id
             )));
         }
 
-        // Check if this is the active timeline
-        if let Some(active) = self.state.get_active_timeline() {
-            if &active != timeline_id {
-                return Err(Error::PlaybackError(format!(
-                    "Timeline '{}' is not currently active",
-                    timeline_id
-                )));
-            }
-        } else {
-            return Err(Error::PlaybackError(
-                "No active timeline to resume".to_string(),
-            ));
-        }
+        self.state.send_cmd(AudioCommand::Resume)?;
 
-        let sink = self.state.sink.lock().unwrap();
-        match *sink {
-            Some(ref s) => {
-                s.play();
-                self.state.is_paused.store(false, Ordering::Relaxed);
-                self.state.is_playing.store(true, Ordering::Relaxed);
-            }
-            None => {
-                return Err(Error::PlaybackError(
-                    "No active playback to resume".to_string(),
-                ))
-            }
-        }
-        drop(sink);
-
-        if let Some(session) = self.state.get_session(&timeline_id) {
+        if let Some(session) = self.state.get_session(timeline_id) {
             let progress = session.progress();
             let pos = progress as f64 * session.duration_seconds();
             if let Ok(logger) = self.logging.lock() {
@@ -477,7 +830,6 @@ impl TimelinePlaybackController {
 
     // ── stop ─────────────────────────────────────────────────────────────
 
-    /// Stop a specific timeline and reset its progress to zero.
     pub fn stop(&self, timeline_id: &TimelineId) -> Result<(), Error> {
         let session = self.state.get_session(timeline_id).ok_or_else(|| {
             Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
@@ -495,28 +847,13 @@ impl TimelinePlaybackController {
                 )
             );
         }
-
-        session.reset();
         drop(session);
 
-        self.state.stop_current_playback();
-        self.state.set_active_timeline(None);
-
-        emit_logged!(
-            self.app,
-            "op-timeline-progress",
-            serde_json::json!({ "timelineId": null, "progress": 0.0 })
-        );
-
-        Ok(())
+        self.state.send_cmd(AudioCommand::Stop)
     }
 
     // ── seek ─────────────────────────────────────────────────────────────
 
-    /// Seek to `position_seconds` within `timeline_id`.
-    ///
-    /// If the timeline is actively playing, the audio is restarted from the
-    /// new position (since rodio's `try_seek` is not always supported).
     pub fn seek(&self, timeline_id: &TimelineId, position_seconds: f64) -> Result<(), Error> {
         let session = self.state.get_session(timeline_id).ok_or_else(|| {
             Error::PlaybackError(format!("No session for timeline '{timeline_id}'"))
@@ -552,46 +889,18 @@ impl TimelinePlaybackController {
             serde_json::json!({ "timelineId": timeline_id, "progress": progress })
         );
 
-        // If this timeline is actively playing, restart from new position
+        // If actively playing/paused, send seek command to worker
         let is_active = self.state.get_active_timeline().as_ref() == Some(timeline_id)
-            && self.state.is_playing.load(Ordering::Relaxed);
+            && !self.state.is_idle();
 
         if is_active {
-            let seek_duration = Duration::from_secs_f64(position_seconds);
-
-            // Try native seek first
-            let sink = self.state.sink.lock().unwrap();
-            let seek_ok = sink
-                .as_ref()
-                .and_then(|s| s.try_seek(seek_duration).ok())
-                .is_some();
-            drop(sink);
-
-            if !seek_ok {
-                // Restart from new position
-                let was_paused = self.state.is_paused.load(Ordering::Relaxed);
-                self.state.stop_current_playback();
-                self.state.is_playing.store(true, Ordering::Relaxed);
-                self.state.is_paused.store(was_paused, Ordering::Relaxed);
-
-                let state = Arc::clone(&self.state);
-                let app = self.app.clone();
-                let tid = timeline_id.clone();
-                let seek_pos = SampleTime::from_seconds(position_seconds, spec.sample_rate);
-
-                thread::spawn(move || {
-                    start_playback_from_position(
-                        state,
-                        app,
-                        tid,
-                        graph,
-                        spec,
-                        loop_playback,
-                        seek_pos,
-                        was_paused,
-                    );
-                });
-            }
+            self.state.send_cmd(AudioCommand::Seek {
+                timeline_id: timeline_id.clone(),
+                position_seconds,
+                graph,
+                spec,
+                loop_playback,
+            })?;
         }
 
         Ok(())
@@ -617,10 +926,7 @@ impl TimelinePlaybackController {
     }
 
     pub fn set_master_volume(&self, volume: f32) {
-        let sink = self.state.sink.lock().unwrap();
-        if let Some(ref s) = *sink {
-            s.set_volume(volume);
-        }
+        let _ = self.state.send_cmd(AudioCommand::SetVolume(volume));
     }
 
     pub fn get_progress(&self, timeline_id: &TimelineId) -> Result<f32, Error> {
@@ -632,24 +938,15 @@ impl TimelinePlaybackController {
 
     // ── toggle ───────────────────────────────────────────────────────────
 
-    /// Toggle play/pause/resume for a specific timeline.
-    ///
-    /// If the timeline is currently playing and not paused, pau se it.
-    /// If the timeline is currently paused, resume it.
-    /// Otherwise, start playing the timeline from current position.
     pub fn toggle(&self, timeline_id: &TimelineId) -> Result<(), Error> {
         let active_timeline = self.state.get_active_timeline();
-        let is_playing = self.state.is_playing.load(Ordering::Relaxed);
-        let is_paused = self.state.is_paused.load(Ordering::Relaxed);
-
-        // Check if this timeline is the currently active one
         let is_this_timeline_active = active_timeline.as_ref() == Some(timeline_id);
 
-        if is_this_timeline_active && is_playing && !is_paused {
-            // Timeline is currently playing and not paused - pause it
+        if is_this_timeline_active && self.state.is_playing() {
             self.pause(timeline_id)
+        } else if is_this_timeline_active && self.state.is_paused() {
+            self.resume(timeline_id)
         } else {
-            // Timeline is not playing or not active - start playing it
             self.play(timeline_id.clone(), None)
         }
     }
@@ -659,8 +956,7 @@ impl TimelinePlaybackController {
     pub fn clear(&self, timeline_id: &TimelineId) -> Result<(), Error> {
         // Stop if this is the active timeline
         if self.state.get_active_timeline().as_ref() == Some(timeline_id) {
-            self.state.stop_current_playback();
-            self.state.set_active_timeline(None);
+            let _ = self.state.send_cmd(AudioCommand::Stop);
         }
 
         if let Some((_, session)) = self.state.remove_session(timeline_id) {
@@ -683,8 +979,7 @@ impl TimelinePlaybackController {
 
     pub fn clear_all(&self) -> Result<(), Error> {
         let count = self.state.sessions.len();
-        self.state.stop_current_playback();
-        self.state.set_active_timeline(None);
+        let _ = self.state.send_cmd(AudioCommand::Stop);
         self.state.clear_all();
 
         if let Ok(logger) = self.logging.lock() {
@@ -697,173 +992,6 @@ impl TimelinePlaybackController {
         }
         Ok(())
     }
-}
-
-// ─── Playback engine (private) ──────────────────────────────────────────────
-
-/// Spawn an audio output on the current thread, feed it the graph from
-/// `position`, and run a progress loop until playback ends or is stopped.
-///
-/// **Must be called on a dedicated thread** – `OutputStream` is `!Send` and
-/// must stay alive for the entire duration of playback.
-#[allow(clippy::too_many_arguments)]
-fn start_playback_from_position(
-    state: Arc<AppTimelinePlaybackState>,
-    app: AppHandle,
-    timeline_id: TimelineId,
-    graph: Arc<PlaybackGraph>,
-    spec: AudioSpec,
-    loop_playback: bool,
-    position: SampleTime,
-    was_paused: bool,
-) {
-    // Create audio output — must live on THIS thread
-    let (_stream, stream_handle) = match OutputStream::try_default() {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("🔊 [start_playback] ERROR creating audio output: {e}");
-            state.is_playing.store(false, Ordering::Relaxed);
-            return;
-        }
-    };
-
-    let sink = match Sink::try_new(&stream_handle) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            eprintln!("🔊 [start_playback] ERROR creating sink: {e}");
-            state.is_playing.store(false, Ordering::Relaxed);
-            return;
-        }
-    };
-
-    // Build the timeline audio source
-    let source = TimelineSourceBuilder::new()
-        .spec(spec)
-        .looping(loop_playback)
-        .start_position(position)
-        .build(graph.clone());
-
-    sink.append(source);
-    sink.set_volume(1.0);
-
-    if was_paused {
-        sink.pause();
-    } else {
-        sink.play();
-    }
-
-    // Store sink so pause/resume/stop/volume can reach it
-    *state.sink.lock().unwrap() = Some(Arc::clone(&sink));
-
-    // Run the progress loop (blocks until done)
-    run_progress_loop(&state, &timeline_id, &app);
-
-    // OutputStream drops here → audio stops
-}
-
-/// Progress tracking loop.  Blocks the current thread until playback ends.
-fn run_progress_loop(
-    state: &Arc<AppTimelinePlaybackState>,
-    timeline_id: &TimelineId,
-    app: &AppHandle,
-) {
-    // Capture the initial seek offset once
-    let initial_seek: f32 = state
-        .get_session(timeline_id)
-        .map(|s| s.seek_seconds() as f32)
-        .unwrap_or(0.0);
-
-    let mut tracking_start = Instant::now();
-    let mut pause_start: Option<Instant> = None;
-    let mut total_pause_duration = Duration::ZERO;
-    let mut accumulated_before_pause: f32 = 0.0;
-
-    loop {
-        if !state.is_playing.load(Ordering::Relaxed) {
-            break;
-        }
-        if state.get_active_timeline().as_ref() != Some(timeline_id) {
-            break;
-        }
-
-        let (total_duration, loop_playback) = {
-            let Some(session) = state.get_session(timeline_id) else {
-                break;
-            };
-            (session.duration_seconds(), session.loop_enabled())
-        };
-
-        // Check sink empty
-        {
-            let sg = state.sink.lock().unwrap();
-            let should_break = match *sg {
-                Some(ref s) => s.empty() && !loop_playback,
-                None => true,
-            };
-            if should_break {
-                break;
-            }
-        }
-
-        // ── paused ──────────────────────────────────────────────────────
-        if state.is_paused.load(Ordering::Relaxed) {
-            if pause_start.is_none() {
-                accumulated_before_pause += tracking_start.elapsed().as_secs_f32();
-                pause_start = Some(Instant::now());
-            }
-            thread::sleep(Duration::from_millis(50));
-            continue;
-        } else if let Some(ps) = pause_start.take() {
-            total_pause_duration += ps.elapsed();
-
-            // Detect seek-while-paused
-            if let Some(session) = state.get_session(timeline_id) {
-                let current_seek = session.seek_seconds() as f32;
-                let expected = initial_seek + accumulated_before_pause;
-                if (current_seek - expected).abs() > 0.01 {
-                    accumulated_before_pause = current_seek - initial_seek;
-                }
-            }
-            tracking_start = Instant::now();
-        }
-
-        // ── compute progress ────────────────────────────────────────────
-        let elapsed = tracking_start.elapsed().as_secs_f32();
-        let current_pos = initial_seek + accumulated_before_pause + elapsed;
-
-        let progress = if total_duration > 0.0 {
-            let td = total_duration as f32;
-            if loop_playback {
-                (current_pos % td) / td
-            } else {
-                (current_pos / td).min(1.0)
-            }
-        } else {
-            0.0
-        };
-
-        // Update session
-        if let Some(session) = state.get_session(timeline_id) {
-            *session.progress.lock().unwrap() = progress;
-            *session.seek_seconds.lock().unwrap() = current_pos as f64;
-        }
-
-        emit_logged!(
-            app,
-            "op-timeline-progress",
-            serde_json::json!({ "timelineId": timeline_id, "progress": progress })
-        );
-
-        thread::sleep(Duration::from_millis(16)); // ~60 FPS
-    }
-
-    // Snapshot final position
-    let final_pos =
-        initial_seek + accumulated_before_pause + tracking_start.elapsed().as_secs_f32();
-    if let Some(session) = state.get_session(timeline_id) {
-        *session.seek_seconds.lock().unwrap() = final_pos as f64;
-    }
-    state.is_playing.store(false, Ordering::Relaxed);
 }
 
 // ─── Debug info ─────────────────────────────────────────────────────────────
@@ -1035,18 +1163,10 @@ pub fn get_app_playback_state(
     state: State<'_, Arc<AppTimelinePlaybackState>>,
 ) -> Result<AppPlaybackStateDebugInfo, String> {
     let active_timeline = state.get_active_timeline();
-    let is_playing = state.is_playing.load(Ordering::Relaxed);
-    let is_paused = state.is_paused.load(Ordering::Relaxed);
+    let transport = state.transport();
 
     // BTreeMap guarantees deterministic ordering by key
     let mut sessions_info: BTreeMap<String, PlaybackSessionDebugInfo> = BTreeMap::new();
-
-    // let mut sink = state.sink.lock().unwrap();
-    // if let Some(ref s) = *sink {
-    //     s.is_paused()
-    //     s.len()
-    //     s.
-    // }
 
     for entry in state.sessions.iter() {
         let timeline_id = entry.key().clone();
@@ -1080,12 +1200,13 @@ pub fn get_app_playback_state(
     Ok(AppPlaybackStateDebugInfo {
         sessions: sessions_info,
         active_timeline,
-        is_playing,
-        is_paused,
+        is_playing: transport == TransportState::Playing,
+        is_paused: transport == TransportState::Paused,
         total_sessions,
     })
 }
-/// Serializable representation of OpPlaybackState for debugging
+
+/// Serializable representation of the playback state for debugging
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPlaybackStateDebugInfo {
