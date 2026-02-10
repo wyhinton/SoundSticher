@@ -49,7 +49,6 @@ async function initTimelineProgressListener(): Promise<void> {
         // Calculate playheadTime from progress - use a default duration
         // The actual duration will come from the waveform state managed by TimelineViewer
         const playheadTime = progress * 30; // fallback; actual playhead is driven by viewer
-
         return {
           ...state,
           [timelineId]: { playheadTime, isPlaying: false, looping: true },

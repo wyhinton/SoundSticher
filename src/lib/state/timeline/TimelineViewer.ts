@@ -262,7 +262,7 @@ export class TimelineViewer {
             const waveform = await waveformCache.getOrFetch(filePath, {
               width: widthPx,
               height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
-              normalize: true,
+              normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
             });
 
             store.update(state => {

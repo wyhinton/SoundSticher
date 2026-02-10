@@ -45,14 +45,13 @@
     type TimelineId,
   } from '$lib/state/timeline/timelines';
   // Import operation playback service
-  import { TimelineViewer } from '$lib/state/timeline/TimelineViewer';
+  import type { TimelineViewer } from '$lib/state/timeline/TimelineViewer';
   import timelinePlaybackService from '$lib/state/timelinePlaybackService';
   import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
 
   const dispatch = createEventDispatcher();
 
-  export let timelineViewer: TimelineViewer | null = null;
-  export let timelineId: TimelineId | null = null; // Keep for backward compatibility
+  export let timelineViewer: TimelineViewer;
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -71,7 +70,7 @@
   // Computed scalable region dimensions
   $: contentHeight = height - topPadding - axisHeight;
   $: contentScaleY = contentHeight / baseContentHeight;
-  $: tempYCenter = TIMELINE_DERIVED.CENTER_Y; // Center line in design space
+  let tempYCenter = TIMELINE_DERIVED.CENTER_Y; // Center line in design space
   $: currentActiveTimelineId = $activeTimelineId;
   // D3 Manager instance
   let d3Manager: D3TimelineManager | null = null;
@@ -134,18 +133,15 @@
   // ============================================================================
 
   // Use TimelineViewer as the primary interface
-  $: effectiveTimelineId = timelineViewer?.id ?? timelineId ?? null;
-
-  // Determine if this is an operation-based timeline
-  $: isOperationTimeline = timelineViewer != null;
+  $: effectiveTimelineId = timelineViewer.id;
 
   // Reactive timeline items from TimelineViewer
-  $: timelineItemsStore = timelineViewer?.items ?? null;
-  $: timelineItems = timelineItemsStore ? $timelineItemsStore : [];
+  $: timelineItemsStore = timelineViewer.items;
+  $: timelineItems = $timelineItemsStore;
 
   // Use timeline's own waveform state from TimelineViewer
-  $: waveformStateStore = timelineViewer?.waveformState ?? null;
-  $: waveformState = waveformStateStore ? $waveformStateStore : null;
+  $: waveformStateStore = timelineViewer.waveformState;
+  $: waveformState = $waveformStateStore;
   $: currentDuration = waveformState?.totalDuration || 30; // Default duration fallback
   $: isLoadingWaveforms = waveformState?.loading || waveformState?.loadingWaveforms || false;
 
@@ -327,9 +323,6 @@
     const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
-      if (timelineSource?.kind !== 'operation' || !effectiveTimelineId) {
-        return;
-      }
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
@@ -341,16 +334,12 @@
       return;
     }
 
-    // Check for segment clicks only if not in x-axis area
     const clickedSegmentIndex =
       (timelineItems?.length || 0) > 0 && timelineItems
-        ? d3Manager.findClickedSegment(relativeX, timelineItems as any)
+        ? d3Manager.findClickedSegment(relativeX, timelineItems as AudioFileTimelineItem[])
         : null;
 
     if (clickedSegmentIndex === null) {
-      if (timelineSource?.kind !== 'operation' || !effectiveTimelineId) {
-        return;
-      }
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
@@ -375,7 +364,9 @@
     // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
     if (
       typeof import.meta !== 'undefined' &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       typeof (import.meta as any).env !== 'undefined' &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (import.meta as any).env.DEV &&
       event.ctrlKey &&
       event.shiftKey &&
@@ -389,9 +380,6 @@
     }
 
     if (event.key === 'Delete' && selectedSegments.size > 0) {
-      if (timelineSource?.kind !== 'operation') {
-        return;
-      }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();
@@ -401,9 +389,9 @@
       if ((timelineItems?.length || 0) > 0) {
         Array.from(selectedSegments).forEach(index => {
           if (timelineItems && index < timelineItems.length) {
-            const item = timelineItems[index];
-            if (item && (item as any).operationId) {
-              operationIdsToRemove.add((item as any).operationId);
+            const item = timelineItems[index] as AudioFileTimelineItem;
+            if (item && item.operationId) {
+              operationIdsToRemove.add(item.operationId);
             }
           }
         });
@@ -516,7 +504,7 @@
     if (!dragDropManager || !timelineItems) return;
 
     const draggedIndex = event.detail.index;
-    const draggedItem = timelineItems[draggedIndex] as any; // Cast to access hierarchy props
+    const draggedItem = timelineItems[draggedIndex] as AudioFileTimelineItem;
 
     // If the dragged segment is not in the current selection, clear the selection
     if (!selectedSegments.has(draggedIndex)) {
@@ -634,8 +622,8 @@
           <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
             {#if (timelineItems?.length || 0) > 0}
-              {#each timelineItems as timelineItem, i}
-                {@const audioItem = timelineItem as any}
+              {#each timelineItems as timelineItem, i (timelineItem.id)}
+                {@const audioItem = timelineItem as AudioFileTimelineItem}
                 <TimelineSegment
                   {scaleX}
                   index={i}
