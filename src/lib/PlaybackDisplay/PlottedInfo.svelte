@@ -32,9 +32,8 @@
   $: transportDisabled = (timelineItems?.length || 0) === 0;
 
   // Timeline-specific playback state for TimeDisplay
-  $: playheadStore = timelinePlayhead(timelineViewer.id);
-  $: currentPositionSeconds = $playheadStore;
-  $: totalDurationSeconds = waveformState?.totalDuration ?? 0;
+  $: currentPositionSeconds = timelineViewer.playheadPositionSec;
+  $: totalDurationSeconds = timelineViewer.totalDuration;
 
   // Check if THIS timeline is the active one playing
   $: isThisTimelineActive = $appState.timelines?.activeTimelineId === timelineViewer.id;
@@ -65,8 +64,8 @@
     <TransportControls disabled={transportDisabled} timelineId={timelineViewer.id} />
     <TimeDisplay
       compact={true}
-      {currentPositionSeconds}
-      {totalDurationSeconds}
+      currentPositionSeconds={$currentPositionSeconds}
+      totalDurationSeconds={$totalDurationSeconds}
       isPlaying={isCurrentlyPlaying}
     />
   </div>

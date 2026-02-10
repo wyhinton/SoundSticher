@@ -22,7 +22,7 @@
         sourceKind: timeline.source.kind,
         isActive: timelinesState?.activeTimelineId === timeline.id,
         // Playback state
-        playheadTime: playback?.playheadTime ?? 0,
+        playheadTime: playback?.normalizedProgress ?? 0,
         isPlaying: playback?.isPlaying ?? false,
         looping: playback?.looping ?? false,
         // Add source-specific info

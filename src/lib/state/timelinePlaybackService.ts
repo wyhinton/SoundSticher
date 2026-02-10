@@ -253,7 +253,7 @@ export async function playTimeline(timelineId: string, startSeconds?: number): P
     timelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
-        playheadTime: state[timelineId]?.playheadTime ?? 0,
+        normalizedProgress: state[timelineId]?.normalizedProgress ?? 0,
         looping: state[timelineId]?.looping ?? false,
         isPlaying: true,
       },

@@ -38,7 +38,6 @@
   import { dropzone } from '$lib/attachments/droppable';
   import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
   import { type OperationId } from '$lib/state/operation';
-  import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
   import {
     activeTimelineId,
     setActiveTimeline,
@@ -287,24 +286,13 @@
     }
   }
 
-  // Create timeline-specific playhead store derived from effective timeline ID
-  $: timelinePlayheadStore = effectiveTimelineId ? timelinePlayhead(effectiveTimelineId) : null;
-  $: timelinePlayheadTime = timelinePlayheadStore ? $timelinePlayheadStore : 0;
+  // Subscribe to playhead position from TimelineViewer
+  $: playheadPositionStore = timelineViewer.playheadPositionSec;
+  $: playHeadPosition = $playheadPositionStore;
 
   // Update playhead position when it changes
   $: if (d3Manager) {
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
-  }
-
-  // Update playHeadPosition from timeline-specific playhead store (guaranteed to be a number)
-  $: {
-    const newPlayHeadPos = timelinePlayheadTime ?? 0;
-    if (newPlayHeadPos !== playHeadPosition) {
-      console.log(
-        `🎵 Timeline playhead update: ${playHeadPosition.toFixed(2)}s -> ${newPlayHeadPos.toFixed(2)}s`
-      );
-      playHeadPosition = newPlayHeadPos;
-    }
   }
 
   function handleClick(event: MouseEvent) {
@@ -336,7 +324,7 @@
 
     const clickedSegmentIndex =
       (timelineItems?.length || 0) > 0 && timelineItems
-        ? d3Manager.findClickedSegment(relativeX, timelineItems as AudioFileTimelineItem[])
+        ? d3Manager.findClickedSegment(relativeX, timelineItems)
         : null;
 
     if (clickedSegmentIndex === null) {
@@ -435,10 +423,10 @@
       console.error('🔧 Timeline: Failed to initialize waveform service:', error);
     }
 
-    // Initialize the operation playback progress listener
-    opPlaybackService.initProgressListener().catch(err => {
-      console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
-    });
+    // // Initialize the operation playback progress listener
+    // opPlaybackService.initProgressListener().catch(err => {
+    //   console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
+    // });
 
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
@@ -560,8 +548,6 @@
     </div>
   {/if}
 
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div

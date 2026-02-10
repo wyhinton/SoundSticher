@@ -2,7 +2,7 @@ import { derived, writable } from 'svelte/store';
 import { TimelineId } from './timelines';
 
 export interface TimelinePlaybackState {
-  playheadTime: number;
+  normalizedProgress: number;
   looping: boolean;
   isPlaying: boolean;
 }
@@ -25,7 +25,7 @@ export class TimelinePlaybackStoreService {
     timelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: true,
         isPlaying: false,
         ...initialState,
@@ -50,7 +50,7 @@ export class TimelinePlaybackStoreService {
   setPlayheadTime(timelineId: TimelineId, time: number) {
     timelinePlaybackState.update(state => {
       const currentState = state[timelineId] || {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       };
@@ -58,7 +58,7 @@ export class TimelinePlaybackStoreService {
         ...state,
         [timelineId]: {
           ...currentState,
-          playheadTime: time,
+          normalizedProgress: time,
         },
       };
     });
@@ -70,7 +70,7 @@ export class TimelinePlaybackStoreService {
   toggleLooping(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
       const currentState = state[timelineId] || {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       };
@@ -90,7 +90,7 @@ export class TimelinePlaybackStoreService {
   setLooping(timelineId: TimelineId, looping: boolean) {
     timelinePlaybackState.update(state => {
       const currentState = state[timelineId] || {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       };
@@ -110,7 +110,7 @@ export class TimelinePlaybackStoreService {
   startPlayback(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
       const currentState = state[timelineId] || {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       };
@@ -130,7 +130,7 @@ export class TimelinePlaybackStoreService {
   stopPlayback(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
       const currentState = state[timelineId] || {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       };
@@ -150,7 +150,7 @@ export class TimelinePlaybackStoreService {
   togglePlayback(timelineId: TimelineId) {
     timelinePlaybackState.update(state => {
       const currentState = state[timelineId] || {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       };
@@ -187,7 +187,7 @@ export class TimelinePlaybackStoreService {
     timelinePlaybackState.update(state => ({
       ...state,
       [timelineId]: {
-        playheadTime: 0,
+        normalizedProgress: 0,
         looping: false,
         isPlaying: false,
       },
@@ -242,7 +242,7 @@ export const timelinePlaybackStoreService = new TimelinePlaybackStoreService();
  * Returns 0 if timeline is not found
  */
 export function timelinePlayhead(timelineId: TimelineId) {
-  return derived(timelinePlaybackState, $state => $state[timelineId]?.playheadTime ?? 0);
+  return derived(timelinePlaybackState, $state => $state[timelineId]?.normalizedProgress ?? 0);
 }
 
 /**
