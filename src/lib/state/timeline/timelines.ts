@@ -6,13 +6,11 @@ import { logger } from '../logging';
 import type { OperationDef, OperationId } from '../operation';
 import { buildBackendGraphForTimeline, getOperationById } from '../operation';
 import type { OpTimelineProgressEvent } from '../opPlaybackService';
-import { invokeWithPerf } from '../performance';
-import { appState, AudioFileTimelineItem, TimelineItem, type AppState } from '../state.svelte';
+import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
 import timelinePlaybackService from '../timelinePlaybackService';
 import { dispatch, type ToggleTimelineVisibilityCommand } from '../undo/undo';
 import { waveformCache, type Waveform } from '../waveformCache';
 import { timelinePlaybackState, timelinePlaybackStoreService } from './timelinePlaybackState';
-import { timelineService } from './timelineStoreService';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
 
 // Timeline progress listener for updating individual timeline views
@@ -41,15 +39,16 @@ async function initTimelineProgressListener(): Promise<void> {
 
       // Update the runtime playhead state (NOT the persisted timeline state)
       timelinePlaybackState.update(state => {
-        const timeline = get(timelinesStore).timelines[timelineId];
-        if (!timeline || !timeline.waveformState) {
-          logger.opPlayback.warning(`Timeline '${timelineId}' not found or has no waveform state`);
+        const currentAppState = get(appState);
+        const timelineData = currentAppState.timelines?.timelines[timelineId];
+        if (!timelineData) {
+          logger.opPlayback.warning(`Timeline '${timelineId}' not found in appState`);
           return state;
         }
 
-        // Calculate playheadTime from progress and timeline duration
-        const currentWaveformState = get(timeline.waveformState);
-        const playheadTime = progress * currentWaveformState.totalDuration;
+        // Calculate playheadTime from progress - use a default duration
+        // The actual duration will come from the waveform state managed by TimelineViewer
+        const playheadTime = progress * 30; // fallback; actual playhead is driven by viewer
 
         return {
           ...state,
@@ -192,188 +191,26 @@ export function defaultTimelineViewState(): TimelineViewState {
 // SERIALIZATION FOR PERSISTENCE
 // ============================================================================
 
-export interface SerializableTimeline {
-  id: TimelineId;
-  source: TimelineSource;
-  items: TimelineItem[]; // plain array instead of Readable
-}
+// ============================================================================
+// LEGACY SERIALIZATION REMOVED
+// ============================================================================
+// Timeline data is now stored as plain serializable objects in appState.timelines.
+// The old timelinesStore, serializeTimeline, deserializeTimeline, and
+// timelineStoreSerializer have been removed.
 
-export interface SerializableTimelinesState {
-  timelines: Record<TimelineId, SerializableTimeline>;
-  activeTimelineId: TimelineId | null;
-}
+// Timeline data is now stored in appState.timelines and synced automatically.
 
 /**
- * Serialize a Timeline to a SerializableTimeline
- * Converts the reactive items store to a plain array
- */
-function serializeTimeline(timeline: Timeline): SerializableTimeline {
-  const currentItems = get(timeline.items);
-
-  return {
-    id: timeline.id,
-    source: timeline.source,
-    items: currentItems,
-  };
-}
-
-/**
- * Deserialize a SerializableTimeline back to a Timeline
- * Recreates the reactive stores and waveform state
- */
-function deserializeTimeline(serialized: SerializableTimeline): Timeline {
-  console.log('DESERIALIZNG');
-  const { id, source } = serialized;
-
-  // Create waveform store for this timeline
-  const waveformState = createTimelineWaveformStore(id);
-
-  let items: Readable<TimelineItem[]>;
-  console.log(source);
-  if (source.kind === 'operation') {
-    // For operation-based timelines, recreate the reactive items store
-    const operationIdReadable = writable(source.operationId);
-    items = createOperationTimelineItems(operationIdReadable, waveformState);
-
-    // Trigger async loading of waveform data
-    setTimeout(async () => {
-      try {
-        const currentAppState = get(appState);
-        console.log(currentAppState);
-        const operation = currentAppState.operations?.defs?.[source.operationId];
-        if (operation) {
-          const hierarchicalItems = getHierarchicalTimelineItems(operation, source.operationId);
-          const filePaths = hierarchicalItems
-            .filter(item => item.kind === 'sample')
-            .map(item => item.path);
-
-          if (filePaths.length > 0) {
-            await waveformState.load(filePaths, 1000);
-          }
-        }
-        logger.timeline?.info(`Restored timeline ${id} for operation ${source.operationId}`);
-      } catch (error) {
-        logger.timeline?.error(`Failed to restore waveform data for timeline ${id}:`, error);
-      }
-    }, 50);
-  } else {
-    // For other timeline types, create a static store with the serialized items
-    items = writable(serialized.items);
-  }
-
-  console.log(id);
-  console.log(items);
-  console.log(source);
-  return {
-    id,
-    source,
-    items,
-    waveformState,
-  };
-}
-
-/**
- * Custom serializer for the persisted timelines store
- */
-const timelineStoreSerializer = {
-  parse: (text: string): TimelinesState => {
-    try {
-      const serialized: SerializableTimelinesState = JSON.parse(text);
-      const timelines: Record<TimelineId, Timeline> = {};
-
-      for (const [timelineId, serializedTimeline] of Object.entries(serialized.timelines)) {
-        try {
-          timelines[timelineId] = deserializeTimeline(serializedTimeline);
-          logger.timeline?.info(
-            `Restored timeline: ${timelineId} (source: ${serializedTimeline.source.kind})`
-          );
-        } catch (error) {
-          logger.timeline?.error(`Failed to restore timeline ${timelineId}:`, error);
-          // Skip this timeline but continue with others
-        }
-      }
-
-      return {
-        timelines,
-        activeTimelineId: serialized.activeTimelineId || null,
-      };
-    } catch (error) {
-      logger.timeline?.error('Failed to parse timeline store:', error);
-      return {
-        timelines: {},
-        activeTimelineId: null,
-      };
-    }
-  },
-
-  stringify: (value: TimelinesState): string => {
-    try {
-      const serialized: SerializableTimelinesState = {
-        timelines: {},
-        activeTimelineId: value.activeTimelineId,
-      };
-
-      for (const [timelineId, timeline] of Object.entries(value.timelines)) {
-        if (timeline) {
-          try {
-            serialized.timelines[timelineId] = serializeTimeline(timeline);
-          } catch (error) {
-            logger.timeline?.error(`Failed to serialize timeline ${timelineId}:`, error);
-            // Skip this timeline but continue with others
-          }
-        }
-      }
-
-      return JSON.stringify(serialized);
-    } catch (error) {
-      logger.timeline?.error('Failed to stringify timeline store:', error);
-      return JSON.stringify({
-        timelines: {},
-        activeTimelineId: null,
-      });
-    }
-  },
-};
-
-export const timelinesStore = persisted<TimelinesState>(
-  'timelines:v1',
-  {
-    timelines: {},
-    activeTimelineId: null,
-  },
-  {
-    serializer: timelineStoreSerializer,
-  }
-);
-
-const timelineKeys = derived(timelinesStore, $store => Object.keys($store.timelines));
-
-/**
- * Initialize timeline synchronization with the backend
- * This keeps the backend's playback sessions in sync with frontend timelines
+ * Initialize timeline synchronization with the backend.
+ * With the new system, timeline keys are derived from appState,
+ * so manual sync is no longer needed on key changes.
  */
 export function initializeTimelineSync(): void {
-  // timelineKeys.subscribe(async keys => {
-  //   console.log(`%cHERE LINE :352 %c`, 'color: yellow; font-weight: bold', '');
-  //   logger.timeline?.info(`Timeline keys changed: [${keys.join(', ')}] - syncing with backend`);
-  //   try {
-  //     const result = await invokeWithPerf('op_timeline_sync_full', {
-  //       timelineIds: keys,
-  //     });
-  //     if (!result.ok) {
-  //       logger.timeline?.error('Failed to sync timelines with backend:', result.error);
-  //     } else {
-  //       logger.timeline?.info(`Successfully synced ${keys.length} timelines with backend`);
-  //     }
-  //   } catch (error) {
-  //     logger.timeline?.error('Error during timeline sync:', error);
-  //   }
-  // });
+  // No-op: timeline sync is handled via appState subscriptions
 }
 
 // Initialize timeline sync when module loads
-if (typeof window !== 'undefined') {
-}
+// (Retained for backwards compatibility but is a no-op)
 
 /**
  * Separate persisted store for timeline view states (zoom, scroll, selection, etc.)
@@ -788,37 +625,80 @@ export function toggleTimelineVisibilityByOpIdDispatch(operationId: OperationId)
 }
 
 export function toggleTimelineVisibilityByOpId(operationId: OperationId): void {
-  const currentState = get(timelinesStore);
+  const state = get(appState);
+  const operation = state.operations?.defs[operationId];
+  if (!operation) {
+    logger.waveform.warning(`Operation ${operationId} not found`);
+    return;
+  }
 
-  // Check if there's already a timeline for this operation
-  const existingTimelineId = Object.keys(currentState.timelines).find(timelineId => {
-    const timeline = currentState.timelines[timelineId];
-    return (
-      timeline &&
-      timeline.source.kind === 'operation' &&
-      timeline.source.operationId === operationId
-    );
-  });
+  const isCurrentlyVisible = operation.visible || false;
 
-  if (existingTimelineId) {
+  if (isCurrentlyVisible) {
     // Timeline exists - remove it (toggle off)
     logger.waveform.info(`Hiding timeline for operation: ${operationId}`);
 
-    timelineService.deleteTimeline(existingTimelineId);
+    const timelineId = `tl_op_${operationId}`;
 
-    // Also clean up the view state for this timeline
-    timelinePlaybackStoreService.removeTimeline(existingTimelineId);
-    timelinePlaybackService.clearTimeline(existingTimelineId);
+    appState.update(s => {
+      const newDefs = { ...s.operations!.defs };
+      const existingOp = newDefs[operationId];
+      if (existingOp) {
+        newDefs[operationId] = { ...existingOp, visible: false } as typeof existingOp;
+      }
+
+      const newTimelines = { ...(s.timelines?.timelines ?? {}) };
+      delete newTimelines[timelineId];
+
+      const newActiveId =
+        s.timelines?.activeTimelineId === timelineId
+          ? (Object.keys(newTimelines)[0] ?? null)
+          : (s.timelines?.activeTimelineId ?? null);
+
+      return {
+        ...s,
+        operations: { ...s.operations!, defs: newDefs },
+        timelines: { timelines: newTimelines, activeTimelineId: newActiveId },
+      };
+    });
+
+    // Clean up playback state
+    timelinePlaybackStoreService.removeTimeline(timelineId);
+    timelinePlaybackService.clearTimeline(timelineId);
   } else {
-    console.log(`%cHERE LINE :808 %c`, 'color: yellow; font-weight: bold', '');
-
     // No timeline exists - create one (toggle on)
     logger.waveform.info(`Showing timeline for operation: ${operationId}`);
 
-    // const newTimeline = createTimelineStateForOp(operationId);
+    const timelineId = `tl_op_${operationId}`;
 
-    const newTimeline = timelineService.createTimelineForOperation(operationId);
-    buildBackendGraphForTimeline(newTimeline.id, operationId);
+    appState.update(s => {
+      const newDefs = { ...s.operations!.defs };
+      const existingOp2 = newDefs[operationId];
+      if (existingOp2) {
+        newDefs[operationId] = { ...existingOp2, visible: true } as typeof existingOp2;
+      }
+
+      const existingTimelines = s.timelines?.timelines ?? {};
+      const newTimeline: import('../state.svelte').TimelineData = {
+        id: timelineId,
+        source: { kind: 'operation', operationId },
+        items: [],
+      };
+
+      const newActiveId = s.timelines?.activeTimelineId ?? timelineId;
+
+      return {
+        ...s,
+        operations: { ...s.operations!, defs: newDefs },
+        timelines: {
+          timelines: { ...existingTimelines, [timelineId]: newTimeline },
+          activeTimelineId: newActiveId,
+        },
+      };
+    });
+
+    timelinePlaybackStoreService.addTimeline(timelineId);
+    buildBackendGraphForTimeline(timelineId, operationId);
   }
 }
 
@@ -1022,35 +902,43 @@ function flattenOperationToTimelineItems(
 }
 
 /**
- * Check if an operation has a visible timeline
+ * Check if an operation has a visible timeline (reads from operation.visible in appState)
  */
 export function isOperationTimelineVisible(operationId: OperationId): boolean {
-  const currentState = get(timelinesStore);
-
-  return Object.values(currentState.timelines).some(
-    timeline =>
-      timeline &&
-      timeline.source.kind === 'operation' &&
-      timeline.source.operationId === operationId
-  );
+  const state = get(appState);
+  const operation = state.operations?.defs[operationId];
+  return operation?.visible || false;
 }
 
 /**
- * Derived store that provides an array of all operation timelines
+ * Derived store that provides an array of all visible operation timelines (from appState)
+ * Each entry is a serializable TimelineData object.
  */
-export const operationTimelines = derived(timelinesStore, $timelinesStore => {
-  return Object.values($timelinesStore.timelines).filter(
-    timeline => timeline && timeline.source.kind === 'operation'
+export const visibleOperationTimelines = derived(appState, $appState => {
+  const timelines = $appState.timelines?.timelines;
+  if (!timelines) return [];
+  return Object.values(timelines).filter(
+    (tl): tl is NonNullable<typeof tl> => tl != null && tl.source.kind === 'operation'
   );
 });
 
 /**
- * Set the active timeline ID
+ * Derived store for the active timeline ID (from appState)
+ */
+export const activeTimelineId = derived(appState, $appState => {
+  return $appState.timelines?.activeTimelineId ?? null;
+});
+
+/**
+ * Set the active timeline ID (stored in appState)
  */
 export function setActiveTimeline(timelineId: TimelineId | null): void {
-  timelinesStore.update(state => ({
+  appState.update(state => ({
     ...state,
-    activeTimelineId: timelineId,
+    timelines: {
+      ...(state.timelines ?? { timelines: {}, activeTimelineId: null }),
+      activeTimelineId: timelineId,
+    },
   }));
 
   if (timelineId) {
@@ -1061,19 +949,20 @@ export function setActiveTimeline(timelineId: TimelineId | null): void {
 }
 
 /**
- * Get the current active timeline ID
+ * Get the current active timeline ID (from appState)
  */
 export function getActiveTimelineId(): TimelineId | null {
-  return get(timelinesStore).activeTimelineId;
+  const state = get(appState);
+  return state.timelines?.activeTimelineId ?? null;
 }
 
 /**
- * Get the current active timeline
+ * Get the current active timeline data (from appState)
  */
-export function getActiveTimeline(): Timeline | null {
-  const state = get(timelinesStore);
-  const activeId = state.activeTimelineId;
-  return activeId ? state.timelines[activeId] || null : null;
+export function getActiveTimeline(): import('../state.svelte').TimelineData | null {
+  const state = get(appState);
+  const activeId = state.timelines?.activeTimelineId;
+  return activeId ? (state.timelines?.timelines[activeId] ?? null) : null;
 }
 
 /**

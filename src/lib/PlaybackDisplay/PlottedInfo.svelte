@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { timelinesStore, type Timeline } from '../state/timeline/timelines';
+  import type { TimelineViewer } from '../state/timeline/TimelineViewer';
   import { isTimelinePaused, isTimelinePlaying } from '../state/timelinePlaybackService';
   import TimeDisplay from './TimeDisplay.svelte';
   import TimelineInfo from './TimelineInfo.svelte';
@@ -10,11 +10,11 @@
     timelinePlayhead,
   } from '$lib/state/timeline/timelinePlaybackState';
 
-  export let timeline: Timeline;
+  export let timelineViewer: TimelineViewer;
 
   // Use timeline-specific waveform state for progress/loading indicators
-  $: waveformStateStore = timeline.waveformState;
-  $: waveformState = waveformStateStore ? $waveformStateStore : null;
+  $: waveformStateStore = timelineViewer.waveformState;
+  $: waveformState = $waveformStateStore;
   $: isLoading = waveformState?.loading || waveformState?.loadingWaveforms || false;
   $: hasError = !!waveformState?.error;
 
@@ -27,17 +27,17 @@
   })();
 
   // Get timeline items to check if transport should be disabled
-  $: timelineItemsStore = timeline.items;
+  $: timelineItemsStore = timelineViewer.items;
   $: timelineItems = $timelineItemsStore;
   $: transportDisabled = (timelineItems?.length || 0) === 0;
 
   // Timeline-specific playback state for TimeDisplay
-  $: playheadStore = timelinePlayhead(timeline.id);
+  $: playheadStore = timelinePlayhead(timelineViewer.id);
   $: currentPositionSeconds = $playheadStore;
   $: totalDurationSeconds = waveformState?.totalDuration ?? 0;
 
   // Check if THIS timeline is the active one playing
-  $: isThisTimelineActive = $timelinesStore.activeTimelineId === timeline.id;
+  $: isThisTimelineActive = $appState.timelines?.activeTimelineId === timelineViewer.id;
   $: isPlaying = isThisTimelineActive && $isTimelinePlaying;
   $: isPaused = isThisTimelineActive && $isTimelinePaused;
   $: isCurrentlyPlaying = isPlaying && !isPaused;
@@ -47,9 +47,7 @@
   <!-- Timeline header with operation info -->
   <div class="timeline-header">
     <span class="timeline-operation-name px-2">
-      {timeline.source.kind === 'operation'
-        ? `${$appState.operations?.defs?.[timeline.source.operationId]?.name}`
-        : 'Timeline'}
+      {$appState.operations?.defs?.[timelineViewer.operationId]?.name ?? 'Timeline'}
     </span>
     {#if isLoading}
       <!-- <span class="loading-indicator">Loading...</span> -->
@@ -64,7 +62,7 @@
   {/if} -->
 
   <div class="d-flex">
-    <TransportControls disabled={transportDisabled} timelineId={timeline.id} />
+    <TransportControls disabled={transportDisabled} timelineId={timelineViewer.id} />
     <TimeDisplay
       compact={true}
       {currentPositionSeconds}
@@ -72,7 +70,7 @@
       isPlaying={isCurrentlyPlaying}
     />
   </div>
-  <TimelineInfo {timeline} />
+  <TimelineInfo {timelineViewer} />
 </div>
 
 <style>

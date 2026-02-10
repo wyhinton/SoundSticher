@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
   import { appState, currentOperationSources, getAllFiles } from '../state/state.svelte';
-  import type { Timeline } from '../state/timeline/timelines';
+  import type { TimelineViewer } from '../state/timeline/TimelineViewer';
   import { formatMilliseconds } from '../utils/format';
   import TimeDisplay from './TimeDisplay.svelte';
   import {
@@ -10,15 +10,16 @@
     type EstimatedFileSize,
   } from '$lib/state/export';
 
-  // Timeline prop to show timeline-specific information
-  export let timeline: Timeline;
+  // TimelineViewer prop (or null if not available)
+  export let timelineViewer: TimelineViewer | null = null;
 
   let bufferingProgress = 0;
 
   // Timeline-specific information
-  $: timelineId = timeline.id;
-  $: timelineSource = timeline.source;
-  $: waveformStateStore = timeline.waveformState;
+  $: timelineId = timelineViewer?.id ?? '';
+  $: sourceStore = timelineViewer?.source;
+  $: timelineSource = sourceStore ? $sourceStore : null;
+  $: waveformStateStore = timelineViewer?.waveformState;
   $: waveformState = waveformStateStore ? $waveformStateStore : null;
   $: timelineDuration = waveformState?.totalDuration ?? 0;
   $: timelineFilesCount = waveformState?.filePaths?.length ?? 0;
@@ -41,7 +42,7 @@
 <div class="info-panel d-flex justify-content-between align-items-center px-2 py-1">
   <div class="d-flex gap-3 align-items-center">
     {@render infoItem('Timeline ID', timelineId)}
-    {#if timelineSource.kind === 'operation'}
+    {#if timelineSource?.kind === 'operation'}
       {@render infoItem('Operation ID', timelineSource.operationId)}
     {/if}
     {@render infoItem(

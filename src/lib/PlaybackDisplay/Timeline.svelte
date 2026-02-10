@@ -39,20 +39,15 @@
   import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
   import { type OperationId } from '$lib/state/operation';
   import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
-  import {
-    setActiveTimeline,
-    timelinesStore,
-    type Timeline,
-    type TimelineId,
-  } from '$lib/state/timeline/timelines';
+  import { setActiveTimeline, type TimelineId } from '$lib/state/timeline/timelines';
   // Import operation playback service
-
+  import { TimelineViewer } from '$lib/state/timeline/TimelineViewer';
   import timelinePlaybackService from '$lib/state/timelinePlaybackService';
   import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
 
   const dispatch = createEventDispatcher();
 
-  export let timeline: Timeline | null = null;
+  export let timelineViewer: TimelineViewer | null = null;
   export let timelineId: TimelineId | null = null; // Keep for backward compatibility
 
   let container: HTMLDivElement;
@@ -131,19 +126,21 @@
   const timelineXAxisBg = '#1d1c23';
 
   // ============================================================================
-  // TIMELINE ITEMS - Operation-based system
+  // TIMELINE ITEMS - Operation-based system (now using TimelineViewer)
   // ============================================================================
 
-  // Use the provided timeline object or resolve from timelineId (for backward compatibility)
-  $: activeTimeline = timeline || (timelineId ? $timelinesStore.timelines[timelineId] : null);
-  $: timelineSource = activeTimeline?.source ?? null;
+  // Use TimelineViewer as the primary interface
+  $: effectiveTimelineId = timelineViewer?.id ?? timelineId ?? null;
 
-  // Reactive timeline items from the timeline object's items property
-  $: timelineItemsStore = activeTimeline?.items;
+  // Determine if this is an operation-based timeline
+  $: isOperationTimeline = timelineViewer != null;
+
+  // Reactive timeline items from TimelineViewer
+  $: timelineItemsStore = timelineViewer?.items ?? null;
   $: timelineItems = timelineItemsStore ? $timelineItemsStore : [];
 
-  // Use timeline's own waveform state instead of global stores
-  $: waveformStateStore = activeTimeline?.waveformState;
+  // Use timeline's own waveform state from TimelineViewer
+  $: waveformStateStore = timelineViewer?.waveformState ?? null;
   $: waveformState = waveformStateStore ? $waveformStateStore : null;
   $: currentDuration = waveformState?.totalDuration || 30; // Default duration fallback
   $: isLoadingWaveforms = waveformState?.loading || waveformState?.loadingWaveforms || false;
@@ -290,8 +287,8 @@
     }
   }
 
-  // Create timeline-specific playhead store derived from active timeline ID
-  $: timelinePlayheadStore = activeTimeline?.id ? timelinePlayhead(activeTimeline.id) : null;
+  // Create timeline-specific playhead store derived from effective timeline ID
+  $: timelinePlayheadStore = effectiveTimelineId ? timelinePlayhead(effectiveTimelineId) : null;
   $: timelinePlayheadTime = timelinePlayheadStore ? $timelinePlayheadStore : 0;
 
   // Update playhead position when it changes
@@ -314,8 +311,8 @@
     if (!d3Manager) return;
 
     // Set this timeline as the active timeline when clicked
-    if (activeTimeline?.id) {
-      setActiveTimeline(activeTimeline.id);
+    if (effectiveTimelineId) {
+      setActiveTimeline(effectiveTimelineId);
     }
 
     const rect = container.getBoundingClientRect();
@@ -326,7 +323,7 @@
     const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
-      if (timelineSource?.kind !== 'operation' || !activeTimeline?.id) {
+      if (timelineSource?.kind !== 'operation' || !effectiveTimelineId) {
         return;
       }
       // Click is in the x-axis area - set playhead position and clear selection
@@ -335,7 +332,7 @@
       console.log(clickedTime);
       // Use operation playback service for seeking
       timelinePlaybackService
-        .seekTimeline(activeTimeline.id, clickedTime)
+        .seekTimeline(effectiveTimelineId, clickedTime)
         .catch((err: unknown) => console.error('Failed to seek:', err));
       return;
     }
@@ -347,7 +344,7 @@
         : null;
 
     if (clickedSegmentIndex === null) {
-      if (timelineSource?.kind !== 'operation' || !activeTimeline?.id) {
+      if (timelineSource?.kind !== 'operation' || !effectiveTimelineId) {
         return;
       }
       handleClearSelection();
@@ -355,7 +352,7 @@
 
       // Use operation playback service for seeking
       opPlaybackService
-        .seekTimeline(activeTimeline.id, clickedTime)
+        .seekTimeline(effectiveTimelineId, clickedTime)
         .catch((err: unknown) => console.error('Failed to seek:', err));
     }
   }

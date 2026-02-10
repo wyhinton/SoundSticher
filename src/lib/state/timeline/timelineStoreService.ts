@@ -1,30 +1,29 @@
 import { get } from 'svelte/store';
 import { logger } from '../logging';
 import type { OperationId } from '../operation';
+import { appState, type TimelineData } from '../state.svelte';
 import {
-  timelinesStore,
   timelineViewStates,
-  createTimelineStateForOp,
   getTimelineViewState,
-  type Timeline,
   type TimelineId,
   type TimelineViewState,
-  type TimelinesState,
 } from './timelines';
 
 /**
  * Service layer for timeline management
- * Provides clean API methods for timeline operations
+ * Uses appState for timeline data instead of timelinesStore
  */
 class TimelineStoreService {
   /**
    * Find timeline ID for a given operation
    */
   findTimelineByOperation(operationId: OperationId): TimelineId | null {
-    const currentState = get(timelinesStore);
+    const currentState = get(appState);
+    const timelines = currentState.timelines?.timelines;
+    if (!timelines) return null;
 
-    const foundTimelineId = Object.keys(currentState.timelines).find(timelineId => {
-      const timeline = currentState.timelines[timelineId];
+    const foundTimelineId = Object.keys(timelines).find(timelineId => {
+      const timeline = timelines[timelineId];
       return (
         timeline &&
         timeline.source.kind === 'operation' &&
@@ -45,16 +44,24 @@ class TimelineStoreService {
   /**
    * Create a new timeline for an operation
    */
-  createTimelineForOperation(operationId: OperationId): Timeline {
+  createTimelineForOperation(operationId: OperationId): TimelineData {
     logger.waveform.info(`Creating timeline for operation: ${operationId}`);
 
-    const newTimeline = createTimelineStateForOp(operationId);
+    const timelineId = `tl_op_${operationId}`;
+    const newTimeline: TimelineData = {
+      id: timelineId,
+      source: { kind: 'operation', operationId },
+      items: [],
+    };
 
-    timelinesStore.update(state => ({
+    appState.update(state => ({
       ...state,
       timelines: {
-        ...state.timelines,
-        [newTimeline.id]: newTimeline,
+        timelines: {
+          ...(state.timelines?.timelines ?? {}),
+          [timelineId]: newTimeline,
+        },
+        activeTimelineId: state.timelines?.activeTimelineId ?? timelineId,
       },
     }));
 
@@ -68,22 +75,23 @@ class TimelineStoreService {
     timelineId: TimelineId,
     operationId: OperationId,
     viewState?: TimelineViewState
-  ): Timeline {
+  ): TimelineData {
     logger.waveform.info(`Creating timeline with ID ${timelineId} for operation: ${operationId}`);
 
-    const newTimeline = createTimelineStateForOp(operationId);
-
-    // Update the timeline with the specified ID
-    const restoredTimeline: Timeline = {
-      ...newTimeline,
+    const newTimeline: TimelineData = {
       id: timelineId,
+      source: { kind: 'operation', operationId },
+      items: [],
     };
 
-    timelinesStore.update(state => ({
+    appState.update(state => ({
       ...state,
       timelines: {
-        ...state.timelines,
-        [timelineId]: restoredTimeline,
+        timelines: {
+          ...(state.timelines?.timelines ?? {}),
+          [timelineId]: newTimeline,
+        },
+        activeTimelineId: state.timelines?.activeTimelineId ?? timelineId,
       },
     }));
 
@@ -95,7 +103,7 @@ class TimelineStoreService {
       }));
     }
 
-    return restoredTimeline;
+    return newTimeline;
   }
 
   /**
@@ -104,16 +112,19 @@ class TimelineStoreService {
   deleteTimeline(timelineId: TimelineId): void {
     logger.waveform.info(`Deleting timeline: ${timelineId}`);
 
-    // Remove timeline from store
-    timelinesStore.update(state => {
-      const newTimelines = { ...state.timelines };
+    appState.update(state => {
+      const newTimelines = { ...(state.timelines?.timelines ?? {}) };
       delete newTimelines[timelineId];
 
       return {
         ...state,
-        timelines: newTimelines,
-        // Clear active timeline if it's the one being deleted
-        activeTimelineId: state.activeTimelineId === timelineId ? null : state.activeTimelineId,
+        timelines: {
+          timelines: newTimelines,
+          activeTimelineId:
+            state.timelines?.activeTimelineId === timelineId
+              ? (Object.keys(newTimelines)[0] ?? null)
+              : (state.timelines?.activeTimelineId ?? null),
+        },
       };
     });
 
@@ -142,15 +153,15 @@ class TimelineStoreService {
   /**
    * Get timeline by ID
    */
-  getTimeline(timelineId: TimelineId): Timeline | null {
-    const currentState = get(timelinesStore);
-    return currentState.timelines[timelineId] || null;
+  getTimeline(timelineId: TimelineId): TimelineData | null {
+    const currentState = get(appState);
+    return currentState.timelines?.timelines[timelineId] || null;
   }
 
   /**
    * Get timeline for a specific operation
    */
-  getTimelineForOperation(operationId: OperationId): Timeline | null {
+  getTimelineForOperation(operationId: OperationId): TimelineData | null {
     const timelineId = this.findTimelineByOperation(operationId);
     return timelineId ? this.getTimeline(timelineId) : null;
   }
@@ -158,15 +169,18 @@ class TimelineStoreService {
   /**
    * Get all timelines
    */
-  getAllTimelines(): Timeline[] {
-    const currentState = get(timelinesStore);
-    return Object.values(currentState.timelines).filter(timeline => timeline !== undefined);
+  getAllTimelines(): TimelineData[] {
+    const currentState = get(appState);
+    const timelines = currentState.timelines?.timelines ?? {};
+    return Object.values(timelines).filter(
+      (timeline): timeline is TimelineData => timeline != null
+    );
   }
 
   /**
    * Get all operation-based timelines
    */
-  getOperationTimelines(): Timeline[] {
+  getOperationTimelines(): TimelineData[] {
     return this.getAllTimelines().filter(timeline => timeline.source.kind === 'operation');
   }
 
@@ -174,9 +188,12 @@ class TimelineStoreService {
    * Set active timeline
    */
   setActiveTimeline(timelineId: TimelineId | null): void {
-    timelinesStore.update(state => ({
+    appState.update(state => ({
       ...state,
-      activeTimelineId: timelineId,
+      timelines: {
+        ...(state.timelines ?? { timelines: {}, activeTimelineId: null }),
+        activeTimelineId: timelineId,
+      },
     }));
 
     if (timelineId) {
@@ -190,23 +207,24 @@ class TimelineStoreService {
    * Get active timeline ID
    */
   getActiveTimelineId(): TimelineId | null {
-    return get(timelinesStore).activeTimelineId;
+    const currentState = get(appState);
+    return currentState.timelines?.activeTimelineId ?? null;
   }
 
   /**
    * Get active timeline
    */
-  getActiveTimeline(): Timeline | null {
-    const state = get(timelinesStore);
-    const activeId = state.activeTimelineId;
-    return activeId ? state.timelines[activeId] || null : null;
+  getActiveTimeline(): TimelineData | null {
+    const currentState = get(appState);
+    const activeId = currentState.timelines?.activeTimelineId;
+    return activeId ? currentState.timelines?.timelines[activeId] || null : null;
   }
 
   /**
    * Capture timeline state for undo operations
    */
   captureTimelineState(timelineId: TimelineId): {
-    timeline: Timeline;
+    timeline: TimelineData;
     viewState: TimelineViewState;
   } | null {
     const timeline = this.getTimeline(timelineId);
@@ -227,7 +245,7 @@ class TimelineStoreService {
   toggleTimelineVisibility(operationId: OperationId): {
     wasVisible: boolean;
     timelineId?: TimelineId;
-    timeline?: Timeline;
+    timeline?: TimelineData;
     viewState?: TimelineViewState;
   } {
     const existingTimelineId = this.findTimelineByOperation(operationId);
@@ -262,7 +280,7 @@ class TimelineStoreService {
     timelineId: TimelineId,
     operationId: OperationId,
     viewState?: TimelineViewState
-  ): Timeline {
+  ): TimelineData {
     return this.createTimelineWithId(timelineId, operationId, viewState);
   }
 }
