@@ -39,7 +39,11 @@
   import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
   import { type OperationId } from '$lib/state/operation';
   import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
-  import { setActiveTimeline, type TimelineId } from '$lib/state/timeline/timelines';
+  import {
+    activeTimelineId,
+    setActiveTimeline,
+    type TimelineId,
+  } from '$lib/state/timeline/timelines';
   // Import operation playback service
   import { TimelineViewer } from '$lib/state/timeline/TimelineViewer';
   import timelinePlaybackService from '$lib/state/timelinePlaybackService';
@@ -68,7 +72,7 @@
   $: contentHeight = height - topPadding - axisHeight;
   $: contentScaleY = contentHeight / baseContentHeight;
   $: tempYCenter = TIMELINE_DERIVED.CENTER_Y; // Center line in design space
-
+  $: currentActiveTimelineId = $activeTimelineId;
   // D3 Manager instance
   let d3Manager: D3TimelineManager | null = null;
 
