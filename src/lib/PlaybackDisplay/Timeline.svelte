@@ -51,6 +51,7 @@
   const dispatch = createEventDispatcher();
 
   export let timelineViewer: TimelineViewer;
+  export let isActive: boolean = true;
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -526,7 +527,7 @@
   }
 </script>
 
-<div class="svg-container position-relative">
+<div class="svg-container position-relative" class:inactive={!isActive}>
   <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     {currentTransform.k.toFixed(2)}x
   </div>
@@ -702,6 +703,11 @@
     overflow: hidden;
     flex: 1; /* Take up remaining space in flex container */
     min-height: 0; /* Allow flexbox to shrink below content size */
+    transition: opacity 0.2s ease;
+  }
+
+  .svg-container.inactive {
+    opacity: 0.5;
   }
   svg {
     width: 100%;

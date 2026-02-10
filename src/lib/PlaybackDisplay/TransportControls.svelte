@@ -1,18 +1,25 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import {
     timelineIsPlaying,
     timelineLooping,
     timelinePlayhead,
   } from '$lib/state/timeline/timelinePlaybackState';
-  import { setActiveTimeline } from '$lib/state/timeline/timelines';
-  import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
 
   // Component props
   export let disabled: boolean = false;
   export let timelineId: string | null = null;
 
-  let bufferingProgress = 0;
+  const dispatch = createEventDispatcher<{
+    play: void;
+    pause: void;
+    resume: void;
+    stop: void;
+    skipToStart: void;
+    skipToEnd: void;
+    toggleLoop: void;
+  }>();
 
   // Create timeline-specific derived stores
   $: playheadStore = timelineId ? timelinePlayhead(timelineId) : null;
@@ -21,122 +28,55 @@
 
   // Reactive values from timeline-specific stores
   $: playHeadPosition = playheadStore ? $playheadStore : 0;
-  $: isLoopEnabled = loopingStore ? $loopingStore : false;
-  $: isCurrentlyPlaying = isPlayingStore ? $isPlayingStore : false;
+  $: isLoopEnabled = (loopingStore && $loopingStore) ?? false;
+  $: isCurrentlyPlaying = (isPlayingStore && $isPlayingStore) ?? false;
 
   // Reactive current duration based on operation system
   $: currentDuration = $operationDuration;
 
   // Paused state is when we have a playing timeline but isPlaying is false
   // (This requires additional state tracking in timelinePlaybackState if needed)
-  $: isCurrentlyPaused = false; // TODO: Add paused state to timelinePlaybackState
+  let isCurrentlyPaused = false; // TODO: Add paused state to timelinePlaybackState
 
-  // Transport control functions using new timeline playback service
-  async function handlePlay() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot play. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      await timelinePlaybackService.playTimeline(timelineId, playHeadPosition);
-    } catch (error) {
-      console.error('Error playing audio:', error);
-    }
+  // Transport control functions - now dispatch events instead of handling directly
+  function handlePlay() {
+    dispatch('play');
   }
 
-  async function handlePause() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot pause. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      await timelinePlaybackService.pauseTimeline(timelineId);
-    } catch (error) {
-      console.error('Error pausing audio:', error);
-    }
+  function handlePause() {
+    dispatch('pause');
   }
 
-  async function handleResume() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot resume. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      await timelinePlaybackService.resumeTimeline(timelineId);
-    } catch (error) {
-      console.error('Error resuming audio:', error);
-    }
+  function handleResume() {
+    dispatch('resume');
   }
 
-  async function handleStop() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot stop. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      await timelinePlaybackService.stopTimeline(timelineId);
-    } catch (error) {
-      console.error('Error stopping audio:', error);
-    }
+  function handleStop() {
+    dispatch('stop');
   }
 
-  async function handleSkipToStart() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      await timelinePlaybackService.seekTimeline(timelineId, 0);
-    } catch (error) {
-      console.error('Error skipping to start:', error);
-    }
+  function handleSkipToStart() {
+    dispatch('skipToStart');
   }
 
-  async function handleSkipToEnd() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      await timelinePlaybackService.seekTimeline(timelineId, currentDuration);
-    } catch (error) {
-      console.error('Error skipping to end:', error);
-    }
+  function handleSkipToEnd() {
+    dispatch('skipToEnd');
   }
 
-  async function toggleLoop() {
-    try {
-      if (!timelineId) {
-        console.error('No timeline ID - cannot toggle loop. Please provide a timelineId prop.');
-        return;
-      }
-      setActiveTimeline(timelineId);
-      // Use timeline-specific loop state instead of global opPlaybackState
-      await timelinePlaybackService.setTimelineLoop(timelineId, !isLoopEnabled);
-    } catch (error) {
-      console.error('Error toggling loop:', error);
-    }
+  function toggleLoop() {
+    dispatch('toggleLoop');
   }
 
   // Handle play/pause toggle
-  async function handlePlayPause() {
+  function handlePlayPause() {
     if (isCurrentlyPlaying) {
-      await handlePause();
+      handlePause();
     } else if (isCurrentlyPaused) {
-      await handleResume();
+      handleResume();
     } else {
-      await handlePlay();
+      handlePlay();
     }
   }
-
-  // No longer need to listen for legacy audio playback events
-  // The operation system handles looping internally
 </script>
 
 {#snippet transportButton(
