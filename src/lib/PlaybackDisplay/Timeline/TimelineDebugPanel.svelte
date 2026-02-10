@@ -7,7 +7,6 @@
     toggleShowFullSvgPath,
     type TimelineItem,
   } from '../../state/state.svelte';
-  import { timelinesStore } from '../../state/timeline/timelines';
   import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
 
   // Props passed from Timeline component
@@ -80,11 +79,14 @@
   });
 
   function clearAllTimelines() {
-    timelinesStore.set({
-      timelines: {},
-      activeTimelineId: null,
-    });
-    console.log('✓ Cleared all timelines from frontend store');
+    appState.update(state => ({
+      ...state,
+      timelines: {
+        timelines: {},
+        activeTimelineId: null,
+      },
+    }));
+    console.log('✓ Cleared all timelines from appState');
   }
 </script>
 

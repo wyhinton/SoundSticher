@@ -1,66 +1,61 @@
 <script lang="ts">
   import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
-  import { appState } from '$lib/state/state.svelte';
+  import { appState, type TimelineData } from '$lib/state/state.svelte';
   import { timelinePlaybackState } from '$lib/state/timeline/timelinePlaybackState';
-  import {
-    createTimelineStateForOp,
-    timelinesStore,
-    toggleTimelineVisibilityByOpId,
-    type Timeline,
-  } from '$lib/state/timeline/timelines';
+  import { toggleTimelineVisibilityByOpId } from '$lib/state/timeline/timelines';
+
   // Reactive stores
-  $: timelinesState = $timelinesStore;
+  $: timelinesState = $appState.timelines;
   $: playbackState = $timelinePlaybackState;
 
   // Computed data for display
-  $: timelineCount = Object.keys($timelinesStore.timelines).length;
+  $: timelineCount = Object.keys(timelinesState?.timelines ?? {}).length;
 
   // Timeline summary data
-  $: timelinesSummary = Object.values(timelinesState.timelines).map((timeline: Timeline) => {
-    // Get playback state for this timeline
-    const playback = playbackState[timeline.id];
+  $: timelinesSummary = Object.values(timelinesState?.timelines ?? {}).map(
+    (timeline: TimelineData) => {
+      // Get playback state for this timeline
+      const playback = playbackState[timeline.id];
 
-    return {
-      id: timeline.id,
-      sourceKind: timeline.source.kind,
-      isActive: false, // No active timeline concept in simplified version
-      isDocked: false, // No layout concept in simplified version
-      isFloating: false, // No layout concept in simplified version
-      // Playback state
-      playheadTime: playback?.playheadTime ?? 0,
-      isPlaying: playback?.isPlaying ?? false,
-      looping: playback?.looping ?? false,
-      // Add source-specific info
-      ...(timeline.source.kind === 'operation' ? { operationId: timeline.source.operationId } : {}),
-      ...(timeline.source.kind === 'audioFile' ? { fileId: timeline.source.fileId } : {}),
-      ...(timeline.source.kind === 'comparison'
-        ? {
-            comparisonA: timeline.source.a,
-            comparisonB: timeline.source.b,
-          }
-        : {}),
-    };
-  });
+      return {
+        id: timeline.id,
+        sourceKind: timeline.source.kind,
+        isActive: timelinesState?.activeTimelineId === timeline.id,
+        // Playback state
+        playheadTime: playback?.playheadTime ?? 0,
+        isPlaying: playback?.isPlaying ?? false,
+        looping: playback?.looping ?? false,
+        // Add source-specific info
+        ...(timeline.source.kind === 'operation'
+          ? { operationId: timeline.source.operationId }
+          : {}),
+        ...(timeline.source.kind === 'audioFile' ? { fileId: timeline.source.fileId } : {}),
+        ...(timeline.source.kind === 'comparison'
+          ? {
+              comparisonA: timeline.source.a,
+              comparisonB: timeline.source.b,
+            }
+          : {}),
+      };
+    }
+  );
 
   // Interaction functions
   function createTestTimeline() {
     const selectedOperationId = $appState.uiSettings?.selectedOperationId;
     if (selectedOperationId) {
-      const newTimeline = createTimelineStateForOp(selectedOperationId);
-      timelinesStore.update(state => ({
-        ...state,
-        timelines: {
-          ...state.timelines,
-          [newTimeline.id]: newTimeline,
-        },
-      }));
+      toggleTimelineVisibilityByOpId(selectedOperationId);
     }
   }
 
   function clearAllTimelines() {
-    timelinesStore.set({
-      timelines: {},
-    });
+    appState.update(state => ({
+      ...state,
+      timelines: {
+        timelines: {},
+        activeTimelineId: null,
+      },
+    }));
   }
 
   function toggleTimelineForCurrentOp() {
@@ -70,52 +65,11 @@
     }
   }
 
-  //   // Layout manipulation
-  //   function moveToFloating(timelineId: string) {
-  //     timelinesStore.update(state => {
-  //       const layout = { ...state.layout };
-  //       layout.docked = layout.docked.filter(id => id !== timelineId);
-  //       if (!layout.floating.includes(timelineId)) {
-  //         layout.floating.push(timelineId);
-  //       }
-  //       return { ...state, layout };
-  //     });
-  //   }
-
-  //   function moveToDocked(timelineId: string) {
-  //     timelinesStore.update(state => {
-  //       const layout = { ...state.layout };
-  //       layout.floating = layout.floating.filter(id => id !== timelineId);
-  //       if (!layout.docked.includes(timelineId)) {
-  //         layout.docked.push(timelineId);
-  //       }
-  //       return { ...state, layout };
-  //     });
-  //   }
-
   // View state manipulation
   function resetViewState(timelineId: string) {
-    timelinesStore.update(state => {
-      const timeline = state.timelines[timelineId];
-      if (!timeline) return state;
-
-      return {
-        ...state,
-        timelines: {
-          ...state.timelines,
-          [timelineId]: {
-            ...timeline,
-            view: {
-              zoom: 1,
-              scrollX: 0,
-              playheadTime: 0,
-              visibleTracks: [],
-              selection: undefined,
-            },
-          },
-        },
-      };
-    });
+    // View state is no longer stored in timelinesStore;
+    // use timelineViewStates store or no-op for now
+    console.log(`Reset view state for ${timelineId} (no-op in new system)`);
   }
 </script>
 
@@ -240,17 +194,7 @@
                   {/if}
                 </td>
                 <td class="layout-info">
-                  {#if timeline.isDocked}
-                    <span class="layout-badge docked">
-                      <i class="fa fa-anchor"></i> Docked
-                    </span>
-                  {:else if timeline.isFloating}
-                    <span class="layout-badge floating">
-                      <i class="fa fa-window-maximize"></i> Floating
-                    </span>
-                  {:else}
-                    <span class="layout-badge unknown">Unknown</span>
-                  {/if}
+                  <span class="layout-badge">In appState</span>
                 </td>
                 <td class="view-info">
                   <div class="view-details">

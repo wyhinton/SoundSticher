@@ -13,7 +13,8 @@
   import Timeline from './PlaybackDisplay/Timeline.svelte';
   import { initializeFrontend } from './state/initializeFrontend';
   import { appState } from './state/state.svelte';
-  import { operationTimelines, timelinesStore } from './state/timeline/timelines';
+  import { activeTimelineId, visibleOperationTimelines } from './state/timeline/timelines';
+  import { TimelineViewer } from './state/timeline/TimelineViewer';
   import Footer from './StatusFooter.svelte';
 
   WebviewWindow.getCurrent()
@@ -28,6 +29,30 @@
   let timelineComponent: any;
   let operationsPanelHeight: number = 0;
   let cleanupFrontend: (() => void) | null = null;
+
+  // Create TimelineViewers for all visible operations
+  // Map is keyed by timeline ID so we reuse viewers across re-renders
+  const timelineViewerCache = new Map<string, TimelineViewer>();
+
+  $: visibleTimelines = $visibleOperationTimelines;
+  $: currentActiveTimelineId = $activeTimelineId;
+
+  // Build TimelineViewer instances for each visible timeline
+  $: timelineViewers = visibleTimelines
+    .map(tl => {
+      const opId = tl.source.kind === 'operation' ? tl.source.operationId : null;
+      if (!opId) return null;
+
+      let viewer = timelineViewerCache.get(tl.id);
+      if (!viewer) {
+        viewer = new TimelineViewer(opId);
+        timelineViewerCache.set(tl.id, viewer);
+        // Kick off waveform loading for new viewers
+        viewer.loadWaveformData().catch(err => console.error('Failed to load waveform data:', err));
+      }
+      return viewer;
+    })
+    .filter((v): v is TimelineViewer => v !== null);
 
   // Reactive timeline height from appState
   $: timelineHeight = TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
@@ -116,14 +141,17 @@
         >
           <div class="timeline-container">
             <Splitpanes theme="modern-theme" horizontal={true}>
-              {#each $operationTimelines as timeline (timeline.id)}
+              {#each timelineViewers as viewer (viewer.id)}
                 <Pane>
                   <div
                     class="timeline-pane-content"
-                    class:active={$timelinesStore.activeTimelineId === timeline.id}
+                    class:active={currentActiveTimelineId === viewer.id}
                   >
-                    <PlottedInfo {timeline} />
-                    <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
+                    <PlottedInfo timelineViewer={viewer} />
+                    <Timeline
+                      timelineViewer={viewer}
+                      on:selectionChange={handleTimelineSelectionChange}
+                    />
                   </div>
                 </Pane>
               {:else}

@@ -58,6 +58,11 @@ export interface AppState {
   sortDirection?: 'asc' | 'desc';
   sortKey?: keyof AudioFileItem;
   timelineItems: TimelineItem[];
+  /**
+   * Timeline state managed directly in appState (replaces timelinesStore).
+   * Contains serializable timeline data keyed by timeline ID.
+   */
+  timelines?: TimelinesStateData;
   uiSettings?: {
     activeTab?: string;
     debugActiveTab?: string;
@@ -158,6 +163,30 @@ export interface SpacerTimelineItem extends BaseTimelineItem {
 }
 
 export type TimelineItem = AudioFileTimelineItem | SpacerTimelineItem;
+
+// ============================================================================
+// TIMELINE STATE (managed in appState, replaces timelinesStore)
+// ============================================================================
+
+/** Serializable timeline source */
+export type TimelineSourceData =
+  | { kind: 'operation'; operationId: OperationId }
+  | { kind: 'audioFile'; fileId: string }
+  | { kind: 'comparison'; a: OperationId; b: OperationId }
+  | { kind: 'custom'; tracks: { id: string; name?: string }[] };
+
+/** Serializable timeline data (no Svelte stores) */
+export interface TimelineData {
+  id: string;
+  source: TimelineSourceData;
+  items: TimelineItem[];
+}
+
+/** Top-level timelines state stored in appState */
+export interface TimelinesStateData {
+  timelines: Record<string, TimelineData>;
+  activeTimelineId: string | null;
+}
 
 const CURRENT_STATE_VERSION = 1; // Increment this when you need to run migrations
 

@@ -54,6 +54,12 @@ export interface BaseOperation {
   name: string; // user-visible, editable display label
 
   /**
+   * Whether this operation's timeline is currently visible in the UI.
+   * Toggled by the user via the eye button on operations.
+   */
+  visible?: boolean;
+
+  /**
    * Controls how this operation reacts to upstream changes.
    * - 'auto': Re-render when any input changes (default)
    * - 'manual': Never re-render unless explicitly triggered

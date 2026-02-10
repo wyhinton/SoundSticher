@@ -18,7 +18,7 @@ import {
 import { appState } from './state.svelte';
 import { initializeStatusPublishers } from './status-publishers';
 import { timelinePlaybackStoreService } from './timeline/timelinePlaybackState';
-import { initializeTimelineSync, timelinesStore } from './timeline/timelines';
+import { initializeTimelineSync } from './timeline/timelines';
 import { timelinePlaybackService } from './timelinePlaybackService';
 import { undo, redo, canUndo, canRedo } from './undo/undo';
 import { initWaveformService } from './waveformCache';
@@ -30,20 +30,19 @@ import { initWaveformService } from './waveformCache';
  */
 async function buildBackendGraphsForAllTimelines(): Promise<void> {
   const currentAppState = get(appState);
-  const currentTimelinesState = get(timelinesStore);
-
-  console.log(currentTimelinesState);
-  console.log(`%cHERE LINE :35 %c`, 'color: blue; font-weight: bold', '');
+  const timelinesState = currentAppState.timelines;
 
   if (!currentAppState.operations?.defs) {
     logger.opPlayback.info('No operations available, skipping timeline graph building');
     return;
   }
 
-  console.log(`%cHERE LINE :42 %c`, 'color: blue; font-weight: bold', '');
+  if (!timelinesState?.timelines) {
+    logger.opPlayback.info('No timelines state available, skipping timeline graph building');
+    return;
+  }
 
-  const timelineIds = Object.keys(currentTimelinesState.timelines);
-  console.log(timelineIds);
+  const timelineIds = Object.keys(timelinesState.timelines);
   if (timelineIds.length === 0) {
     logger.opPlayback.info('No timelines to build backend graphs for');
     return;
@@ -53,7 +52,7 @@ async function buildBackendGraphsForAllTimelines(): Promise<void> {
 
   // Build graphs for all timelines in parallel
   const buildPromises = timelineIds.map(async timelineId => {
-    const timeline = currentTimelinesState.timelines[timelineId];
+    const timeline = timelinesState.timelines[timelineId];
     timelinePlaybackStoreService.addTimeline(timelineId);
     if (!timeline || timeline.source.kind !== 'operation') {
       logger.opPlayback.warning(`Skipping timeline ${timelineId}: not an operation-based timeline`);

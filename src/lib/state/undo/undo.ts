@@ -2,14 +2,8 @@ import { get } from 'svelte/store';
 import { loggingState } from '../logging';
 import type { OperationId, OperationDef, OperationSource, RenderPolicy } from '../operation';
 import { appState, type AppState, type TimelineItem } from '../state.svelte';
-import {
-  timelinesStore,
-  type TimelineSource,
-  type TimelineViewState,
-  type TimelinesState,
-} from '../timeline/timelines';
+import type { TimelineSource, TimelineViewState } from '../timeline/timelines';
 import { applyCommand } from './applyCommand';
-import { applyTimelineCommand } from './applyTimelineCommand';
 import { invertCommand } from './invertCommand';
 
 // ============================================================================
@@ -219,7 +213,6 @@ class UndoRedoManager {
       let finalCommand: Command = command;
       updateStoresTransactionally(stores => {
         finalCommand = applyCommand(stores.appState, command);
-        stores.timelinesState = applyTimelineCommand(stores.timelinesState, finalCommand);
       });
 
       // Create the inverse command for undo
@@ -296,7 +289,6 @@ class UndoRedoManager {
       // Apply the inverse command using transactional updates
       updateStoresTransactionally(stores => {
         applyCommand(stores.appState, historyEntry.inverse);
-        stores.timelinesState = applyTimelineCommand(stores.timelinesState, historyEntry.inverse);
       });
 
       // Move the current index back
@@ -349,7 +341,6 @@ class UndoRedoManager {
       // Apply the forward command using transactional updates
       updateStoresTransactionally(stores => {
         applyCommand(stores.appState, historyEntry.forward);
-        stores.timelinesState = applyTimelineCommand(stores.timelinesState, historyEntry.forward);
       });
 
       // Move the current index forward
@@ -459,12 +450,11 @@ class UndoRedoManager {
  */
 interface StoreStates {
   appState: AppState;
-  timelinesState: TimelinesState;
 }
 
 /**
- * Update multiple stores transactionally to maintain consistency
- * This ensures that commands affecting multiple stores update them atomically
+ * Update stores transactionally to maintain consistency.
+ * Since timelines are now part of appState, we only need to update one store.
  */
 function updateStoresTransactionally(updater: (stores: StoreStates) => void): void {
   const isLogging = get(loggingState).operationsLog;
@@ -472,16 +462,14 @@ function updateStoresTransactionally(updater: (stores: StoreStates) => void): vo
     console.log('🔄 UndoRedo: Starting transactional store update');
   }
   try {
-    // Step 1: Get current values from all stores
+    // Step 1: Get current value from appState
     const stores: StoreStates = {
       appState: get(appState),
-      timelinesState: get(timelinesStore),
     };
     // Step 2: Let the caller modify the stores
     updater(stores);
-    // Step 3: Write updated stores back atomically
+    // Step 3: Write updated store back
     appState.set(stores.appState);
-    timelinesStore.set(stores.timelinesState);
     if (isLogging) {
       console.log('✅ UndoRedo: Transactional store update completed successfully');
     }
