@@ -1,17 +1,16 @@
 <script lang="ts">
-  import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
-  import { deleteOperationsById, updateOperationById } from '$lib/state/operation';
-  import type { OperationDef, OperationId } from '$lib/state/operation';
   import OperationParamsDebugPanel from './OperationParamsDebugPanel.svelte';
   import OperationParamsForm from '$lib/components/schema/OperationParamsForm.svelte';
-
+  import type { OperationDef } from '$lib/state/operation';
+  import { deleteOperationsById, updateOperationById } from '$lib/state/operation';
+  import { appState, setSelectedOperationId } from '$lib/state/state.svelte';
   // Import schema-driven types and utilities
   import {
     type OperationKind,
-    isValidOperationKind,
     createDefaultParams,
-    validateParams,
+    isValidOperationKind,
     operationMeta,
+    validateParams,
   } from '$lib/types';
 
   // Legacy parameter config interface for backwards compatibility

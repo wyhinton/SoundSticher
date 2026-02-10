@@ -1,6 +1,6 @@
 // Operation trait definition
 
-use crate::artifacts::{Artifact, ArtifactRegistry, ArtifactId};
+use crate::artifacts::{Artifact, ArtifactId, ArtifactRegistry};
 use crate::graph::OpId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -108,15 +108,21 @@ impl OperationContext {
 
     /// Publish an artifact to the registry
     /// Uses frontend_op_id if available for proper frontend-backend ID mapping
-    pub fn publish_artifact(&self, artifact: Artifact) -> Result<Option<ArtifactId>, OperationError> {
+    pub fn publish_artifact(
+        &self,
+        artifact: Artifact,
+    ) -> Result<Option<ArtifactId>, OperationError> {
         if let Some(ref registry) = self.artifact_registry {
-            registry.register_artifact_with_frontend_id(
-                artifact, 
-                self.op_id, 
-                self.frontend_op_id.clone()
-            )
+            registry
+                .register_artifact_with_frontend_id(
+                    artifact,
+                    self.op_id,
+                    self.frontend_op_id.clone(),
+                )
                 .map(Some)
-                .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
+                .map_err(|e| {
+                    OperationError::ProcessingError(format!("Failed to register artifact: {}", e))
+                })
         } else {
             // If no registry is available, we still succeed but return None
             Ok(None)
@@ -126,19 +132,22 @@ impl OperationContext {
     /// Publish an artifact with metadata tags
     /// Uses frontend_op_id if available for proper frontend-backend ID mapping
     pub fn publish_artifact_with_tags(
-        &self, 
-        artifact: Artifact, 
-        tags: HashMap<String, String>
+        &self,
+        artifact: Artifact,
+        tags: HashMap<String, String>,
     ) -> Result<Option<ArtifactId>, OperationError> {
         if let Some(ref registry) = self.artifact_registry {
-            registry.register_artifact_with_tags_and_frontend_id(
-                artifact, 
-                self.op_id, 
-                tags, 
-                self.frontend_op_id.clone()
-            )
+            registry
+                .register_artifact_with_tags_and_frontend_id(
+                    artifact,
+                    self.op_id,
+                    tags,
+                    self.frontend_op_id.clone(),
+                )
                 .map(Some)
-                .map_err(|e| OperationError::ProcessingError(format!("Failed to register artifact: {}", e)))
+                .map_err(|e| {
+                    OperationError::ProcessingError(format!("Failed to register artifact: {}", e))
+                })
         } else {
             // If no registry is available, we still succeed but return None
             Ok(None)

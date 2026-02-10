@@ -1,9 +1,13 @@
 import { get } from 'svelte/store';
-import { logger } from './logging';
-import { invokeWithPerf } from './performance';
 import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
-import type { BuildGraphRequest, BuildGraphResponse, AddOpRequest } from './opPlaybackService';
+import { logger } from './logging';
+import type {
+  BuildOpPlaybackGraphRequest,
+  BuildGraphResponse,
+  AddOpRequest,
+} from './opPlaybackService';
 import { useSampleCache } from './opPlaybackService';
+import { invokeWithPerf } from './performance';
 
 /**
  * Typed event definitions for build graph progress
@@ -44,7 +48,7 @@ type StateUpdater = (updater: (state: any) => any) => void;
  * Build a playback graph from operations using typed event channels
  */
 export async function buildGraph(
-  request: BuildGraphRequest,
+  request: BuildOpPlaybackGraphRequest,
   updateState: StateUpdater
 ): Promise<BuildGraphResponse> {
   logger.opPlayback.info(`Building playback graph with ${request.operations.length} operations`);

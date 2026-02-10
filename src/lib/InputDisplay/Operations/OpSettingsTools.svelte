@@ -2,6 +2,10 @@
   import type { OperationId } from '$lib/state/operation';
   import { type RenderPolicy } from '$lib/state/operation';
   import { appState } from '$lib/state/state.svelte';
+  import {
+    isOperationTimelineVisible,
+    toggleTimelineVisibilityByOpId,
+  } from '$lib/state/timeline/timelines';
   import { setRenderPolicyCommand } from '$lib/state/undo/undo';
 
   export let operationId: OperationId;
@@ -12,6 +16,9 @@
   $: renderPolicy = (operation?.renderPolicy || 'auto') as RenderPolicy;
   $: isFrozen = renderPolicy === 'frozen';
   $: isAuto = renderPolicy === 'auto';
+
+  // Reactive state for timeline visibility
+  $: hasVisibleTimeline = isOperationTimelineVisible(operationId);
 
   // Action handlers
   function handleRender() {
@@ -40,6 +47,13 @@
       console.log('  → Operation will now auto-rerender when upstream changes occur');
     }
   }
+
+  function handleTimelineToggle() {
+    toggleTimelineVisibilityByOpId(operationId);
+
+    console.log(`👁️ Toggled timeline for: ${operationName} (id: ${operationId})`);
+    console.log(`  → Timeline is now ${hasVisibleTimeline ? 'hidden' : 'visible'}`);
+  }
 </script>
 
 <div class="op-settings-tools">
@@ -63,6 +77,18 @@
     aria-label={isFrozen ? 'Unfreeze operation' : 'Freeze operation'}
   >
     <span class="tool-icon" class:frozen={isFrozen}>❄️</span>
+  </button>
+
+  <button
+    class="tool-button"
+    class:visible={hasVisibleTimeline}
+    on:click={handleTimelineToggle}
+    title={hasVisibleTimeline ? 'Hide operation timeline' : 'Show operation timeline'}
+    aria-label={hasVisibleTimeline ? 'Hide timeline' : 'Show timeline'}
+  >
+    <span class="tool-icon" class:visible={hasVisibleTimeline}>
+      {hasVisibleTimeline ? '👁️' : '👁️‍🗨️'}
+    </span>
   </button>
 </div>
 
@@ -109,6 +135,14 @@
     background: rgba(239, 68, 68, 0.25);
   }
 
+  .tool-button.visible {
+    background: rgba(34, 197, 94, 0.15);
+  }
+
+  .tool-button.visible:hover {
+    background: rgba(34, 197, 94, 0.25);
+  }
+
   .tool-icon {
     font-size: 1rem;
     line-height: 1;
@@ -118,9 +152,10 @@
     opacity: 0.5; /* Default: half opacity */
   }
 
-  /* Full opacity when active/frozen */
+  /* Full opacity when active/frozen/visible */
   .tool-icon.active,
-  .tool-icon.frozen {
+  .tool-icon.frozen,
+  .tool-icon.visible {
     opacity: 1;
   }
 
@@ -138,6 +173,11 @@
     filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.6));
   }
 
+  /* Timeline button - green glow on hover */
+  .tool-button:nth-child(3):hover .tool-icon {
+    filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.6));
+  }
+
   /* Active state - brighter red glow */
   .tool-button.active .tool-icon {
     filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.8));
@@ -146,5 +186,10 @@
   /* Frozen state - brighter blue glow */
   .tool-button.frozen .tool-icon {
     filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.8));
+  }
+
+  /* Visible timeline state - brighter green glow */
+  .tool-button.visible .tool-icon {
+    filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.8));
   }
 </style>

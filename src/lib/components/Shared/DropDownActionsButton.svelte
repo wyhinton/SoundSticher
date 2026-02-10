@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { openDropdown, openDropdownExclusive, closeDropdown } from '../state/dropdown.svelte';
-  import { appState } from '../state/state.svelte';
-  import { createFloatingActions } from 'svelte-floating-ui';
   import { flip, offset, shift } from '@floating-ui/dom';
-  import Portal from './Shared/Portal.svelte';
+  import { createFloatingActions } from 'svelte-floating-ui';
+  import { closeDropdown, openDropdown, openDropdownExclusive } from '../../state/dropdown.svelte';
+  import { appState } from '../../state/state.svelte';
 
   // Props for customization
   export let dropdownId: string;

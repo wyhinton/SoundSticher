@@ -98,6 +98,10 @@
         <slot name="artifacts" />
       {:else if activeTab === 'undo-redo'}
         <slot name="undo-redo" />
+      {:else if activeTab === 'op-playback'}
+        <slot name="op-playback" />
+      {:else if activeTab === 'timeline-store'}
+        <slot name="timeline-store" />
       {:else}
         <slot {activeTab} />
       {/if}

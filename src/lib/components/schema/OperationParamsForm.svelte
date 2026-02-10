@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import type { OperationKind, UIControl } from '$lib/types/generated/operations';
-  import { operationUIControls, operationDefaults } from '$lib/types/generated/operations';
+  import { operationDefaults, operationUIControls } from '$lib/types/generated/operations';
 
   // Props
   export let operationKind: OperationKind;

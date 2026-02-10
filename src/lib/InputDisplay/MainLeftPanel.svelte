@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { appState, setActiveTab } from '$lib/state/state.svelte';
   import Favorites from './Favorites.svelte';
   import Groups from './Groups/Groups.svelte';
   import Operations from './Operations/Operations.svelte';
+  import { appState, setActiveTab } from '$lib/state/state.svelte';
 </script>
 
 <!-- Tab panel section -->

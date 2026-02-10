@@ -29,8 +29,8 @@ pub enum Error {
     #[error("No audio data")]
     NoAudioData,
 
-    #[error("No audio data")]
-    PlaybackError,
+    #[error("Playback error: {0}")]
+    PlaybackError(String),
 
     #[error("MP3 encoder build error: {0}")]
     MP3EncoderError(String),
@@ -95,7 +95,7 @@ impl serde::Serialize for Error {
             Self::HoundWriteError(_) => ErrorKind::HoundWriteError(error_message),
             Self::NoDefaultTrackFound => ErrorKind::NoDefaultTrackFound(error_message),
             Self::NoAudioData => ErrorKind::NoAudioData(error_message),
-            Self::PlaybackError => ErrorKind::PlaybackError(error_message),
+            Self::PlaybackError(_) => ErrorKind::PlaybackError(error_message),
             Self::TauriError(_) => ErrorKind::TauriError(error_message),
             Self::MP3EncoderError(_) => ErrorKind::MP3EncoderError(error_message),
             Self::UnevenNumberOfSamples => ErrorKind::UnevenNumberOfSamples,

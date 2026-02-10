@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
-  import ContextMenu from './ContextMenu.svelte';
-  import { contextMenuState, contextMenuManager } from './contextMenuStore';
-  import { sourcesTableProvider, exportPanelProvider, generalProvider } from './providers';
-  import { appState } from '../../state/state.svelte';
   import { debugState } from '../../state/debug.svelte';
+  import { appState } from '../../state/state.svelte';
+  import ContextMenu from './ContextMenu.svelte';
+  import { contextMenuManager, contextMenuState } from './contextMenuStore';
+  import { exportPanelProvider, generalProvider, sourcesTableProvider } from './providers';
 
   // Context for passing to providers
   let selectedTimelineSegments: Set<number> = new Set();

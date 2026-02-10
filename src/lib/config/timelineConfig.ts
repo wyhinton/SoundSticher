@@ -78,10 +78,10 @@ export const TIMELINE_RESIZE = {
   MIN_HEIGHT_PERCENT: 10,
 
   /** Maximum timeline height as percentage of viewport (60% = majority of screen) */
-  MAX_HEIGHT_PERCENT: 50,
+  MAX_HEIGHT_PERCENT: 30,
 
   /** Default timeline height as percentage of viewport */
-  DEFAULT_HEIGHT_PERCENT: 20,
+  DEFAULT_HEIGHT_PERCENT: 50,
 } as const;
 
 /**

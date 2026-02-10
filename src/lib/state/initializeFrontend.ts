@@ -1,10 +1,73 @@
-import { initWaveformService } from './waveformCache';
-import { initializeGroupsSubscription } from './groups';
-import { initializeOperationsSubscription } from './operation';
-import { initializeStatusPublishers } from './status-publishers';
-import { undo, redo, canUndo, canRedo } from './undo/undo';
-import { opPlaybackService } from './opPlaybackService';
+import { get } from 'svelte/store';
 import { initializeAutoRenderSubscription } from './autoRender';
+import { initializeGroupsSubscription } from './groups';
+import { logger } from './logging';
+import {
+  initializeOperationsSubscription,
+  getOperationById,
+  type OperationDef,
+  buildOperationDurationMap,
+  buildBackendGraphForTimeline,
+} from './operation';
+import {
+  buildTimelineForOp,
+  type BuildOpPlaybackGraphRequest,
+  type AddOpRequest,
+  type MergeInputRequest,
+} from './opPlaybackService';
+import { appState } from './state.svelte';
+import { initializeStatusPublishers } from './status-publishers';
+import { timelinePlaybackStoreService } from './timeline/timelinePlaybackState';
+import { initializeTimelineSync, timelinesStore } from './timeline/timelines';
+import { timelinePlaybackService } from './timelinePlaybackService';
+import { undo, redo, canUndo, canRedo } from './undo/undo';
+import { initWaveformService } from './waveformCache';
+// import { subscribeForTimelineStoreSerialization } from './timeline/persistentTimeline';
+
+/**
+ * Build backend playback graphs for all existing timelines in the store
+ * This ensures that timelines can be played immediately after initialization
+ */
+async function buildBackendGraphsForAllTimelines(): Promise<void> {
+  const currentAppState = get(appState);
+  const currentTimelinesState = get(timelinesStore);
+
+  console.log(currentTimelinesState);
+  console.log(`%cHERE LINE :35 %c`, 'color: blue; font-weight: bold', '');
+
+  if (!currentAppState.operations?.defs) {
+    logger.opPlayback.info('No operations available, skipping timeline graph building');
+    return;
+  }
+
+  console.log(`%cHERE LINE :42 %c`, 'color: blue; font-weight: bold', '');
+
+  const timelineIds = Object.keys(currentTimelinesState.timelines);
+  console.log(timelineIds);
+  if (timelineIds.length === 0) {
+    logger.opPlayback.info('No timelines to build backend graphs for');
+    return;
+  }
+
+  logger.opPlayback.info(`Building backend graphs for ${timelineIds.length} timelines`);
+
+  // Build graphs for all timelines in parallel
+  const buildPromises = timelineIds.map(async timelineId => {
+    const timeline = currentTimelinesState.timelines[timelineId];
+    timelinePlaybackStoreService.addTimeline(timelineId);
+    if (!timeline || timeline.source.kind !== 'operation') {
+      logger.opPlayback.warning(`Skipping timeline ${timelineId}: not an operation-based timeline`);
+      return;
+    }
+
+    const operationId = timeline.source.operationId;
+    await buildBackendGraphForTimeline(timelineId, operationId);
+  });
+
+  // Wait for all graphs to be built
+  await Promise.allSettled(buildPromises);
+  logger.opPlayback.info('Finished building backend graphs for all timelines');
+}
 
 /**
  * Initialize all frontend systems and services
@@ -21,9 +84,18 @@ export function initializeFrontend(): () => void {
   initializeAutoRenderSubscription();
   // Initialize automatic status publishers (buffering, etc.)
   initializeStatusPublishers();
-
+  initializeTimelineSync();
+  // subscribeForTimelineStoreSerialization();
   // Initialize waveform service (handles loading waveforms when operation changes)
   const cleanupWaveformService = initWaveformService();
+
+  // Build backend playback graphs for all existing timelines
+  buildBackendGraphsForAllTimelines().catch(error => {
+    logger.opPlayback.error(
+      'Failed to build backend graphs for timelines during initialization:',
+      error
+    );
+  });
 
   // Setup keyboard shortcuts
   const handleKeyPress = (ev: KeyboardEvent) => {
@@ -33,10 +105,10 @@ export function initializeFrontend(): () => void {
       if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) {
         return;
       }
-
       ev.preventDefault(); // Prevent default scrolling
-      // Use the operation playback service
-      opPlaybackService.togglePlayPause().catch((err: Error) => {
+      // Use the timeline playback service for the active timeline
+
+      timelinePlaybackService.togglePlayPauseActiveTimeline().catch((err: Error) => {
         console.error('Error toggling playback:', err);
       });
       return;

@@ -1,38 +1,45 @@
 <script lang="ts">
   import {
-    opPlaybackService,
-    opPlaybackState,
-    opPlaybackProgress,
-    opIsPlaying,
-    opIsPaused,
-  } from '$lib/state/opPlaybackService';
+    timelineIsPlaying,
+    timelineLooping,
+    timelinePlayhead,
+  } from '$lib/state/timeline/timelinePlaybackState';
+  import { setActiveTimeline } from '$lib/state/timeline/timelines';
+  import { timelinePlaybackService } from '$lib/state/timelinePlaybackService';
   import { operationDuration } from '$lib/state/waveformCache';
 
   // Component props
   export let disabled: boolean = false;
+  export let timelineId: string | null = null;
 
   let bufferingProgress = 0;
-  let playHeadPosition = 0;
 
-  // Listen to operation playback progress when using operation system
-  $: playHeadPosition = $opPlaybackState.positionSeconds;
+  // Create timeline-specific derived stores
+  $: playheadStore = timelineId ? timelinePlayhead(timelineId) : null;
+  $: loopingStore = timelineId ? timelineLooping(timelineId) : null;
+  $: isPlayingStore = timelineId ? timelineIsPlaying(timelineId) : null;
+
+  // Reactive values from timeline-specific stores
+  $: playHeadPosition = playheadStore ? $playheadStore : 0;
+  $: isLoopEnabled = loopingStore ? $loopingStore : false;
+  $: isCurrentlyPlaying = isPlayingStore ? $isPlayingStore : false;
 
   // Reactive current duration based on operation system
   $: currentDuration = $operationDuration;
 
-  // Reactive play state
-  $: isCurrentlyPlaying = $opIsPlaying && !$opIsPaused;
+  // Paused state is when we have a playing timeline but isPlaying is false
+  // (This requires additional state tracking in timelinePlaybackState if needed)
+  $: isCurrentlyPaused = false; // TODO: Add paused state to timelinePlaybackState
 
-  // Reactive pause state
-  $: isCurrentlyPaused = $opIsPaused;
-
-  // Reactive loop state
-  $: isLoopEnabled = $opPlaybackState.loopEnabled;
-
-  // Transport control functions
+  // Transport control functions using new timeline playback service
   async function handlePlay() {
     try {
-      await opPlaybackService.play(playHeadPosition);
+      if (!timelineId) {
+        console.error('No timeline ID - cannot play. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      await timelinePlaybackService.playTimeline(timelineId, playHeadPosition);
     } catch (error) {
       console.error('Error playing audio:', error);
     }
@@ -40,7 +47,12 @@
 
   async function handlePause() {
     try {
-      await opPlaybackService.pause();
+      if (!timelineId) {
+        console.error('No timeline ID - cannot pause. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      await timelinePlaybackService.pauseTimeline(timelineId);
     } catch (error) {
       console.error('Error pausing audio:', error);
     }
@@ -48,7 +60,12 @@
 
   async function handleResume() {
     try {
-      await opPlaybackService.resume();
+      if (!timelineId) {
+        console.error('No timeline ID - cannot resume. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      await timelinePlaybackService.resumeTimeline(timelineId);
     } catch (error) {
       console.error('Error resuming audio:', error);
     }
@@ -56,7 +73,12 @@
 
   async function handleStop() {
     try {
-      await opPlaybackService.stop();
+      if (!timelineId) {
+        console.error('No timeline ID - cannot stop. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      await timelinePlaybackService.stopTimeline(timelineId);
     } catch (error) {
       console.error('Error stopping audio:', error);
     }
@@ -64,7 +86,12 @@
 
   async function handleSkipToStart() {
     try {
-      await opPlaybackService.seek(0);
+      if (!timelineId) {
+        console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      await timelinePlaybackService.seekTimeline(timelineId, 0);
     } catch (error) {
       console.error('Error skipping to start:', error);
     }
@@ -72,7 +99,12 @@
 
   async function handleSkipToEnd() {
     try {
-      await opPlaybackService.seek(currentDuration);
+      if (!timelineId) {
+        console.error('No timeline ID - cannot seek. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      await timelinePlaybackService.seekTimeline(timelineId, currentDuration);
     } catch (error) {
       console.error('Error skipping to end:', error);
     }
@@ -80,7 +112,13 @@
 
   async function toggleLoop() {
     try {
-      await opPlaybackService.setLoop(!$opPlaybackState.loopEnabled);
+      if (!timelineId) {
+        console.error('No timeline ID - cannot toggle loop. Please provide a timelineId prop.');
+        return;
+      }
+      setActiveTimeline(timelineId);
+      // Use timeline-specific loop state instead of global opPlaybackState
+      await timelinePlaybackService.setTimelineLoop(timelineId, !isLoopEnabled);
     } catch (error) {
       console.error('Error toggling loop:', error);
     }
@@ -122,7 +160,7 @@
 {/snippet}
 
 <!-- Audacity-style Transport Controls -->
-<div class="transport-controls d-flex align-items-center gap-2 py-2 px-2" class:disabled>
+<div class="transport-controls d-flex align-items-center gap-2 py-1 px-1" class:disabled>
   {@render transportButton(
     'fa-backward-step',
     'Skip to Start',
@@ -137,7 +175,7 @@
     handlePlayPause,
     'btn-play',
     isCurrentlyPlaying,
-    disabled
+    disabled || isCurrentlyPlaying
   )}
   {@render transportButton(
     'fa-pause',
@@ -155,10 +193,8 @@
 <style>
   .transport-controls {
     background: linear-gradient(to bottom, #2c3e50, #34495e);
-    border: 1px solid #1a252f;
-    border-radius: 4px;
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.1);
     transition: opacity 0.2s ease;
+    padding: 2px 4px;
   }
 
   .transport-controls.disabled {
@@ -168,19 +204,19 @@
   }
 
   .btn-transport {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     border: 1px solid #4a5568;
     background: linear-gradient(to bottom, #4a5568, #2d3748);
     color: #e2e8f0;
-    border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    font-size: 14px;
+    font-size: 11px;
     transition: all 0.1s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
   }
 
   .btn-transport:hover {
@@ -254,7 +290,7 @@
     background: #2d3748;
     border: 1px solid #1a252f;
     border-top: none;
-    border-radius: 0 0 4px 4px;
+
     font-size: 11px;
   }
 

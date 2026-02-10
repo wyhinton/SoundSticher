@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
+  import { onDestroy, onMount } from 'svelte';
+  import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
 
   export let visible = false;
 

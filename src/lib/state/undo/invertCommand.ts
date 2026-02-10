@@ -169,6 +169,19 @@ export function invertCommand(cmd: Command): Command {
         policy: cmd.previousPolicy!,
       };
 
+    case 'toggle-timeline-visibility':
+      // The inverse of a toggle is the same toggle - it will restore the previous state
+      return {
+        type: 'toggle-timeline-visibility',
+        operationId: cmd.operationId,
+        // If timeline was visible before, toggling again will hide it (and vice versa)
+        // Pass the captured state so it can be restored
+        wasVisible: !cmd.wasVisible,
+        timelineId: cmd.timelineId,
+        timelineData: cmd.timelineData,
+        viewState: cmd.viewState,
+      };
+
     case 'batch':
       // Invert batch by inverting each command in reverse order
       const invertedCommands = cmd.commands.map(invertCommand).reverse();

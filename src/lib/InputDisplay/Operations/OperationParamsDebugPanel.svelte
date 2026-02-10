@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { invokeWithPerf } from '$lib/state/performance';
-  import type { OperationDef, OperationId, OperationsState } from '$lib/state/operation';
-  import { appState } from '$lib/state/state.svelte';
   import { get } from 'svelte/store';
+  import type { OperationDef, OperationId } from '$lib/state/operation';
+  import { invokeWithPerf } from '$lib/state/performance';
+  import { appState } from '$lib/state/state.svelte';
 
   // Props
   export let selectedOperation: OperationDef | null = null;

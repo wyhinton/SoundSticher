@@ -1,10 +1,10 @@
 // src/lib/stores/appState.ts
 import { Channel, invoke } from '@tauri-apps/api/core';
-import { persisted } from 'svelte-persisted-store';
 import { get } from 'svelte/store';
-import { type Section, callSiteTrackingEnabled } from './state.svelte';
+import { persisted } from 'svelte-persisted-store';
 import type { ExportAudioEvent } from './events';
 import { exportState, type ExportSettings } from './export';
+import { type Section, callSiteTrackingEnabled } from './state.svelte';
 
 export interface PerformanceMetric {
   time: number;
@@ -61,28 +61,41 @@ function getCallSiteInfo() {
 
 export interface PerformanceState {
   cancel_combine: PerformanceMetric[];
+  clear_artifact_registry: PerformanceMetric[];
+  clear_artifact_registry_debug: PerformanceMetric[];
   clear_duration_cache: PerformanceMetric[];
+  clear_sample_cache: PerformanceMetric[];
   clear_waveform_cache: PerformanceMetric[];
   combine_all_cached_samples: PerformanceMetric[];
   combine_all_cached_samples_with_custom_order: PerformanceMetric[];
+  count_audio_files_in_folders: PerformanceMetric[];
   export_audio: PerformanceMetric[];
+  get_app_playback_state: PerformanceMetric[];
   get_app_state: PerformanceMetric[];
+  get_artifact_debug_info: PerformanceMetric[];
+  get_artifact_details_debug: PerformanceMetric[];
+  get_artifact_registry_records: PerformanceMetric[];
+  get_artifact_registry_stats: PerformanceMetric[];
+  get_artifacts_by_operation: PerformanceMetric[];
   get_audio_file_active_status: PerformanceMetric[];
-  get_current_play_progress: PerformanceMetric[];
   get_custom_order: PerformanceMetric[];
-  get_duration_cache_stats: PerformanceMetric[];
   get_duration: PerformanceMetric[];
+  get_duration_cache_stats: PerformanceMetric[];
   get_durations_batch: PerformanceMetric[];
+  get_filtered_artifacts: PerformanceMetric[];
   get_metadata: PerformanceMetric[];
+  get_sample_cache_stats: PerformanceMetric[];
   get_waveform: PerformanceMetric[];
   get_waveform_cache_stats: PerformanceMetric[];
   get_waveforms_batch: PerformanceMetric[];
   get_waveforms_for_operation: PerformanceMetric[];
   invalidate_duration: PerformanceMetric[];
+  invalidate_sample_cache: PerformanceMetric[];
   invalidate_waveform: PerformanceMetric[];
   op_playback_build_graph: PerformanceMetric[];
   op_playback_build_graph_legacy: PerformanceMetric[];
-  op_playback_clear_graph: PerformanceMetric[];
+  op_playback_clear_all_timelines: PerformanceMetric[];
+  op_playback_clear_timeline: PerformanceMetric[];
   op_playback_get_progress: PerformanceMetric[];
   op_playback_pause: PerformanceMetric[];
   op_playback_play: PerformanceMetric[];
@@ -91,50 +104,71 @@ export interface PerformanceState {
   op_playback_set_loop: PerformanceMetric[];
   op_playback_set_volume: PerformanceMetric[];
   op_playback_stop: PerformanceMetric[];
+  op_timeline_sync_full: PerformanceMetric[];
   pause_sample_preview: PerformanceMetric[];
-  pause_timeline_audio: PerformanceMetric[];
   play_sample_preview: PerformanceMetric[];
-  play_timeline_audio: PerformanceMetric[];
+  refresh_artifact_registry_status: PerformanceMetric[];
+  refresh_artifacts_existence: PerformanceMetric[];
+  remove_artifacts_by_operation_debug: PerformanceMetric[];
   render_all_auto_operations: PerformanceMetric[];
   set_audio_file_active: PerformanceMetric[];
   set_audio_files_active_batch: PerformanceMetric[];
-  set_timeline_loop_enabled: PerformanceMetric[];
-  set_timeline_play_position: PerformanceMetric[];
-  set_volume: PerformanceMetric[];
-  stop_timeline_audio: PerformanceMetric[];
   test_async: PerformanceMetric[];
-  test_operation: PerformanceMetric[];
   test_render_single_operation: PerformanceMetric[];
   test_scheduler: PerformanceMetric[];
+  timeline_build_playback: PerformanceMetric[];
+  timeline_clear: PerformanceMetric[];
+  timeline_clear_all: PerformanceMetric[];
+  timeline_get_progress: PerformanceMetric[];
+  timeline_pause: PerformanceMetric[];
+  timeline_play: PerformanceMetric[];
+  timeline_resume: PerformanceMetric[];
+  timeline_seek: PerformanceMetric[];
+  timeline_set_loop: PerformanceMetric[];
+  timeline_set_volume: PerformanceMetric[];
+  timeline_stop: PerformanceMetric[];
+  timeline_toggle: PerformanceMetric[];
   toggle_audio_file_active: PerformanceMetric[];
-  update_inputs: PerformanceMetric[];
   update_sorting: PerformanceMetric[];
 }
 
 export const performanceStore = persisted<PerformanceState>('performanceState', {
   cancel_combine: [],
+  clear_artifact_registry: [],
+  clear_artifact_registry_debug: [],
   clear_duration_cache: [],
+  clear_sample_cache: [],
   clear_waveform_cache: [],
   combine_all_cached_samples: [],
   combine_all_cached_samples_with_custom_order: [],
+  count_audio_files_in_folders: [],
   export_audio: [],
+  get_app_playback_state: [],
   get_app_state: [],
+  get_artifact_debug_info: [],
+  get_artifact_details_debug: [],
+  get_artifact_registry_records: [],
+  get_artifact_registry_stats: [],
+  get_artifacts_by_operation: [],
   get_audio_file_active_status: [],
-  get_current_play_progress: [],
   get_custom_order: [],
-  get_duration_cache_stats: [],
   get_duration: [],
+  get_duration_cache_stats: [],
   get_durations_batch: [],
+  get_filtered_artifacts: [],
   get_metadata: [],
+  get_sample_cache_stats: [],
   get_waveform: [],
   get_waveform_cache_stats: [],
   get_waveforms_batch: [],
   get_waveforms_for_operation: [],
   invalidate_duration: [],
+  invalidate_sample_cache: [],
   invalidate_waveform: [],
   op_playback_build_graph: [],
   op_playback_build_graph_legacy: [],
-  op_playback_clear_graph: [],
+  op_playback_clear_all_timelines: [],
+  op_playback_clear_timeline: [],
   op_playback_get_progress: [],
   op_playback_pause: [],
   op_playback_play: [],
@@ -143,23 +177,31 @@ export const performanceStore = persisted<PerformanceState>('performanceState', 
   op_playback_set_loop: [],
   op_playback_set_volume: [],
   op_playback_stop: [],
+  op_timeline_sync_full: [],
   pause_sample_preview: [],
-  pause_timeline_audio: [],
   play_sample_preview: [],
-  play_timeline_audio: [],
+  refresh_artifact_registry_status: [],
+  refresh_artifacts_existence: [],
+  remove_artifacts_by_operation_debug: [],
   render_all_auto_operations: [],
   set_audio_file_active: [],
   set_audio_files_active_batch: [],
-  set_timeline_loop_enabled: [],
-  set_timeline_play_position: [],
-  set_volume: [],
-  stop_timeline_audio: [],
   test_async: [],
-  test_operation: [],
   test_render_single_operation: [],
   test_scheduler: [],
+  timeline_build_playback: [],
+  timeline_clear: [],
+  timeline_clear_all: [],
+  timeline_get_progress: [],
+  timeline_pause: [],
+  timeline_play: [],
+  timeline_resume: [],
+  timeline_seek: [],
+  timeline_set_loop: [],
+  timeline_set_volume: [],
+  timeline_stop: [],
+  timeline_toggle: [],
   toggle_audio_file_active: [],
-  update_inputs: [],
   update_sorting: [],
 });
 

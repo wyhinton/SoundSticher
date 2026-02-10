@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Handle, Position } from '@xyflow/svelte';
-  import type { OperationDef } from '$lib/state/operation';
   import { createOperationRenderStore, type OperationRenderState } from '$lib/state/autoRender';
+  import type { OperationDef } from '$lib/state/operation';
 
   interface OperationNodeData {
     id: string; // Operation ID for render state tracking

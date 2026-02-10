@@ -1,20 +1,20 @@
 <script lang="ts">
   import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
-  import { appState } from './state/state.svelte';
-  import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
-  import Plotted from './PlaybackDisplay/Timeline.svelte';
-  import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
   import { onDestroy, onMount } from 'svelte';
-  import Footer from './StatusFooter.svelte';
-  import { initializeFrontend } from './state/initializeFrontend';
-  import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
-  import MainDebugToolbar from './components/MainDebugToolbar.svelte';
-  import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
-  import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
-  import { opPlaybackService } from './state/opPlaybackService';
-  import { TIMELINE_RESIZE } from './config/timelineConfig';
   import { type IPaneSizingEvent, Pane, Splitpanes } from 'svelte-splitpanes';
+  import ContextMenuWrapper from './components/ContextMenu/ContextMenuWrapper.svelte';
+  import MainDebugToolbar from './components/debug/MainDebugToolbar.svelte';
+  import { TIMELINE_RESIZE } from './config/timelineConfig';
+  import InputsOutputsTable from './InputDisplay/InputsOutputsTable.svelte';
+  import MainLeftPanel from './InputDisplay/MainLeftPanel.svelte';
+  import OperationsFlowPanel from './InputDisplay/Operations/OperationsFlowPanel.svelte';
+  import PlottedInfo from './PlaybackDisplay/PlottedInfo.svelte';
+  import Timeline from './PlaybackDisplay/Timeline.svelte';
+  import { initializeFrontend } from './state/initializeFrontend';
+  import { appState } from './state/state.svelte';
+  import { operationTimelines, timelinesStore } from './state/timeline/timelines';
+  import Footer from './StatusFooter.svelte';
 
   WebviewWindow.getCurrent()
     .once<null>('initialized', event => {})
@@ -33,15 +33,6 @@
   $: timelineHeight = TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT;
 
   // Update appState when timeline height changes
-  function setTimelineHeight(height: number) {
-    appState.update(s => ({
-      ...s,
-      uiSettings: {
-        ...s.uiSettings,
-        timelineHeight: height,
-      },
-    }));
-  }
 
   // async function onDrop(event) {
   //   filedropEvent = event;
@@ -64,6 +55,8 @@
   // Handle resize of operations panel
   function handleOperationsPanelResize(event: CustomEvent<number>) {
     if (event.detail) {
+      console.log(`%cHERE LINE :68 %c`, 'color: yellow; font-weight: bold', '');
+
       operationsPanelHeight = (event.detail as any as IPaneSizingEvent[])[0].size;
     }
   }
@@ -122,11 +115,24 @@
           maxSize={TIMELINE_RESIZE.MAX_HEIGHT_PERCENT}
         >
           <div class="timeline-container">
-            <PlottedInfo />
-            <Plotted
-              bind:this={timelineComponent}
-              on:selectionChange={handleTimelineSelectionChange}
-            />
+            <Splitpanes theme="modern-theme" horizontal={true}>
+              {#each $operationTimelines as timeline (timeline.id)}
+                <Pane>
+                  <div
+                    class="timeline-pane-content"
+                    class:active={$timelinesStore.activeTimelineId === timeline.id}
+                  >
+                    <PlottedInfo {timeline} />
+                    <Timeline {timeline} on:selectionChange={handleTimelineSelectionChange} />
+                  </div>
+                </Pane>
+              {:else}
+                <div class="no-timelines">
+                  <p>No operation timelines visible</p>
+                  <small>Use the eye button on operations to show their timelines</small>
+                </div>
+              {/each}
+            </Splitpanes>
             <!-- <Export></Export> -->
           </div>
         </Pane>
@@ -155,6 +161,29 @@
     overflow: hidden;
     height: 100%;
     width: 100%;
+  }
+
+  .timeline-pane-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    opacity: 0.5;
+  }
+
+  .timeline-pane-content.active {
+    border-color: var(--bs-primary, #0d6efd);
+    background-color: rgba(13, 110, 253, 0.05);
+    opacity: 1;
+  }
+
+  .no-timelines {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--bs-text-muted);
   }
 
   /* Modern theme for splitpanes */

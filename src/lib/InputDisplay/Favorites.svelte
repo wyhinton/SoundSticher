@@ -1,11 +1,7 @@
 <script lang="ts">
-  import { open } from '@tauri-apps/plugin-dialog';
   import { invoke } from '@tauri-apps/api/core';
-  import {
-    appState,
-    addOperationSourceToCurrent,
-    addSampleOpsFromDirectory,
-  } from '../state/state.svelte';
+  import { open } from '@tauri-apps/plugin-dialog';
+  import { appState, addSampleOpsFromDirectory } from '../state/state.svelte';
   import { removeFromFavorites, addToFavorites } from '$lib/state/favorites';
 
   let showDebugPanel = false;

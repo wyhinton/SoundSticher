@@ -15,6 +15,7 @@
     "lint:fix": "eslint --fix src --ext .js,.ts,.svelte",
     "lint": "svelte-check --tsconfig ./tsconfig.json && eslint src --ext .js,.ts,.svelte",
     "pr": "powershell -ExecutionPolicy Bypass -File ./scripts/create-pr.ps1",
+    "commit": "powershell -ExecutionPolicy Bypass -File ./scripts/commit-all.ps1",
     "release:major": "npm version major && git push && git push --tags",
     "release:minor": "npm version minor && git push && git push --tags",
     "release:patch": "npm version patch && git push && git push --tags",
@@ -24,6 +25,7 @@
     "stash": "git stash push --include-untracked",
     "sync:logging": "node scripts/sync-logging-config.js",
     "sync:performance": "node scripts/sync-performance-types.js",
+    "commands": "node scripts/extract_command_line_numbers.js",
     "sync": "svelte-kit sync",
     "tauri": "tauri",
     "type-check": "svelte-check --tsconfig ./tsconfig.json --threshold warning",
@@ -63,9 +65,10 @@
     "@sveltejs/kit": "^2.5.8",
     "@sveltejs/vite-plugin-svelte": "^3.1.0",
     "@tauri-apps/cli": "^2.6.2",
+    "@types/prismjs": "^1.26.5",
     "@typescript-eslint/eslint-plugin": "^8.35.1",
     "@typescript-eslint/parser": "^8.35.1",
-    "eslint": "^9.30.1",
+    "eslint": "^9.39.2",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-only-warn": "^1.1.0",
     "eslint-plugin-svelte": "^3.10.1",
@@ -80,6 +83,7 @@
     "svelte": "5.35.2",
     "svelte-check": "^4.3.4",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0",
     "vite": "^5.0.0"
   }
 }

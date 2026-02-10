@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import PrismWrapper from '$lib/components/PrismWrapper.svelte';
+  import PrismWrapper from '$lib/components/Shared/PrismWrapper.svelte';
 
   // Types
   interface ArtifactRecord {

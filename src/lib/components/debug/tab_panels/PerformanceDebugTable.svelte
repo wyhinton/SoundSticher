@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { resetPerformance, performanceStore } from '$lib/state/performance';
-  import { TAURI_COMMANDS, type CommandInfo } from '$lib/generated/tauri_commands';
-  import { derived } from 'svelte/store';
   import { invoke } from '@tauri-apps/api/core';
+  import { derived } from 'svelte/store';
+  import { TAURI_COMMANDS, type CommandInfo } from '$lib/generated/tauri_commands';
+  import { performanceStore, resetPerformance } from '$lib/state/performance';
 
   const sortedPerformance = derived(performanceStore, $store => {
     return Object.entries($store).sort((a, b) => {

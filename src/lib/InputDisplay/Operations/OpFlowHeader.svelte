@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { get } from 'svelte/store';
+  import OpSettingsTools from './OpSettingsTools.svelte';
   import { draggable } from '$lib/attachments/draggable';
-  import type { OperationId } from '$lib/state/operation';
-  import { setSelectedOperationId, addOpAsSourceById, appState } from '$lib/state/state.svelte';
   import ContextMenu from '$lib/components/ContextMenu/ContextMenu.svelte';
   import type { ContextMenuItem, ContextMenuPosition } from '$lib/components/ContextMenu/types';
-  import { get } from 'svelte/store';
+  import type { OperationId } from '$lib/state/operation';
+  import { addOpAsSourceById, appState, setSelectedOperationId } from '$lib/state/state.svelte';
   import type { OperationMeta } from '$lib/types';
-  import OpSettingsTools from './OpSettingsTools.svelte';
 
   export let operationId: OperationId;
   export let operationName: string;

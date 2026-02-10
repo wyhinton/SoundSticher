@@ -1,11 +1,14 @@
 <script lang="ts">
-  import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
+  import { invoke } from '@tauri-apps/api/core';
+  import { onDestroy, onMount } from 'svelte';
   import {
-    durationSeconds,
-    type TimelineItem,
     appState,
+    durationSeconds,
     toggleShowFullSvgPath,
+    type TimelineItem,
   } from '../../state/state.svelte';
+  import { timelinesStore } from '../../state/timeline/timelines';
+  import { getDisplayName, getItemSize, isItemActive } from '../../utils/timelineHelpers';
 
   // Props passed from Timeline component
   export let isDragging: boolean;
@@ -24,6 +27,65 @@
 
   // Reactive access to showFullSvgPath setting
   $: showFullSvgPath = $appState.uiSettings?.showFullSvgPath ?? false;
+
+  // OpPlaybackState debugging
+  interface AudioSpecDebugInfo {
+    sampleRate: number;
+    channels: number;
+  }
+
+  interface PlaybackSessionDebugInfo {
+    durationSeconds: number;
+    progress: number;
+    seekSeconds: number;
+    loopPlayback: boolean;
+    operationNames: string[];
+    operationCount: number;
+    spec: AudioSpecDebugInfo;
+  }
+
+  interface OpPlaybackStateDebugInfo {
+    sessions: { [key: string]: PlaybackSessionDebugInfo };
+    activeTimeline: string | null;
+    isPlaying: boolean;
+    isPaused: boolean;
+    totalSessions: number;
+  }
+
+  let opPlaybackState: OpPlaybackStateDebugInfo | null = null;
+  let opPlaybackError: string | null = null;
+  let refreshInterval: number;
+
+  async function fetchOpPlaybackState() {
+    try {
+      const state = await invoke<OpPlaybackStateDebugInfo>('get_app_playback_state');
+      opPlaybackState = state;
+      opPlaybackError = null;
+    } catch (err) {
+      opPlaybackError = `Error: ${err}`;
+      console.error('Failed to fetch op playback state:', err);
+    }
+  }
+
+  onMount(() => {
+    // Start 200ms refresh cycle
+    refreshInterval = setInterval(fetchOpPlaybackState, 200);
+    fetchOpPlaybackState(); // Initial fetch
+  });
+
+  onDestroy(() => {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
+  });
+
+  function clearAllTimelines() {
+    timelinesStore.set({
+      timelines: {},
+      activeTimelineId: null,
+    });
+    console.log('✓ Cleared all timelines from frontend store');
+  }
 </script>
 
 <div class="debug">
@@ -32,6 +94,7 @@
       <input type="checkbox" checked={showFullSvgPath} on:change={() => toggleShowFullSvgPath()} />
       Show full SVG path
     </label>
+    <button on:click={clearAllTimelines} class="clear-btn">Clear All Timelines</button>
   </div>
   <div>
     <b>Drag:</b>
@@ -73,6 +136,40 @@
       none
     {/if}
   </div>
+
+  <!-- OpPlaybackState Debug Info -->
+  <div class="op-playback-section">
+    <b>Op Playback State:</b>
+    {#if opPlaybackError}
+      <span style="color: red;">{opPlaybackError}</span>
+    {:else if opPlaybackState}
+      <div class="op-playback-info">
+        <div>
+          <b>Sessions:</b>
+          {opPlaybackState.totalSessions} |
+          <b>Active:</b>
+          {opPlaybackState.activeTimeline || 'None'} |
+          <b>Playing:</b>
+          {opPlaybackState.isPlaying ? 'Yes' : 'No'} |
+          <b>Paused:</b>
+          {opPlaybackState.isPaused ? 'Yes' : 'No'}
+        </div>
+        {#if opPlaybackState.activeTimeline && opPlaybackState.sessions[opPlaybackState.activeTimeline]}
+          {@const activeSession = opPlaybackState.sessions[opPlaybackState.activeTimeline]}
+          <div class="active-session-info">
+            <b>Active Session:</b>
+            Progress: {(activeSession.progress * 100).toFixed(1)}% | Seek: {activeSession.seekSeconds.toFixed(
+              2
+            )}s | Duration: {activeSession.durationSeconds.toFixed(2)}s | Ops: {activeSession.operationCount}
+            | Loop: {activeSession.loopPlayback ? 'On' : 'Off'}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <span style="color: yellow;">Loading...</span>
+    {/if}
+  </div>
+
   {#if timelineItems && timelineItems.length > 0}
     <div><b>Items ({timelineItems.length}):</b></div>
     {#each timelineItems as item, i}
@@ -156,6 +253,27 @@
     margin: 0;
   }
 
+  .clear-btn {
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: #cc3333;
+    color: #fff;
+    border: 1px solid #ff6666;
+    border-radius: 2px;
+    font-size: 10px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  .clear-btn:hover {
+    background: #ff4444;
+    border-color: #ffaaaa;
+  }
+
+  .clear-btn:active {
+    background: #990000;
+  }
+
   .debug .item {
     padding: 1px 2px;
     border-radius: 2px;
@@ -193,6 +311,24 @@
 
   .svg-path-short {
     color: #88ddff;
+    font-size: 10px;
+  }
+
+  .op-playback-section {
+    margin: 4px 0;
+    padding: 4px 0;
+    border-top: 1px solid #444;
+  }
+
+  .op-playback-info {
+    margin-left: 8px;
+    font-size: 10px;
+  }
+
+  .active-session-info {
+    margin-top: 2px;
+    margin-left: 8px;
+    color: #4ade80;
     font-size: 10px;
   }
 </style>

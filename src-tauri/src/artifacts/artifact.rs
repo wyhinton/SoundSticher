@@ -225,8 +225,7 @@ pub struct StorageHints {
     pub temporary: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum CompressionType {
     #[default]
     None,
@@ -235,9 +234,7 @@ pub enum CompressionType {
     Gzip,
 }
 
-
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum StoragePriority {
     Low,
     #[default]
@@ -245,4 +242,3 @@ pub enum StoragePriority {
     High,
     Critical,
 }
-

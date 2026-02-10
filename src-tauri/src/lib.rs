@@ -19,7 +19,6 @@ use crate::waveform::WaveformService;
 mod artifact_registry_commands;
 mod artifacts;
 mod artifacts_service;
-mod audio_manager;
 mod combine;
 mod cook;
 mod duration_cache;
@@ -40,7 +39,7 @@ mod sample_cache;
 mod sample_playback;
 mod sorting;
 mod state;
-mod timeline_playback;
+mod timeline_playback_commands;
 mod util;
 mod waveform;
 
@@ -200,7 +199,7 @@ fn open_file_in_editor(file_path: String, line_number: Option<u32>) -> Result<()
                 return Command::new(&code_path)
                     .args(&args)
                     .spawn()
-                    .map(|mut child| {
+                    .map(|_child| {
                         // Don't wait for the process to finish, just let it run
                         // let _ = child.kill();
                     })
@@ -342,7 +341,9 @@ pub fn run() {
             app.manage(Arc::new(SampleCacheService::new()));
 
             // Initialize operation-based playback state
-            app.manage(Arc::new(op_playback_commands::OpPlaybackState::new()));
+            app.manage(Arc::new(
+                timeline_playback_commands::AppTimelinePlaybackState::new(),
+            ));
 
             #[cfg(debug_assertions)] // Only include this code on debug builds
             {
@@ -386,7 +387,6 @@ pub fn run() {
             sample_cache::invalidate_sample_cache,
             op_playback_commands::op_playback_build_graph,
             op_playback_commands::op_playback_build_graph_legacy,
-            op_playback_commands::op_playback_clear_graph,
             op_playback_commands::op_playback_get_progress,
             op_playback_commands::op_playback_pause,
             op_playback_commands::op_playback_play,
@@ -395,6 +395,21 @@ pub fn run() {
             op_playback_commands::op_playback_set_loop,
             op_playback_commands::op_playback_set_volume,
             op_playback_commands::op_playback_stop,
+            timeline_playback_commands::get_app_playback_state,
+            // Timeline playback commands (new architecture)
+            timeline_playback_commands::timeline_build_playback,
+            timeline_playback_commands::timeline_play,
+            timeline_playback_commands::timeline_pause,
+            timeline_playback_commands::timeline_toggle,
+            timeline_playback_commands::timeline_resume,
+            timeline_playback_commands::timeline_stop,
+            timeline_playback_commands::timeline_seek,
+            timeline_playback_commands::timeline_set_loop,
+            timeline_playback_commands::timeline_set_volume,
+            timeline_playback_commands::timeline_get_progress,
+            timeline_playback_commands::timeline_clear,
+            timeline_playback_commands::timeline_clear_all,
+            timeline_playback_commands::op_timeline_sync_full,
             // Artifact registry commands
             artifact_registry_commands::get_artifact_registry_records,
             artifact_registry_commands::get_artifact_registry_stats,
@@ -414,12 +429,6 @@ pub fn run() {
             sample_playback::play_sample_preview,
             sorting::update_sorting,
             state::get_app_state,
-            timeline_playback::get_current_play_progress,
-            timeline_playback::pause_timeline_audio,
-            timeline_playback::play_timeline_audio,
-            timeline_playback::set_timeline_play_position,
-            timeline_playback::set_volume,
-            timeline_playback::stop_timeline_audio,
             update_logging_config,
             waveform::clear_waveform_cache,
             waveform::get_waveform_cache_stats,

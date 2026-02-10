@@ -1767,7 +1767,7 @@ fn compute_render_order(
                         *in_degree.entry((*id).clone()).or_insert(0) += 1;
                         dependents
                             .entry(operation_id.clone())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push((*id).clone());
                     }
                 }
@@ -1957,7 +1957,10 @@ async fn render_single_operation_internal(
             ))
         }
         FrontendOperationDef::Sample {
-            id, name, sources, ..
+            id: _,
+            name,
+            sources,
+            ..
         } => {
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -1999,10 +2002,10 @@ async fn render_single_operation_internal(
             ))
         }
         FrontendOperationDef::Pipeline {
-            id,
+            id: _,
             name,
             operations,
-            sources,
+            sources: _,
             ..
         } => {
             if let Ok(logger) = logging_service.lock() {
@@ -2027,12 +2030,12 @@ async fn render_single_operation_internal(
             ))
         }
         FrontendOperationDef::Export {
-            id,
-            name,
-            render_policy,
-            sources,
-            output_path,
-            params,
+            id: _,
+            name: _,
+            render_policy: _,
+            sources: _,
+            output_path: _,
+            params: _,
         } => todo!(),
     }
 }
@@ -2050,7 +2053,7 @@ fn render_single_operation_blocking(
 
     match op {
         FrontendOperationDef::Merge {
-            id,
+            id: _,
             name,
             sources,
             output_path,
@@ -2142,7 +2145,10 @@ fn render_single_operation_blocking(
             ))
         }
         FrontendOperationDef::Sample {
-            id, name, sources, ..
+            id: _,
+            name,
+            sources,
+            ..
         } => {
             if let Ok(logger) = logging_service.lock() {
                 log_info!(
@@ -2184,10 +2190,10 @@ fn render_single_operation_blocking(
             ))
         }
         FrontendOperationDef::Pipeline {
-            id,
+            id: _,
             name,
             operations,
-            sources,
+            sources: _,
             ..
         } => {
             if let Ok(logger) = logging_service.lock() {
@@ -2212,12 +2218,12 @@ fn render_single_operation_blocking(
             ))
         }
         FrontendOperationDef::Export {
-            id,
+            id: _,
             name,
-            render_policy,
-            sources,
+            render_policy: _,
+            sources: _,
             output_path,
-            params,
+            params: _,
         } => {
             if let Ok(logger) = logging_service.lock() {
                 log_info!(

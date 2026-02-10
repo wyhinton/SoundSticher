@@ -1,7 +1,7 @@
 <script lang="ts">
-  import AudioSettings from '$lib/components/AudioSettings.svelte';
-  import { onMount } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
+  import { onMount } from 'svelte';
+  import AudioSettings from '$lib/components/AudioSettings.svelte';
 
   let showNotification = false;
   let notificationMessage = '';

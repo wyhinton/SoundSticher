@@ -1,6 +1,6 @@
 // Cook scheduler for managing operation execution
 
-use crate::artifacts::{Artifact, ArtifactStorage, ArtifactRegistry};
+use crate::artifacts::{Artifact, ArtifactRegistry, ArtifactStorage};
 use crate::cook::{CookTask, TaskStatus};
 use crate::graph::{InvalidationManager, OpId, OperationNodeManager};
 use crate::logging::{LogSystem, LoggingService};

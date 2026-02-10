@@ -71,7 +71,6 @@ export interface AppState {
     svgPathDisplayMode?: 'full' | 'trim' | 'hide';
     callSiteTrackingEnabled?: boolean;
     /** Timeline height as percentage of viewport (10-60) */
-    timelineHeight?: number;
     debugPanelPrismDisplay?: {
       frontend: any;
       backend: any;
@@ -184,7 +183,6 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
       callSiteTrackingEnabled: false,
-      timelineHeight: TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT, // Default timeline height (30% of viewport)
       debugPanelPrismDisplay: {
         frontend: {},
         backend: {},
@@ -248,8 +246,6 @@ function validateAndMigrateAppState(loadedState: any): AppState {
       showFullSvgPath: loadedState.uiSettings?.showFullSvgPath || false,
       svgPathDisplayMode: loadedState.uiSettings?.svgPathDisplayMode || 'trim',
       callSiteTrackingEnabled: loadedState.uiSettings?.callSiteTrackingEnabled || false,
-      timelineHeight:
-        loadedState.uiSettings?.timelineHeight || TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT,
       theme: {
         panelHeaderBackgroundColor:
           loadedState.uiSettings.theme?.panelHeaderBackgroundColor || 'rgb(15 21 27)',
@@ -309,7 +305,6 @@ export const appState = persisted<AppState>(
       showFullSvgPath: false,
       svgPathDisplayMode: 'trim',
       callSiteTrackingEnabled: false,
-      timelineHeight: TIMELINE_RESIZE.DEFAULT_HEIGHT_PERCENT, // Default timeline height (30% of viewport)
       theme: {
         tabPanelBackgroundColor: 'rgb(15 21 27)',
         previewBackgroundColor: 'rgba(255, 165, 0, 0.25)',
@@ -820,88 +815,6 @@ export const currentOperationSources = derived(appState, $appState => {
 
   return operation.sources;
 });
-
-/**
- * Current operation file list - gets all file IDs from SampleOps referenced by the current MergeOp
- * Returns an array of file ID strings extracted from the SampleOps
- */
-export const currentOperationFileList = derived(appState, $appState => {
-  const selectedOperationId =
-    $appState.uiSettings?.selectedOperationId ?? $appState.uiSettings?.selectedOperationId;
-  if (!selectedOperationId) return [];
-
-  const operation = $appState.operations?.defs?.[selectedOperationId];
-  if (!operation || operation.kind !== 'merge') return [];
-
-  const fileIds: string[] = [];
-
-  // For each source in the MergeOp (which should be operation references)
-  for (const source of operation.sources) {
-    if (source.type === 'operation') {
-      // Get the referenced SampleOp by its operationId
-      const sampleOp = $appState.operations?.defs?.[source.operationId];
-      if (sampleOp && sampleOp.kind === 'sample') {
-        // Extract file IDs from the SampleOp's sources (should have one 'file' type source)
-        for (const sampleSource of sampleOp.sources) {
-          if (sampleSource.type === 'file') {
-            fileIds.push(sampleSource.fileId);
-          }
-        }
-      }
-    }
-  }
-
-  return fileIds;
-});
-
-/**
- * Get the sources array from the currently selected MergeOp
- * For MergeOps, all sources are operation references to SampleOps
- */
-export function getCurrentOperationSources(): OperationSource[] {
-  const currentState = get(appState);
-  const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
-  if (!selectedOperationId) return [];
-
-  const operation = currentState.operations?.defs?.[selectedOperationId];
-  if (!operation || operation.kind !== 'merge') return [];
-
-  return operation.sources;
-}
-
-/**
- * Add a source operation (by ID) to the current MergeOp
- */
-export function addOperationSourceToCurrent(operationId: OperationId) {
-  const currentState = get(appState);
-  const selectedOperationId =
-    currentState.uiSettings?.selectedOperationId ?? currentState.uiSettings?.selectedOperationId;
-  if (!selectedOperationId) {
-    console.warn('No operation currently selected');
-    return;
-  }
-
-  appState.update(state => {
-    const operation = state.operations?.defs?.[selectedOperationId];
-    if (!operation || operation.kind !== 'merge') {
-      console.warn('Current operation is not a MergeOp');
-      return state;
-    }
-
-    // Add the new operation source using operationId
-    const newSource: OperationSource = { type: 'operation', operationId };
-    operation.sources.push(newSource);
-
-    // Update the operations version
-    if (state.operations) {
-      state.operations._version = (state.operations._version ?? 0) + 1;
-    }
-    state._rev = (state._rev ?? 0) + 1;
-
-    return state;
-  });
-}
 
 /**
  * Remove a source from the current MergeOp by index

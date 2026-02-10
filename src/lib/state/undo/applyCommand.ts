@@ -1,8 +1,14 @@
 import { get } from 'svelte/store';
-import { appState, type AppState } from '../state.svelte';
+
 import { loggingState } from '../logging';
-import type { OperationId, OperationDef, OperationSource, RenderPolicy } from '../operation';
-import { generateOperationId } from '../operation';
+import { OperationId, OperationSource, OperationDef, generateOperationId } from '../operation';
+import { AppState } from '../state.svelte';
+import {
+  timelinesStore,
+  timelineViewStates,
+  createTimelineStateForOp,
+  getTimelineViewState,
+} from '../timeline/timelines';
 import type {
   Command,
   DeleteOperationCommand,
@@ -15,6 +21,7 @@ import type {
   ReorderOperationSourcesCommand,
   RemoveOperationSourcesFromCurrentOpCommand,
   SetRenderPolicyCommand,
+  ToggleTimelineVisibilityCommand,
   CommandBatch,
 } from './undo';
 
@@ -63,6 +70,9 @@ export function applyCommand(state: AppState, cmd: Command): Command {
 
     case 'set-render-policy':
       return applySetRenderPolicy(state, cmd);
+
+    case 'toggle-timeline-visibility':
+      return applyToggleTimelineVisibility(state, cmd);
 
     case 'batch':
       return applyCommandBatch(state, cmd);
@@ -543,6 +553,115 @@ function applySetRenderPolicy(
     ...cmd,
     previousPolicy,
   };
+}
+
+function applyToggleTimelineVisibility(
+  state: AppState,
+  cmd: ToggleTimelineVisibilityCommand
+): ToggleTimelineVisibilityCommand {
+  const isLogging = get(loggingState).operationsLog;
+  if (isLogging) {
+    console.log(`🔄 Timeline: Applying toggle visibility for operation ${cmd.operationId}`);
+  }
+
+  // timelinesStore.reset()
+  // const currentTimelines = get(timelinesStore);
+  // // Check if there's already a timeline for this operation
+  // const existingTimelineId = Object.keys(currentTimelines.timelines).find(timelineId => {
+  //   const timeline = currentTimelines.timelines[timelineId];
+  //   return (
+  //     timeline &&
+  //     timeline.source.kind === 'operation' &&
+  //     timeline.source.operationId === cmd.operationId
+  //   );
+  // });
+  // if (existingTimelineId) {
+  //   // Timeline exists - capture state for undo and remove it (toggle off)
+  //   const existingTimeline = currentTimelines.timelines[existingTimelineId];
+  //   if (!existingTimeline) {
+  //     throw new Error(`Timeline ${existingTimelineId} not found in store`);
+  //   }
+  //   const currentViewState = getTimelineViewState(existingTimelineId);
+  //   if (isLogging) {
+  //     console.log(
+  //       `🔄 Timeline: Hiding timeline ${existingTimelineId} for operation ${cmd.operationId}`
+  //     );
+  //   }
+  //   // Remove timeline
+  //   timelinesStore.update(timelineState => {
+  //     const newTimelines = { ...timelineState.timelines };
+  //     delete newTimelines[existingTimelineId];
+  //     return {
+  //       ...timelineState,
+  //       timelines: newTimelines,
+  //       activeTimelineId:
+  //         timelineState.activeTimelineId === existingTimelineId
+  //           ? null
+  //           : timelineState.activeTimelineId,
+  //     };
+  //   });
+  //   // Clean up view state
+  //   timelineViewStates.update(states => {
+  //     const newStates = { ...states };
+  //     delete newStates[existingTimelineId];
+  //     return newStates;
+  //   });
+  //   // Return command with captured data for undo
+  //   return {
+  //     ...cmd,
+  //     wasVisible: true,
+  //     timelineId: existingTimelineId,
+  //     timelineData: {
+  //       source: existingTimeline.source,
+  //       serializedItems: get(existingTimeline.items), // Capture current items
+  //     },
+  //     viewState: currentViewState,
+  //   };
+  // } else {
+  //   // No timeline exists - create one (toggle on)
+  //   if (isLogging) {
+  //     console.log(`🔄 Timeline: Showing timeline for operation ${cmd.operationId}`);
+  //   }
+  //   const newTimeline = createTimelineStateForOp(cmd.operationId);
+  //   // If we're restoring from undo data, use that
+  //   if (cmd.timelineId && cmd.timelineData && cmd.viewState) {
+  //     if (isLogging) {
+  //       console.log(`🔄 Timeline: Restoring timeline ${cmd.timelineId} from undo data`);
+  //     }
+  //     // Restore timeline with original ID and data
+  //     timelinesStore.update(timelineState => ({
+  //       ...timelineState,
+  //       timelines: {
+  //         ...timelineState.timelines,
+  //         [cmd.timelineId!]: {
+  //           id: cmd.timelineId!,
+  //           source: cmd.timelineData!.source,
+  //           items: newTimeline.items, // Use new reactive items (can't easily restore)
+  //           waveformState: newTimeline.waveformState,
+  //         },
+  //       },
+  //     }));
+  //     // Restore view state
+  //     timelineViewStates.update(states => ({
+  //       ...states,
+  //       [cmd.timelineId!]: cmd.viewState!,
+  //     }));
+  //   } else {
+  //     // Create new timeline normally
+  //     timelinesStore.update(timelineState => ({
+  //       ...timelineState,
+  //       timelines: {
+  //         ...timelineState.timelines,
+  //         [newTimeline.id]: newTimeline,
+  //       },
+  //     }));
+  //   }
+  //   return {
+  //     ...cmd,
+  //     wasVisible: false,
+  //     timelineId: cmd.timelineId || newTimeline.id,
+  //   };
+  // }
 }
 
 function applyCommandBatch(state: AppState, cmd: CommandBatch): CommandBatch {

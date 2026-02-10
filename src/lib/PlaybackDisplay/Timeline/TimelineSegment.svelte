@@ -1,15 +1,18 @@
 <script lang="ts">
   import * as d3 from 'd3';
-  import { hoveredSourceItem, appState, type TimelineItemKind } from '../../state/state.svelte';
-  import { tweened } from 'svelte/motion';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { cubicOut } from 'svelte/easing';
+  import { tweened } from 'svelte/motion';
+  import { appState, hoveredSourceItem, type TimelineItemKind } from '../../state/state.svelte';
+
   export let index: number;
   export let startOffset: number;
   export let size: number;
   export let scaleX: number;
   export let originalPathWidth: number;
   export let zoomTransform: d3.ZoomTransform; // pass currentTransform from parent
-  import { createEventDispatcher, onMount } from 'svelte';
+
+  // pass currentTransform from parent
   export let DEBUG_MODE: boolean;
   export let id: string | undefined;
   export let isSelected: boolean = false;

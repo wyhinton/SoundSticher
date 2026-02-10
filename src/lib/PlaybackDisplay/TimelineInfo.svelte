@@ -1,6 +1,7 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
   import { appState, currentOperationSources, getAllFiles } from '../state/state.svelte';
+  import type { Timeline } from '../state/timeline/timelines';
   import { formatMilliseconds } from '../utils/format';
   import TimeDisplay from './TimeDisplay.svelte';
   import {
@@ -9,17 +10,22 @@
     type EstimatedFileSize,
   } from '$lib/state/export';
 
+  // Timeline prop to show timeline-specific information
+  export let timeline: Timeline;
+
   let bufferingProgress = 0;
 
-  listen<number>('buffering-progress', e => {
-    bufferingProgress = e.payload;
-  });
+  // Timeline-specific information
+  $: timelineId = timeline.id;
+  $: timelineSource = timeline.source;
+  $: waveformStateStore = timeline.waveformState;
+  $: waveformState = waveformStateStore ? $waveformStateStore : null;
+  $: timelineDuration = waveformState?.totalDuration ?? 0;
+  $: timelineFilesCount = waveformState?.filePaths?.length ?? 0;
+  $: timelineLoadedWaveforms = waveformState?.waveforms?.size ?? 0;
 
-  $: activeSampleCount = $currentOperationSources.length;
-
-  // Calculate estimated file size reactively
-  $: durationSeconds = $appState.combinedFileLength ? $appState.combinedFileLength : 0;
-  $: estimatedFileSize = calculateEstimatedFileSize($exportState.settings, durationSeconds);
+  // Calculate estimated file size for this timeline specifically
+  $: estimatedFileSize = calculateEstimatedFileSize($exportState.settings, timelineDuration);
 </script>
 
 {#snippet infoItem(label: string, value: string, skeleton: boolean = false)}
@@ -34,14 +40,16 @@
 <!-- Info Panel -->
 <div class="info-panel d-flex justify-content-between align-items-center px-2 py-1">
   <div class="d-flex gap-3 align-items-center">
+    {@render infoItem('Timeline ID', timelineId)}
+    {#if timelineSource.kind === 'operation'}
+      {@render infoItem('Operation ID', timelineSource.operationId)}
+    {/if}
     {@render infoItem(
-      'Length',
-      $appState.combinedFileLength ? formatMilliseconds($appState.combinedFileLength) : '0:00.000',
-      $appState.isCombiningFile
+      'Duration',
+      timelineDuration ? formatMilliseconds(timelineDuration * 1000) : '0:00.000'
     )}
-    {@render infoItem('Buffer', `${bufferingProgress.toFixed(1)}%`)}
-    {@render infoItem('Active Samples', `${activeSampleCount}`)}
-    {@render infoItem('Est. File Size', estimatedFileSize.formatted)}
+    {@render infoItem('Files', `${timelineLoadedWaveforms}/${timelineFilesCount}`)}
+    {@render infoItem('Est. Size', estimatedFileSize.formatted)}
   </div>
 </div>
 

@@ -1,12 +1,7 @@
 <script lang="ts">
-  import {
-    loggingState,
-    updateBackendLoggingConfig,
-    backendLogs,
-    type BackendLogMessage,
-  } from '$lib/state/logging';
-  import PrismWrapper from './PrismWrapper.svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import PrismWrapper from '../../Shared/PrismWrapper.svelte';
+  import { backendLogs, loggingState, updateBackendLoggingConfig } from '$lib/state/logging';
 
   // ...existing code...
 

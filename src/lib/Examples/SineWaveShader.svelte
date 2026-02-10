@@ -1,7 +1,7 @@
 <script>
-    import { WebGlShader } from "svader";
+  import { WebGlShader } from 'svader';
 
-const shaderCode = `#version 300 es
+  const shaderCode = `#version 300 es
 precision highp float;
 
 out vec4 fragColor;
@@ -57,26 +57,25 @@ void main() {
 </script>
 
 <div class="shader-wrapper">
-    <WebGlShader
-        width="400px"
-        height="100px"
-    
-        code={shaderCode}
-        parameters={[
-            { name: "u_resolution", value: "resolution" },
-            { name: "u_offset", value: "offset" },
-            { name: "time", value: "time"},
-        ]}
-    >
-        <div class="fallback">WebGL not supported in this environment.</div>
-    </WebGlShader>
+  <WebGlShader
+    width="400px"
+    height="100px"
+    code={shaderCode}
+    parameters={[
+      { name: 'u_resolution', value: 'resolution' },
+      { name: 'u_offset', value: 'offset' },
+      { name: 'time', value: 'time' },
+    ]}
+  >
+    <div class="fallback">WebGL not supported in this environment.</div>
+  </WebGlShader>
 </div>
 
 <style>
-    .shader-wrapper{
-          position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-    }
+  .shader-wrapper {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
 </style>

@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { open } from '@tauri-apps/plugin-dialog';
-
   export let selectedRowCount: number = 0;
   export let onSelectAll: (() => void) | undefined = undefined;
   export let onClearSelection: (() => void) | undefined = undefined;

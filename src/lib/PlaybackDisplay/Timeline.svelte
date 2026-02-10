@@ -1,55 +1,59 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import * as d3 from 'd3';
-  import { createEventDispatcher } from 'svelte';
-  import { appState } from '../state/state.svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { opPlaybackService } from '../state/opPlaybackService';
   import {
-    getItemSize,
-    isItemActive,
+    previewActive,
+    previewIds,
+    selectedIds,
+    selectionService,
+  } from '../state/selection.svelte';
+  import { appState, timelineDebugMode, type AudioFileTimelineItem } from '../state/state.svelte';
+  import {
+    buildHierarchyMaps,
+    getIndicesToMoveOnDrag,
+    type FlattenedTimelineItem,
+  } from '../state/timeline/timelineGraph';
+  import {
     canItemBeDragged,
     getItemColor,
+    getItemSize,
     getItemSvgPath,
+    isItemActive,
   } from '../utils/timelineHelpers';
-  import TimelineSegment from './Timeline/TimelineSegment.svelte';
+  import { D3TimelineManager } from './Timeline/D3TimelineManager';
+  import {
+    DEFAULT_DD,
+    DragDropManager,
+    type DragDropState,
+    type DragEndEvent,
+    type DragMoveEvent,
+    type DragStartEvent,
+  } from './Timeline/DragDropManager';
+  import DropIndicator from './Timeline/DropIndicator.svelte';
   import LabelLayer from './Timeline/LabelLayer.svelte';
   import Playhead from './Timeline/Playhead.svelte';
-  import DropIndicator from './Timeline/DropIndicator.svelte';
-  import {
-    selectionService,
-    selectedIds,
-    previewIds,
-    previewActive,
-  } from '../state/selection.svelte';
-  import { D3TimelineManager, type TimelineItem } from './Timeline/D3TimelineManager';
-  import { timelineDebugMode } from '../state/state.svelte';
   import TimelineDebugPanel from './Timeline/TimelineDebugPanel.svelte';
-  import {
-    operationTimelineItems,
-    operationDuration,
-    operationWaveformsLoading,
-    operationTimelineHierarchy,
-    initWaveformService,
-  } from '../state/waveformCache';
-  import { getIndicesToMoveOnDrag } from '../state/timelineGraph';
-  // Import operation playback service
-  import { opPlaybackService, opPlaybackProgress } from '../state/opPlaybackService';
-
-  import {
-    DragDropManager,
-    type DragStartEvent,
-    type DragMoveEvent,
-    type DragEndEvent,
-    type DragDropState,
-    DEFAULT_DD,
-  } from './Timeline/DragDropManager';
+  import TimelineSegment from './Timeline/TimelineSegment.svelte';
   import { dropzone } from '$lib/attachments/droppable';
+  import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
+  import { type OperationId } from '$lib/state/operation';
+  import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
   import {
-    removeOperationSourcesFromCurrentOpCommand,
-    type OperationId,
-  } from '$lib/state/undo/undo';
-  import { TIMELINE_LAYOUT, TIMELINE_DERIVED } from '$lib/config/timelineConfig';
+    setActiveTimeline,
+    timelinesStore,
+    type Timeline,
+    type TimelineId,
+  } from '$lib/state/timeline/timelines';
+  // Import operation playback service
+
+  import timelinePlaybackService from '$lib/state/timelinePlaybackService';
+  import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
 
   const dispatch = createEventDispatcher();
+
+  export let timeline: Timeline | null = null;
+  export let timelineId: TimelineId | null = null; // Keep for backward compatibility
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -130,20 +134,50 @@
   // TIMELINE ITEMS - Operation-based system
   // ============================================================================
 
-  // Reactive timeline items from operation system
-  $: timelineItems = $operationTimelineItems;
+  // Use the provided timeline object or resolve from timelineId (for backward compatibility)
+  $: activeTimeline = timeline || (timelineId ? $timelinesStore.timelines[timelineId] : null);
+  $: timelineSource = activeTimeline?.source ?? null;
 
-  // Reactive duration from operation system
-  $: currentDuration = $operationDuration;
+  // Reactive timeline items from the timeline object's items property
+  $: timelineItemsStore = activeTimeline?.items;
+  $: timelineItems = timelineItemsStore ? $timelineItemsStore : [];
 
-  // Loading state for operation waveforms
-  $: isLoadingWaveforms = $operationWaveformsLoading;
+  // Use timeline's own waveform state instead of global stores
+  $: waveformStateStore = activeTimeline?.waveformState;
+  $: waveformState = waveformStateStore ? $waveformStateStore : null;
+  $: currentDuration = waveformState?.totalDuration || 30; // Default duration fallback
+  $: isLoadingWaveforms = waveformState?.loading || waveformState?.loadingWaveforms || false;
 
-  // Hierarchy information for drag operations
-  $: timelineHierarchy = $operationTimelineHierarchy;
+  // Timeline-scoped hierarchy derived from timeline's own items
+  $: timelineHierarchy = (() => {
+    if (!timelineItems || timelineItems.length === 0) return null;
+
+    // Convert TimelineItems to FlattenedTimelineItems for hierarchy building
+    const flattenedItems: FlattenedTimelineItem[] = timelineItems.map(item => {
+      const audioItem = item as AudioFileTimelineItem;
+      return {
+        kind: (audioItem.kind || 'sample') as 'sample' | 'merge',
+        id: audioItem.id,
+        fileName: audioItem.fileName,
+        svgPath: audioItem.svgPath,
+        startOffset: audioItem.startOffset,
+        size: audioItem.size,
+        active: audioItem.active,
+        duration: audioItem.duration,
+        children: audioItem.children || [],
+        parentId: audioItem.parentId,
+        depth: audioItem.depth ?? 0,
+        isGroup: audioItem.isGroup ?? false,
+        operationName: audioItem.operationName || '',
+        rootGroupId: undefined,
+      };
+    });
+
+    return buildHierarchyMaps(flattenedItems);
+  })();
 
   // Check if we have no active samples
-  $: hasNoActiveSamples = timelineItems.length === 0 && !isLoadingWaveforms;
+  $: hasNoActiveSamples = (timelineItems?.length || 0) === 0 && !isLoadingWaveforms;
 
   // Selection state - derived from the selection service
   $: selectedSegments = $selectedIds;
@@ -202,8 +236,7 @@
     console.log('🔧 Timeline: Initializing managers with:', {
       currentDuration,
       width,
-      operationTimelineItems: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
+      timelineItems: timelineItems?.length || 0,
       isLoadingWaveforms,
     });
 
@@ -257,18 +290,33 @@
     }
   }
 
+  // Create timeline-specific playhead store derived from active timeline ID
+  $: timelinePlayheadStore = activeTimeline?.id ? timelinePlayhead(activeTimeline.id) : null;
+  $: timelinePlayheadTime = timelinePlayheadStore ? $timelinePlayheadStore : 0;
+
   // Update playhead position when it changes
   $: if (d3Manager) {
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
   }
 
-  // Listen to operation playback progress
-  $: if ($opPlaybackProgress !== undefined) {
-    playHeadPosition = $opPlaybackProgress * currentDuration;
+  // Update playHeadPosition from timeline-specific playhead store (guaranteed to be a number)
+  $: {
+    const newPlayHeadPos = timelinePlayheadTime ?? 0;
+    if (newPlayHeadPos !== playHeadPosition) {
+      console.log(
+        `🎵 Timeline playhead update: ${playHeadPosition.toFixed(2)}s -> ${newPlayHeadPos.toFixed(2)}s`
+      );
+      playHeadPosition = newPlayHeadPos;
+    }
   }
 
   function handleClick(event: MouseEvent) {
     if (!d3Manager) return;
+
+    // Set this timeline as the active timeline when clicked
+    if (activeTimeline?.id) {
+      setActiveTimeline(activeTimeline.id);
+    }
 
     const rect = container.getBoundingClientRect();
     const relativeX = event.clientX - rect.left;
@@ -278,27 +326,37 @@
     const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
+      if (timelineSource?.kind !== 'operation' || !activeTimeline?.id) {
+        return;
+      }
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
-
+      console.log(clickedTime);
       // Use operation playback service for seeking
-      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      timelinePlaybackService
+        .seekTimeline(activeTimeline.id, clickedTime)
+        .catch((err: unknown) => console.error('Failed to seek:', err));
       return;
     }
 
     // Check for segment clicks only if not in x-axis area
     const clickedSegmentIndex =
-      timelineItems.length > 0
-        ? d3Manager.findClickedSegment(relativeX, timelineItems as TimelineItem[])
+      (timelineItems?.length || 0) > 0 && timelineItems
+        ? d3Manager.findClickedSegment(relativeX, timelineItems as any)
         : null;
 
     if (clickedSegmentIndex === null) {
+      if (timelineSource?.kind !== 'operation' || !activeTimeline?.id) {
+        return;
+      }
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
       // Use operation playback service for seeking
-      opPlaybackService.seek(clickedTime).catch(err => console.error('Failed to seek:', err));
+      opPlaybackService
+        .seekTimeline(activeTimeline.id, clickedTime)
+        .catch((err: unknown) => console.error('Failed to seek:', err));
     }
   }
 
@@ -330,18 +388,21 @@
     }
 
     if (event.key === 'Delete' && selectedSegments.size > 0) {
+      if (timelineSource?.kind !== 'operation') {
+        return;
+      }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();
 
       // Collect unique operation IDs from selected timeline items
       const operationIdsToRemove = new Set<OperationId>();
-      if (timelineItems.length > 0) {
+      if ((timelineItems?.length || 0) > 0) {
         Array.from(selectedSegments).forEach(index => {
-          if (index < timelineItems.length) {
+          if (timelineItems && index < timelineItems.length) {
             const item = timelineItems[index];
-            if (item && item.operationId) {
-              operationIdsToRemove.add(item.operationId);
+            if (item && (item as any).operationId) {
+              operationIdsToRemove.add((item as any).operationId);
             }
           }
         });
@@ -373,15 +434,13 @@
   onMount(() => {
     // DEBUG: Log component mount state
     console.log('🔧 Timeline: Component mounted with:', {
-      operationTimelineItems: $operationTimelineItems?.length || 0,
-      operationDuration: $operationDuration,
-      operationWaveformsLoading: $operationWaveformsLoading,
+      timelineItems: timelineItems?.length || 0,
+      isLoadingWaveforms,
     });
 
     // Initialize waveform service
     console.log('🔧 Timeline: Initializing waveform service...');
     try {
-      initWaveformService();
       console.log('🔧 Timeline: Waveform service initialized');
     } catch (error) {
       console.error('🔧 Timeline: Failed to initialize waveform service:', error);
@@ -453,7 +512,7 @@
   });
 
   function handleDragStart(event: CustomEvent<DragStartEvent>) {
-    if (!dragDropManager) return;
+    if (!dragDropManager || !timelineItems) return;
 
     const draggedIndex = event.detail.index;
     const draggedItem = timelineItems[draggedIndex] as any; // Cast to access hierarchy props
@@ -490,7 +549,7 @@
   }
 </script>
 
-<div class="svg-container position-relative h-fill-available">
+<div class="svg-container position-relative">
   <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     {currentTransform.k.toFixed(2)}x
   </div>
@@ -538,7 +597,7 @@
   >
     <svg class="waveform-svg-parent" bind:this={svgEl} viewBox={`0 0 ${width} ${height}`}>
       <!-- Fixed header region (top padding) -->
-      <g class="fixed-header" transform={`translate(0, 0)`}>
+      <g class="fixed-header" transform="translate(0, 0)">
         <!-- Reserved space for future header content -->
       </g>
 
@@ -547,7 +606,7 @@
         class="scalable-content"
         transform={`translate(0, ${topPadding}) scale(1, ${contentScaleY})`}
       >
-        <g bind:this={pathGroup} transform={``}>
+        <g bind:this={pathGroup} transform="">
           <!-- Zero level baseline (in design space coordinates) -->
           <line
             x1="0"
@@ -573,7 +632,7 @@
 
           <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
-            {#if timelineItems.length > 0}
+            {#if (timelineItems?.length || 0) > 0}
               {#each timelineItems as timelineItem, i}
                 {@const audioItem = timelineItem as any}
                 <TimelineSegment
@@ -611,7 +670,7 @@
       </g>
 
       <!-- Fixed label layer (positioned outside scalable content) -->
-      {#if timelineItems.length > 0}
+      {#if (timelineItems?.length || 0) > 0 && timelineItems}
         <LabelLayer
           {scaleX}
           items={timelineItems}
@@ -666,6 +725,8 @@
   .svg-container {
     background-color: var(--bs-primary-bg-subtle);
     overflow: hidden;
+    flex: 1; /* Take up remaining space in flex container */
+    min-height: 0; /* Allow flexbox to shrink below content size */
   }
   svg {
     width: 100%;
@@ -676,6 +737,10 @@
   :global(g.axis text) {
     font-family: monospace;
     font-size: 10px; /* optional: adjust as needed */
+  }
+
+  :global(.splitpanes__pane) {
+    transition: none !important;
   }
 
   /* No Active Samples Message */

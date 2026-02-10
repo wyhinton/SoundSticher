@@ -60,12 +60,12 @@
  * - `skipped`: Operation was skipped (e.g., due to renderPolicy: 'manual')
  */
 
-import { get, derived, writable } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
-import { appState, type AppState } from './state.svelte';
+import { get, derived, writable } from 'svelte/store';
+import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
 import { loggingState } from './logging';
 import { invokeWithPerf } from './performance';
-import { createTypedEventChannelWithLoggingAndStatusMessages } from '../utils/channelMaker';
+import { appState, type AppState } from './state.svelte';
 
 // ============================================================================
 // TYPES

@@ -1,12 +1,12 @@
 <script lang="ts">
+  import lottie from 'lottie-web';
   import { tick } from 'svelte';
   import {
+    addSourceToCurrentOperation,
     appState,
     currentOperationSources,
-    addSourceToCurrentOperation,
   } from '../state/state.svelte';
   import SourceRow from './SourceRow.svelte';
-  import lottie from 'lottie-web';
 
   // Props
   export let container: HTMLElement;

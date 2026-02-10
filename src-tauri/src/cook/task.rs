@@ -50,8 +50,7 @@ pub struct CookTask {
 }
 
 /// Task priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum CookTaskPriority {
     Low = 0,
     #[default]
@@ -60,7 +59,6 @@ pub enum CookTaskPriority {
     Critical = 3,
     Immediate = 4,
 }
-
 
 impl CookTaskPriority {
     /// Get numeric value for priority comparison
