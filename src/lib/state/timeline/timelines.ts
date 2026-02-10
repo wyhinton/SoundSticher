@@ -7,7 +7,7 @@ import type { OperationDef, OperationId } from '../operation';
 import { buildBackendGraphForTimeline, getOperationById } from '../operation';
 import type { OpTimelineProgressEvent } from '../opPlaybackService';
 import { invokeWithPerf } from '../performance';
-import { appState, AudioFileTimelineItem, TimelineItem } from '../state.svelte';
+import { appState, AudioFileTimelineItem, TimelineItem, type AppState } from '../state.svelte';
 import timelinePlaybackService from '../timelinePlaybackService';
 import { dispatch, type ToggleTimelineVisibilityCommand } from '../undo/undo';
 import { waveformCache, type Waveform } from '../waveformCache';
@@ -229,7 +229,7 @@ function deserializeTimeline(serialized: SerializableTimeline): Timeline {
   const waveformState = createTimelineWaveformStore(id);
 
   let items: Readable<TimelineItem[]>;
-
+  console.log(source);
   if (source.kind === 'operation') {
     // For operation-based timelines, recreate the reactive items store
     const operationIdReadable = writable(source.operationId);
@@ -239,6 +239,7 @@ function deserializeTimeline(serialized: SerializableTimeline): Timeline {
     setTimeout(async () => {
       try {
         const currentAppState = get(appState);
+        console.log(currentAppState);
         const operation = currentAppState.operations?.defs?.[source.operationId];
         if (operation) {
           const hierarchicalItems = getHierarchicalTimelineItems(operation, source.operationId);
@@ -254,12 +255,15 @@ function deserializeTimeline(serialized: SerializableTimeline): Timeline {
       } catch (error) {
         logger.timeline?.error(`Failed to restore waveform data for timeline ${id}:`, error);
       }
-    }, 0);
+    }, 50);
   } else {
     // For other timeline types, create a static store with the serialized items
     items = writable(serialized.items);
   }
 
+  console.log(id);
+  console.log(items);
+  console.log(source);
   return {
     id,
     source,
@@ -349,25 +353,22 @@ const timelineKeys = derived(timelinesStore, $store => Object.keys($store.timeli
  * This keeps the backend's playback sessions in sync with frontend timelines
  */
 export function initializeTimelineSync(): void {
-  timelineKeys.subscribe(async keys => {
-    console.log(`%cHERE LINE :352 %c`, 'color: yellow; font-weight: bold', '');
-
-    logger.timeline?.info(`Timeline keys changed: [${keys.join(', ')}] - syncing with backend`);
-
-    try {
-      const result = await invokeWithPerf('op_timeline_sync_full', {
-        timelineIds: keys,
-      });
-
-      if (!result.ok) {
-        logger.timeline?.error('Failed to sync timelines with backend:', result.error);
-      } else {
-        logger.timeline?.info(`Successfully synced ${keys.length} timelines with backend`);
-      }
-    } catch (error) {
-      logger.timeline?.error('Error during timeline sync:', error);
-    }
-  });
+  // timelineKeys.subscribe(async keys => {
+  //   console.log(`%cHERE LINE :352 %c`, 'color: yellow; font-weight: bold', '');
+  //   logger.timeline?.info(`Timeline keys changed: [${keys.join(', ')}] - syncing with backend`);
+  //   try {
+  //     const result = await invokeWithPerf('op_timeline_sync_full', {
+  //       timelineIds: keys,
+  //     });
+  //     if (!result.ok) {
+  //       logger.timeline?.error('Failed to sync timelines with backend:', result.error);
+  //     } else {
+  //       logger.timeline?.info(`Successfully synced ${keys.length} timelines with backend`);
+  //     }
+  //   } catch (error) {
+  //     logger.timeline?.error('Error during timeline sync:', error);
+  //   }
+  // });
 }
 
 // Initialize timeline sync when module loads
