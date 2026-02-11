@@ -209,7 +209,7 @@ export class WaveformCache {
             filePaths: toFetch,
             width: spec.width,
             height: spec.height,
-            normalize: spec.normalize,
+            normalize: spec.normalize, //TODO: FIX ISSUES WITH NORMALIZATION CAUSING WAVEFORMS TO BE OFF CENTER
           },
         });
         if (!batchResult.ok) {
@@ -763,7 +763,6 @@ function getOperationFilePaths(operation: OperationDef | undefined): string[] {
 
   return fileIds;
 }
-
 
 /**
  * Derived store for the total duration of the selected operation's audio

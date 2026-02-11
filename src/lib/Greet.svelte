@@ -150,6 +150,7 @@
                     <PlottedInfo timelineViewer={viewer} />
                     <Timeline
                       timelineViewer={viewer}
+                      isActive={currentActiveTimelineId === viewer.id}
                       on:selectionChange={handleTimelineSelectionChange}
                     />
                   </div>
@@ -196,13 +197,11 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    opacity: 0.5;
   }
 
   .timeline-pane-content.active {
     border-color: var(--bs-primary, #0d6efd);
     background-color: rgba(13, 110, 253, 0.05);
-    opacity: 1;
   }
 
   .no-timelines {

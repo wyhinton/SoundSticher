@@ -38,21 +38,20 @@
   import { dropzone } from '$lib/attachments/droppable';
   import { TIMELINE_DERIVED, TIMELINE_LAYOUT } from '$lib/config/timelineConfig';
   import { type OperationId } from '$lib/state/operation';
-  import { timelinePlayhead } from '$lib/state/timeline/timelinePlaybackState';
   import {
     activeTimelineId,
     setActiveTimeline,
     type TimelineId,
   } from '$lib/state/timeline/timelines';
   // Import operation playback service
-  import { TimelineViewer } from '$lib/state/timeline/TimelineViewer';
+  import type { TimelineViewer } from '$lib/state/timeline/TimelineViewer';
   import timelinePlaybackService from '$lib/state/timelinePlaybackService';
   import { removeOperationSourcesFromCurrentOpCommand } from '$lib/state/undo/undo';
 
   const dispatch = createEventDispatcher();
 
-  export let timelineViewer: TimelineViewer | null = null;
-  export let timelineId: TimelineId | null = null; // Keep for backward compatibility
+  export let timelineViewer: TimelineViewer;
+  export let isActive: boolean = true;
 
   let container: HTMLDivElement;
   let svgEl: SVGSVGElement;
@@ -71,7 +70,7 @@
   // Computed scalable region dimensions
   $: contentHeight = height - topPadding - axisHeight;
   $: contentScaleY = contentHeight / baseContentHeight;
-  $: tempYCenter = TIMELINE_DERIVED.CENTER_Y; // Center line in design space
+  let tempYCenter = TIMELINE_DERIVED.CENTER_Y; // Center line in design space
   $: currentActiveTimelineId = $activeTimelineId;
   // D3 Manager instance
   let d3Manager: D3TimelineManager | null = null;
@@ -134,18 +133,15 @@
   // ============================================================================
 
   // Use TimelineViewer as the primary interface
-  $: effectiveTimelineId = timelineViewer?.id ?? timelineId ?? null;
-
-  // Determine if this is an operation-based timeline
-  $: isOperationTimeline = timelineViewer != null;
+  $: effectiveTimelineId = timelineViewer.id;
 
   // Reactive timeline items from TimelineViewer
-  $: timelineItemsStore = timelineViewer?.items ?? null;
-  $: timelineItems = timelineItemsStore ? $timelineItemsStore : [];
+  $: timelineItemsStore = timelineViewer.items;
+  $: timelineItems = $timelineItemsStore;
 
   // Use timeline's own waveform state from TimelineViewer
-  $: waveformStateStore = timelineViewer?.waveformState ?? null;
-  $: waveformState = waveformStateStore ? $waveformStateStore : null;
+  $: waveformStateStore = timelineViewer.waveformState;
+  $: waveformState = $waveformStateStore;
   $: currentDuration = waveformState?.totalDuration || 30; // Default duration fallback
   $: isLoadingWaveforms = waveformState?.loading || waveformState?.loadingWaveforms || false;
 
@@ -291,24 +287,13 @@
     }
   }
 
-  // Create timeline-specific playhead store derived from effective timeline ID
-  $: timelinePlayheadStore = effectiveTimelineId ? timelinePlayhead(effectiveTimelineId) : null;
-  $: timelinePlayheadTime = timelinePlayheadStore ? $timelinePlayheadStore : 0;
+  // Subscribe to playhead position from TimelineViewer
+  $: playheadPositionStore = timelineViewer.playheadPositionSec;
+  $: playHeadPosition = $playheadPositionStore;
 
   // Update playhead position when it changes
   $: if (d3Manager) {
     playHeadX = d3Manager.getPlayheadX(playHeadPosition);
-  }
-
-  // Update playHeadPosition from timeline-specific playhead store (guaranteed to be a number)
-  $: {
-    const newPlayHeadPos = timelinePlayheadTime ?? 0;
-    if (newPlayHeadPos !== playHeadPosition) {
-      console.log(
-        `🎵 Timeline playhead update: ${playHeadPosition.toFixed(2)}s -> ${newPlayHeadPos.toFixed(2)}s`
-      );
-      playHeadPosition = newPlayHeadPos;
-    }
   }
 
   function handleClick(event: MouseEvent) {
@@ -327,9 +312,6 @@
     const isXAxisClick = relativeY >= height - axisHeight;
 
     if (isXAxisClick) {
-      if (timelineSource?.kind !== 'operation' || !effectiveTimelineId) {
-        return;
-      }
       // Click is in the x-axis area - set playhead position and clear selection
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
@@ -341,16 +323,12 @@
       return;
     }
 
-    // Check for segment clicks only if not in x-axis area
     const clickedSegmentIndex =
       (timelineItems?.length || 0) > 0 && timelineItems
-        ? d3Manager.findClickedSegment(relativeX, timelineItems as any)
+        ? d3Manager.findClickedSegment(relativeX, timelineItems)
         : null;
 
     if (clickedSegmentIndex === null) {
-      if (timelineSource?.kind !== 'operation' || !effectiveTimelineId) {
-        return;
-      }
       handleClearSelection();
       const clickedTime = d3Manager.clickToTime(relativeX);
 
@@ -375,7 +353,9 @@
     // Toggle timeline debug mode in dev mode with Ctrl+Shift+Space
     if (
       typeof import.meta !== 'undefined' &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       typeof (import.meta as any).env !== 'undefined' &&
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (import.meta as any).env.DEV &&
       event.ctrlKey &&
       event.shiftKey &&
@@ -389,9 +369,6 @@
     }
 
     if (event.key === 'Delete' && selectedSegments.size > 0) {
-      if (timelineSource?.kind !== 'operation') {
-        return;
-      }
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       event.preventDefault();
@@ -401,9 +378,9 @@
       if ((timelineItems?.length || 0) > 0) {
         Array.from(selectedSegments).forEach(index => {
           if (timelineItems && index < timelineItems.length) {
-            const item = timelineItems[index];
-            if (item && (item as any).operationId) {
-              operationIdsToRemove.add((item as any).operationId);
+            const item = timelineItems[index] as AudioFileTimelineItem;
+            if (item && item.operationId) {
+              operationIdsToRemove.add(item.operationId);
             }
           }
         });
@@ -447,10 +424,10 @@
       console.error('🔧 Timeline: Failed to initialize waveform service:', error);
     }
 
-    // Initialize the operation playback progress listener
-    opPlaybackService.initProgressListener().catch(err => {
-      console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
-    });
+    // // Initialize the operation playback progress listener
+    // opPlaybackService.initProgressListener().catch(err => {
+    //   console.error('🔧 Timeline: Failed to initialize op playback progress listener:', err);
+    // });
 
     const resizeObserver = new ResizeObserver(() => {
       width = container.clientWidth;
@@ -516,7 +493,7 @@
     if (!dragDropManager || !timelineItems) return;
 
     const draggedIndex = event.detail.index;
-    const draggedItem = timelineItems[draggedIndex] as any; // Cast to access hierarchy props
+    const draggedItem = timelineItems[draggedIndex] as AudioFileTimelineItem;
 
     // If the dragged segment is not in the current selection, clear the selection
     if (!selectedSegments.has(draggedIndex)) {
@@ -550,7 +527,7 @@
   }
 </script>
 
-<div class="svg-container position-relative">
+<div class="svg-container position-relative" class:inactive={!isActive}>
   <div class="position-absolute" style="font-size: 10px; color: #9d9d9d !important; bottom:20px">
     {currentTransform.k.toFixed(2)}x
   </div>
@@ -572,8 +549,6 @@
     </div>
   {/if}
 
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -634,8 +609,8 @@
           <!-- Timeline segments - uses reactive timelineItems (operation-based or legacy) -->
           <g class="timeline-segments">
             {#if (timelineItems?.length || 0) > 0}
-              {#each timelineItems as timelineItem, i}
-                {@const audioItem = timelineItem as any}
+              {#each timelineItems as timelineItem, i (timelineItem.id)}
+                {@const audioItem = timelineItem as AudioFileTimelineItem}
                 <TimelineSegment
                   {scaleX}
                   index={i}
@@ -728,6 +703,11 @@
     overflow: hidden;
     flex: 1; /* Take up remaining space in flex container */
     min-height: 0; /* Allow flexbox to shrink below content size */
+    transition: opacity 0.2s ease;
+  }
+
+  .svg-container.inactive {
+    opacity: 0.5;
   }
   svg {
     width: 100%;

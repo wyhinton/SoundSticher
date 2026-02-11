@@ -46,7 +46,6 @@
 
     // Convert item.id to number for selection system (assuming it's numeric)
     const itemId = index;
-    console.log(itemId);
     if (isNaN(itemId)) {
       console.warn('Cannot select item with non-numeric ID:', item.id);
       return;

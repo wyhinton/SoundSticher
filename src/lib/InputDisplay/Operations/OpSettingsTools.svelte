@@ -64,7 +64,7 @@
     title="Render operation - Force rebuild and cache output"
     aria-label="Render operation"
   >
-    <span class="tool-icon" class:active={isAuto}>🚩</span>
+    <i class="tool-icon fa-solid fa-flag" class:active={isAuto}></i>
   </button>
 
   <button
@@ -76,19 +76,20 @@
       : 'Freeze operation - Prevent auto-rerendering'}
     aria-label={isFrozen ? 'Unfreeze operation' : 'Freeze operation'}
   >
-    <span class="tool-icon" class:frozen={isFrozen}>❄️</span>
+    <i class="tool-icon fa-solid fa-snowflake" class:frozen={isFrozen}></i>
   </button>
 
   <button
     class="tool-button"
-    class:visible={hasVisibleTimeline}
+    class:visible={$hasVisibleTimeline}
     on:click={handleTimelineToggle}
-    title={hasVisibleTimeline ? 'Hide operation timeline' : 'Show operation timeline'}
-    aria-label={hasVisibleTimeline ? 'Hide timeline' : 'Show timeline'}
+    title={$hasVisibleTimeline ? 'Hide operation timeline' : 'Show operation timeline'}
+    aria-label={$hasVisibleTimeline ? 'Hide timeline' : 'Show timeline'}
   >
-    <span class="tool-icon" class:visible={hasVisibleTimeline}>
-      {hasVisibleTimeline ? '👁️' : '👁️‍🗨️'}
-    </span>
+    <i
+      class="tool-icon fa-solid {$hasVisibleTimeline ? 'fa-eye' : 'fa-eye-slash'}"
+      class:visible={$hasVisibleTimeline}
+    ></i>
   </button>
 </div>
 
@@ -101,8 +102,9 @@
   }
 
   .tool-button {
-    background: transparent;
-    border: none;
+    background: rgb(54 54 54);
+    border: 1px solid rgb(43, 43, 43);
+    padding: 2px 4px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -112,84 +114,29 @@
   }
 
   .tool-button:hover {
-    transform: translateY(-1px) scale(1.05);
-  }
-
-  .tool-button:active {
-    transform: translateY(0) scale(0.95);
-  }
-
-  .tool-button.frozen {
-    background: rgba(96, 165, 250, 0.2);
-  }
-
-  .tool-button.frozen:hover {
-    background: rgba(96, 165, 250, 0.3);
-  }
-
-  .tool-button.active {
-    background: rgba(239, 68, 68, 0.15);
-  }
-
-  .tool-button.active:hover {
-    background: rgba(239, 68, 68, 0.25);
-  }
-
-  .tool-button.visible {
-    background: rgba(34, 197, 94, 0.15);
-  }
-
-  .tool-button.visible:hover {
-    background: rgba(34, 197, 94, 0.25);
+    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
   .tool-icon {
     font-size: 1rem;
     line-height: 1;
     transition:
-      filter 0.2s ease,
-      opacity 0.2s ease;
-    opacity: 0.5; /* Default: half opacity */
+      color 0.2s ease,
+      filter 0.2s ease;
+    color: rgba(255, 255, 255, 0.5); /* Default: muted white */
   }
 
-  /* Full opacity when active/frozen/visible */
-  .tool-icon.active,
-  .tool-icon.frozen,
+  /* Icon color changes when active/frozen/visible */
+  .tool-icon.active {
+    color: rgb(239, 68, 68); /* Red for active render */
+  }
+
+  .tool-icon.frozen {
+    color: rgb(96, 165, 250); /* Blue for frozen */
+  }
+
   .tool-icon.visible {
-    opacity: 1;
-  }
-
-  .tool-button:hover .tool-icon {
-    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
-  }
-
-  /* Render button - red glow on hover */
-  .tool-button:nth-child(1):hover .tool-icon {
-    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.6));
-  }
-
-  /* Freeze button - blue glow on hover */
-  .tool-button:nth-child(2):hover .tool-icon {
-    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.6));
-  }
-
-  /* Timeline button - green glow on hover */
-  .tool-button:nth-child(3):hover .tool-icon {
-    filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.6));
-  }
-
-  /* Active state - brighter red glow */
-  .tool-button.active .tool-icon {
-    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.8));
-  }
-
-  /* Frozen state - brighter blue glow */
-  .tool-button.frozen .tool-icon {
-    filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.8));
-  }
-
-  /* Visible timeline state - brighter green glow */
-  .tool-button.visible .tool-icon {
-    filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.8));
+    color: rgb(34, 197, 94); /* Green for visible timeline */
   }
 </style>

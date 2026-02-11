@@ -5,6 +5,7 @@ import type { OperationId, OperationDef } from '../operation';
 import { appState, type TimelineItem, type AudioFileTimelineItem } from '../state.svelte';
 import { waveformCache } from '../waveformCache';
 import { buildHierarchyMaps, type FlattenedTimelineItem } from './timelineGraph';
+import { timelinePlaybackState } from './timelinePlaybackState';
 import type { TimelineId, TimelineSource, TimelineWaveformState } from './timelines';
 import { getHierarchicalTimelineItems } from './timelines';
 import { WAVEFORM_CONFIG } from '$lib/config/timelineConfig';
@@ -40,6 +41,15 @@ export class TimelineViewer {
     });
   }
 
+  get playheadPositionSec(): Readable<number> {
+    return derived([timelinePlaybackState, this._waveformStore], ([$playback, $waveform]) => {
+      const playback = $playback[this._timelineId];
+      if (!playback) return 0;
+
+      return playback.normalizedProgress * $waveform.totalDuration;
+    });
+  }
+
   get id(): TimelineId {
     return this._timelineId;
   }
@@ -56,6 +66,12 @@ export class TimelineViewer {
       const timelineData = $appState.timelines?.timelines[this._timelineId];
       if (!timelineData) return null;
       return timelineData.source as TimelineSource;
+    });
+  }
+
+  get totalDuration(): Readable<number> {
+    return derived(this._waveformStore, $waveform => {
+      return $waveform.totalDuration;
     });
   }
 
@@ -262,7 +278,7 @@ export class TimelineViewer {
             const waveform = await waveformCache.getOrFetch(filePath, {
               width: widthPx,
               height: WAVEFORM_CONFIG.DEFAULT_HEIGHT,
-              normalize: true,
+              normalize: WAVEFORM_CONFIG.DEFAULT_NORMALIZE,
             });
 
             store.update(state => {
