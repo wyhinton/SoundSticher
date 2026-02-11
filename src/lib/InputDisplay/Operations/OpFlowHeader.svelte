@@ -206,7 +206,6 @@
 
   .flow-header.selected {
     background: rgb(54, 157, 249);
-    border: 1px solid rgba(59, 130, 246, 0.6);
   }
 
   .flow-header:not(.selected):hover {

@@ -199,38 +199,6 @@
 </script>
 
 <div class="merge-op-flow position-relative">
-  <!-- Render Status Indicator -->
-  {#if $operationRenderState}
-    <div
-      class="render-status-overlay"
-      class:rendering={$operationRenderState.status === 'rendering'}
-      class:success={$operationRenderState.status === 'success'}
-      class:error={$operationRenderState.status === 'error'}
-      class:skipped={$operationRenderState.status === 'skipped'}
-    >
-      <div class="status-content">
-        {#if $operationRenderState.status === 'rendering'}
-          <span class="status-icon">⏳</span>
-          <span class="status-text"
-            >Rendering... ({$operationRenderState.index}/{$operationRenderState.totalOperations})</span
-          >
-        {:else if $operationRenderState.status === 'success'}
-          <span class="status-icon">✅</span>
-          <span class="status-text">Rendered in {$operationRenderState.duration_ms}ms</span>
-        {:else if $operationRenderState.status === 'error'}
-          <span class="status-icon">❌</span>
-          <span class="status-text">Error: {$operationRenderState.error ?? 'Unknown error'}</span>
-        {:else if $operationRenderState.status === 'skipped'}
-          <span class="status-icon">⏭️</span>
-          <span class="status-text">Skipped</span>
-        {:else if $operationRenderState.status === 'pending'}
-          <span class="status-icon">⏸️</span>
-          <span class="status-text">Pending...</span>
-        {/if}
-      </div>
-    </div>
-  {/if}
-
   <div class="flow-content">
     <OpFlowHeader
       {operationId}

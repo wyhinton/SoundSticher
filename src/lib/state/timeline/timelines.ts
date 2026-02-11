@@ -488,10 +488,11 @@ function flattenOperationToTimelineItems(
 /**
  * Check if an operation has a visible timeline (reads from operation.visible in appState)
  */
-export function isOperationTimelineVisible(operationId: OperationId): boolean {
-  const state = get(appState);
-  const operation = state.operations?.defs[operationId];
-  return operation?.visible || false;
+export function isOperationTimelineVisible(operationId: OperationId) {
+  return derived(appState, $appState => {
+    const operation = $appState.operations?.defs[operationId];
+    return operation?.visible || false;
+  });
 }
 
 /**
